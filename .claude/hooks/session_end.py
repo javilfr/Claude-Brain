@@ -29,8 +29,7 @@ def main() -> int:
         from engine import common as c
         from engine import ledger
         main_path = Path(transcript)
-        subdir = main_path.parent / main_path.stem / "subagents"
-        subs = sorted(subdir.glob("*.jsonl")) if subdir.is_dir() else []
+        subs = c.helper_transcripts(main_path)
         project = c.resolve_project(None, BRAIN)
         if project is not None and not c.is_managed(project):
             project = None

@@ -312,12 +312,20 @@ def transcript_paths(sid: str | None = None, home: Path | None = None) -> tuple[
         base = Path(home or Path.home()) / ".claude" / "projects"
         hits = sorted(base.glob(f"*/{sid}.jsonl")) if base.is_dir() else []
         main = hits[0] if hits else None
-    subs: list[Path] = []
-    if main is not None:
-        subdir = main.parent / main.stem / "subagents"
-        if subdir.is_dir():
-            subs = sorted(subdir.glob("*.jsonl"))
-    return main, subs
+    return main, (helper_transcripts(main) if main is not None else [])
+
+
+def helper_transcripts(main: Path) -> list[Path]:
+    """Every helper transcript of the session whose main transcript is ``main``.
+
+    Helpers started with the Agent tool are in <session>/subagents/agent-*.jsonl;
+    helpers started by a workflow are one level down, in
+    <session>/subagents/workflows/<run>/agent-*.jsonl, beside a journal.jsonl
+    that is not a transcript. Both count: a ledger that saw only the first kind
+    reported one helper in a session that had started seventeen.
+    """
+    subdir = main.parent / main.stem / "subagents"
+    return sorted(subdir.rglob("agent-*.jsonl")) if subdir.is_dir() else []
 
 
 # ---------------------------------------------------------------- cli
