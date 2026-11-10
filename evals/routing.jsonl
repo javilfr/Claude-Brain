@@ -1,0 +1,107 @@
+{"text": "Start running", "tier": 2, "class": "resume", "trigger": true}
+{"text": "start runing", "tier": 2, "class": "resume", "trigger": true}
+{"text": "Continue", "tier": 2, "class": "resume", "trigger": true}
+{"text": "ok continue where you left off", "tier": 2, "class": "resume", "trigger": true}
+{"text": "Resume", "tier": 2, "class": "resume", "trigger": true}
+{"text": "set up", "tier": 2, "class": "resume", "trigger": true}
+{"text": "Setup this repo", "tier": 2, "class": "resume", "trigger": true}
+{"text": "Continúa", "tier": 2, "class": "resume", "trigger": true}
+{"text": "sigue", "tier": 2, "class": "resume", "trigger": true}
+{"text": "keep going please", "tier": 2, "class": "resume", "trigger": true}
+{"text": "Status", "tier": 0, "class": "status", "trigger": true}
+{"text": "estado", "tier": 0, "class": "status", "trigger": true}
+{"text": "what's the status?", "tier": 0, "class": "status", "trigger": true}
+{"text": "¿Cómo vamos?", "tier": 0, "class": "status", "trigger": true}
+{"text": "Hand over", "tier": 1, "class": "handover", "trigger": true}
+{"text": "handover", "tier": 1, "class": "handover", "trigger": true}
+{"text": "context is getting long, new chat", "tier": 1, "class": "handover", "trigger": false}
+{"text": "New chat", "tier": 1, "class": "handover", "trigger": true}
+{"text": "Pasa a un chat nuevo", "tier": 1, "class": "handover", "trigger": true}
+{"text": "What did you learn?", "tier": 0, "class": "learned", "trigger": true}
+{"text": "¿Qué has aprendido?", "tier": 0, "class": "learned", "trigger": true}
+{"text": "Go back", "tier": 1, "class": "revert", "trigger": true}
+{"text": "it's the worst it's ever been, go back", "tier": 1, "class": "revert", "trigger": false}
+{"text": "revert to the last good version", "tier": 1, "class": "revert", "trigger": true}
+{"text": "vuelve atrás", "tier": 1, "class": "revert", "trigger": true}
+{"text": "Stop after this", "tier": 0, "class": "stop", "trigger": true}
+{"text": "quick: what's the difference between opus and sonnet", "tier": 0, "class": "answer", "trigger": true}
+{"text": "Quick: fix the typo in the footer", "tier": 1, "family": "software", "class": "software.bugfix", "trigger": true}
+{"text": "quick: build me a whole new website for the brochure", "tier": 1, "trigger": true}
+{"text": "rápido: cambia el color del botón a verde", "tier": 1, "family": "software", "class": "software.ui", "trigger": true}
+{"text": "Go deep: which star tracker is best for a 400mm lens", "tier": 1, "class": "knowledge.research", "trigger": true}
+{"text": "a fondo: qué dice la ley sobre los contratos de alquiler", "tier": 1, "class": "knowledge.research", "trigger": true}
+{"text": "New project: a bird sighting app for my iPhone deployed on Vercel", "tier": 2, "family": "software", "trigger": true}
+{"text": "Nuevo proyecto: una base de conocimiento sobre Costa Rica", "tier": 2, "family": "knowledge", "trigger": true}
+{"text": "new project: plan the entire platform in phases with a roadmap", "tier": 3, "trigger": true}
+{"text": "What does this error mean?", "tier": 0, "class": "answer"}
+{"text": "which is better for this, a pwa or a native app?", "tier": 0, "class": "answer"}
+{"text": "how many tokens did the last session use", "tier": 0, "class": "answer"}
+{"text": "can claude code run two repos in one session?", "tier": 0, "class": "answer"}
+{"text": "does fable cost more than opus", "tier": 0, "class": "answer"}
+{"text": "Is the prompt cache shared between subagents?", "tier": 0, "class": "answer"}
+{"text": "qué modelo es mejor para traducir", "tier": 0, "class": "answer"}
+{"text": "cómo funciona el caché de prompts?", "tier": 0, "class": "answer"}
+{"text": "por qué se cortó la sesión ayer", "tier": 0, "class": "answer"}
+{"text": "why is the deploy on vercel showing an old version?", "tier": 0, "class": "answer"}
+{"text": "what does the roadmap say about phase 2?", "tier": 0, "class": "answer"}
+{"text": "thanks, looks good", "tier": 0, "class": "answer"}
+{"text": "fix the typo in the about page title", "tier": 1, "family": "software", "class": "software.bugfix"}
+{"text": "rename the field 'notes' to 'journal'", "tier": 1, "family": "software"}
+{"text": "change the accent colour to the darker blue", "tier": 1, "family": "software", "class": "software.ui"}
+{"text": "add a field for the lens focal length", "tier": 1, "family": "software"}
+{"text": "add one chart of sightings per month", "tier": 1, "family": "data", "class": "data.analysis"}
+{"text": "rewrite the second paragraph so it sounds less formal", "tier": 1, "family": "knowledge"}
+{"text": "the header overlaps the notch on my iphone", "tier": 1, "family": "software", "class": "software.bugfix"}
+{"text": "the login button is broken", "tier": 1, "family": "software", "class": "software.bugfix"}
+{"text": "make the title font a bit bigger", "tier": 1, "family": "software", "class": "software.ui"}
+{"text": "corrige la errata del título", "tier": 1}
+{"text": "cambia el texto del botón de guardar", "tier": 1, "family": "software"}
+{"text": "update the readme link to the live site", "tier": 1, "family": "software"}
+{"text": "bump the version and push to main", "tier": 1, "family": "software", "class": "software.release"}
+{"text": "release to main", "tier": 1, "family": "software", "class": "software.release"}
+{"text": "Can you fix the date format on the entry card?", "tier": 1, "family": "software"}
+{"text": "delete the old branches in the repo", "tier": 1, "family": "software", "class": "software.housekeeping"}
+{"text": "clean up the repo, theres a lot of junk files", "tier": 1, "family": "software", "class": "software.housekeeping"}
+{"text": "translate this paragraph to spanish", "tier": 1, "family": "language", "class": "language.translate"}
+{"text": "Build me an app for my iPhone to log birds with photos, deployed on vercel", "tier": 2, "family": "software", "class": "software.feature"}
+{"text": "create a web app that turns this book into daily lessons", "tier": 2, "family": "software"}
+{"text": "make a learning app from the book I uploaded", "tier": 2, "family": "software"}
+{"text": "redesign the whole app so it looks like an apple first party app", "tier": 2, "family": "software", "class": "software.ui"}
+{"text": "design an agent team for the legal research system", "tier": 2}
+{"text": "research the best way to photograph the milky way from a dark site and write a report with sources", "tier": 2, "family": "knowledge", "class": "knowledge.research"}
+{"text": "build a searchable knowledge base from these PDFs", "tier": 2, "family": "knowledge"}
+{"text": "write a 3000 word essay on the history of Kyoto temples", "tier": 2, "family": "knowledge", "class": "knowledge.longform"}
+{"text": "Write the brochure for the Costa Rica trip as a PDF", "tier": 2, "family": "knowledge", "class": "knowledge.document"}
+{"text": "audit my assignment against the rubric and give me a table of what's missing", "tier": 2, "family": "knowledge", "class": "knowledge.audit"}
+{"text": "translate the whole website to Spanish and Japanese", "tier": 2, "family": "language", "class": "language.translate"}
+{"text": "Traduce todo el libro al inglés", "tier": 2, "family": "language", "class": "language.translate"}
+{"text": "build a pipeline that pulls my ebird data every week into a spreadsheet", "tier": 2, "family": "data", "class": "data.pipeline"}
+{"text": "create a dashboard with my token use per project", "tier": 2, "family": "data"}
+{"text": "make a little minecraft game for my nephew", "tier": 2, "family": "software"}
+{"text": "set up a routine that backs up my photos every night on my mac", "tier": 2, "family": "operations"}
+{"text": "help me install python on my laptop", "tier": 1, "family": "operations", "class": "operations.local"}
+{"text": "investiga la jurisprudencia sobre despidos y prepara un informe", "tier": 2, "family": "knowledge", "class": "knowledge.research"}
+{"text": "research how to cut token use in long claude code sessions", "tier": 2, "family": "knowledge", "class": "knowledge.research"}
+{"text": "crea una presentación de 10 diapositivas sobre el proyecto", "tier": 2, "family": "knowledge", "class": "knowledge.document"}
+{"text": "quiero una aplicación para identificar plantas con la cámara", "tier": 2, "family": "software"}
+{"text": "write my cover letter for the job as a word document", "tier": 1, "family": "knowledge", "class": "knowledge.document"}
+{"text": "build the whole travel journal: phases, waves, everything, till it's done", "tier": 3, "family": "software"}
+{"text": "plan a multi week roadmap for the legal counsel system", "tier": 3}
+{"text": "build the app, the backend api and the admin dashboard end to end", "tier": 3, "family": "software"}
+{"text": "construye la plataforma completa por fases", "tier": 3}
+{"text": "do everything in the master plan until all phases pass", "tier": 3}
+{"text": "how do I make the app work offline?", "tier": 0, "class": "answer"}
+{"text": "is it worth using haiku for the bulk extraction", "tier": 0, "class": "answer"}
+{"text": "puedes arreglar el enlace roto del menú", "tier": 1, "family": "software"}
+{"text": "the map tiles dont load on the phone", "tier": 1, "family": "software", "class": "software.bugfix"}
+{"text": "make the photo grid spacing tighter", "tier": 1, "family": "software", "class": "software.ui"}
+{"text": "write a short summary of this memo", "tier": 1, "family": "knowledge"}
+{"text": "design a landing page for the birding app", "tier": 2, "family": "software", "class": "software.ui"}
+{"text": "research which eBird API limits apply and build the importer", "tier": 2, "family": "data"}
+{"text": "escribe un ensayo de 2000 palabras sobre la ley de costas", "tier": 2, "family": "knowledge"}
+{"text": "write the spanish edition of the user guide", "tier": 2, "family": "language"}
+{"text": "every morning email me a summary of new sightings, automate it", "tier": 2, "family": "operations", "class": "operations.routine"}
+{"text": "make the token usage lower in this repo, go through everything in phases", "tier": 3}
+{"text": "ok so I want the whole thing, app, website and the learning course, built in waves", "tier": 3}
+{"text": "Continue with the next ticket", "tier": 2, "class": "resume", "trigger": true}
+{"text": "sigue con lo siguiente", "tier": 2, "class": "resume", "trigger": true}

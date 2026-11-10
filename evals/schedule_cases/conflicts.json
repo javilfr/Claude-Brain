@@ -1,0 +1,9 @@
+{"agents": 3, "helper_start_tokens": 20000, "tickets": [
+ {"id": "schema", "est": 3, "deps": [], "files": ["packages/domain/schema.ts"], "tokens": 40000},
+ {"id": "api", "est": 4, "deps": ["schema"], "files": ["services/api"], "tokens": 60000},
+ {"id": "api-auth", "est": 2, "deps": ["schema"], "files": ["services/api/auth.ts"], "tokens": 30000},
+ {"id": "ui-grid", "est": 5, "deps": [], "files": ["apps/web/src/grid.tsx", "packages/ui/tokens.css"], "tokens": 70000},
+ {"id": "ui-viewer", "est": 3, "deps": [], "files": ["apps/web/src/viewer.tsx", "packages/ui/tokens.css"], "tokens": 45000},
+ {"id": "docs", "est": 2, "deps": ["api", "ui-grid"], "files": ["docs/guide.md"], "tokens": 15000},
+ {"id": "e2e", "est": 3, "deps": ["api-auth", "ui-viewer"], "files": ["apps/web/e2e"], "tokens": 25000}
+]}
