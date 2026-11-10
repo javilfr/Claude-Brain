@@ -392,6 +392,22 @@ class ReqTests(Base):
         self.run_cli("req", "verify", "--all")
         self.assertEqual({r["quote"]: r for r in req.load(p)}["it passes"]["status"], "open")
 
+    def test_verify_output_is_capped(self):
+        p = self.project()
+        os.environ["BRAIN_PROJECT"] = str(p)
+        for i in range(20):
+            self.run_cli("req", "add", "--quote", f"thing {i}", "--passes-when", "true exits 0", "--check", "true")
+        _, out = self.run_cli("req", "verify")
+        self.assertLessEqual(len(out.splitlines()), req.VERIFY_MAX_LINES + 2)
+        self.assertIn("20 done", out)
+
+    def test_a_missing_project_folder_is_reported_not_guessed(self):
+        self.project()
+        os.environ["BRAIN_PROJECT"] = str(self.ws / "nope")
+        d = detect.detect(self.brain)
+        self.assertEqual((d["mode"], d["project"]), ("brain-only", None))
+        self.assertIn("not found", d["warning"])
+
     def test_boot_takes_the_project_from_brain_project(self):
         p, q = self.project(), self.project("other")
         os.environ.pop("BRAIN_PROJECT", None)

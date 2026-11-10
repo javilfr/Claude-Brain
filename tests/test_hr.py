@@ -464,7 +464,13 @@ class ReviewFindings(Base):
         os.environ["TMPDIR"] = str(Path(self._tmp.name) / "tmp")
         Path(os.environ["TMPDIR"]).mkdir()
         import tempfile as _t
+        from unittest import mock
         _t.tempdir = None
+        # Hermetic: no real folder beside the brain may be taken as the project (CB-208 review S7).
+        os.environ.pop("BRAIN_PROJECT", None)
+        iso = mock.patch.object(c, "sibling_dirs", return_value=[])
+        iso.start()
+        self.addCleanup(iso.stop)
         try:
             os.environ["BRAIN_SESSION_ID"] = "crashed-session"
             for i in range(4):

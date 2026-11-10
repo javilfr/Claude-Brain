@@ -47,4 +47,6 @@ Between two sizes, choose the smaller; moving up later is fine, and say why. "Qu
 - `docs/MASTER_PLAN.md` — the design. Read it only when changing the brain itself.
 - Project side: `.brain/project.json` (commands, gates, release rule), `.brain/STATE.md`, `.brain/PLAN.md`, `.brain/ext/` (project-specific tools), `STATUS.md`, `NEEDS_YOU.md`.
 
+If no `brain-*` skill is listed (a Project thread loads only `CLAUDE.md` from each repository, not its skills or agents), read `.claude/skills/<name>/SKILL.md` and follow it, and delegate to a general-purpose agent with the model `BRAIN hr hire` names.
+
 If something in the brain seems broken, run `BRAIN doctor`.

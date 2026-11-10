@@ -31,6 +31,10 @@ def detect(brain_root: Path | None = None, named: str | None = None, project: st
     explicit = project or os.environ.get("BRAIN_PROJECT")
     if explicit and Path(explicit).expanduser().is_dir():
         sibs = [(Path(explicit).expanduser().resolve(), classify(Path(explicit).expanduser().resolve()))]
+    elif explicit:
+        # A named folder that does not exist is an error, not a reason to guess (CB-208 review).
+        return {"brain": str(root), "siblings": [], "project": None, "mode": "brain-only",
+                "warning": f"project folder not found: {explicit}"}
     else:
         sibs = [(p, classify(p)) for p in c.sibling_dirs(root)]
     # Only repositories count as candidate projects; stray folders are ignored.
@@ -87,6 +91,8 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
     d = detect(root, named, project)
     mode = d["mode"]
     lines = [f"brain: {root.name} · mode: {mode}" + (f" · {MODE_HELP[mode]}" if MODE_HELP.get(mode) else "")]
+    if d.get("warning"):
+        lines.append("warning: " + d["warning"])
     proj = Path(d["project"]) if d.get("project") else None
     family = None
     if proj and c.is_managed(proj) and c.manifest_problem(proj):

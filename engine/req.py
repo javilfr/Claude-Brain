@@ -172,6 +172,9 @@ def cmd_evidence(args) -> int:
     return 0
 
 
+VERIFY_MAX_LINES = 15  # output read into the conversation stays short however long the ledger is
+
+
 def cmd_verify(args) -> int:
     """Run each open line's check in the project; a line whose check exits 0
     gets that result as evidence and is marked done. Lines with no runnable
@@ -183,6 +186,14 @@ def cmd_verify(args) -> int:
     rows = load(project)
     head = (gate.head_commit(project) or "")[:8] or "no commit"
     failed = manual = passed = 0
+    shown = 0
+    out_lines: list[str] = []
+
+    def say(line: str) -> None:
+        nonlocal shown
+        shown += 1
+        if shown <= VERIFY_MAX_LINES:
+            out_lines.append(line)
     for r in rows:
         if r.get("status") == "dropped" or not r.get("passes_when"):
             continue
@@ -191,7 +202,7 @@ def cmd_verify(args) -> int:
         cmd = (r.get("check") or "").strip()
         if not cmd:
             manual += 1
-            print(f"{r['id']}: no check command; attach evidence by hand")
+            say(f"{r['id']}: no check command; attach evidence by hand")
             continue
         res = gate.run_filtered(cmd, project, project, timeout=args.timeout)
         if res["exit"] == 0:
@@ -200,17 +211,21 @@ def cmd_verify(args) -> int:
             if ev not in r.setdefault("evidence", []):
                 r["evidence"].append(ev)
             r["status"], r["done"] = "done", c.today()
-            print(f"{r['id']}: done (check exited 0)")
+            say(f"{r['id']}: done (check exited 0)")
         else:
             failed += 1
             if r.get("status") == "done":
                 # --all: a line once done whose check now fails is open again (CB-208).
                 r["status"] = "open"
                 r.setdefault("evidence", []).append(f"check exited {res['exit']} on {head} ({c.today()}): reopened")
-            print(f"{r['id']}: check exited {res['exit']}; open · log: {res['log']}")
-            for l in res["shown"][-3:]:
-                print(f"  {l}")
+            say(f"{r['id']}: check exited {res['exit']}; open · log: {res['log']}")
+            for l in res["shown"][-2:]:
+                say(f"  {l}")
     save(project, rows)
+    for l in out_lines:
+        print(l)
+    if shown > VERIFY_MAX_LINES:
+        print(f"… {shown - VERIFY_MAX_LINES} more line(s); `brain req list` shows every line")
     print(f"verify: {passed} done, {failed} failed, {manual} need evidence by hand")
     return 1 if failed else 0
 

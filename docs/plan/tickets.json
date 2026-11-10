@@ -446,7 +446,7 @@
       "est": 120,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain hr audit",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-209",
