@@ -12,14 +12,14 @@ Things only you can do for the brain itself. All are optional and all are clicks
 ## 2. Protect the brain's `main` (5 minutes, after item 1)
 
 - **Why:** this is what makes "only changed by its own learning systems" a rule that GitHub enforces, not just a convention. With it, a change reaches `main` only through a pull request whose checks pass.
-- **How:** github.com → **javilfr/Claude-Brain** → **Settings** → **Branches** → **Add branch ruleset** (or **Add rule**) → branch name `main` → tick **Require a pull request before merging** and **Require status checks to pass**, then choose the check named **brain** → **Create**.
+- **How:** github.com → **javilfr/Claude-Brain** → **Settings** → **Branches** → **Add branch ruleset** (or **Add rule**) → branch name `main` → tick **Require a pull request before merging** and **Require status checks to pass**, then choose the check named **brain** → **Create**. (The check runs on every push and pull request; it shows up in that list once it has run at least once on a pull request.)
 - **Meanwhile:** the same check runs on every push and reports problems, but nothing stops a direct change.
 
 ## 3. Choose your default model for new chats (no clicks now; a habit)
 
 - **Why:** the model is chosen when you start a chat, and switching it mid-chat throws away the cache. Research for the plan found Opus 5.5 finishes everyday work at about a sixth of Fable 5.2's cost per task, with Fable ahead by about three points on the hardest work.
 - **Recommended:** start everyday chats on **Opus 5.5**. Start a chat on **Fable 5.2** when beginning a brand-new project or when something is stuck and hard.
-- **Meanwhile:** the brain works on either. It tells you once if a routine chat is on Fable.
+- **Meanwhile:** the brain works on either; helpers always run on the model their role sets, whichever you pick.
 
 ## 4. Decide how learning changes get merged (reply with A or B)
 
@@ -32,3 +32,9 @@ Things only you can do for the brain itself. All are optional and all are clicks
 - **Why:** in a chat with two repositories, Claude Code does not load a repository's own guard hooks. The brain does not depend on them, but they add a second layer (blocking a wrong edit before it happens, recording the session automatically at the end).
 - **What is needed:** one setting in your cloud environment. Whether that route works has to be tested in a live two-repo chat first (ticket CB-106 in `docs/BUILD_STATUS.md`).
 - **Meanwhile:** the rules are enforced by the scripts themselves and by the check in item 2.
+
+## 6. Switch on the weekly learning run (reply "schedule the weekly learning run")
+
+- **Why:** once a week the brain should fold what it recorded into its memory, check official sources for news about the models and Claude Code, and write you a short digest. That run works best as a scheduled task on the brain alone.
+- **How:** after item 1 is done, reply "schedule the weekly learning run" in any chat with the brain attached, and I will create the schedule and show it to you.
+- **Meanwhile:** nothing is lost. Every session still records itself, and the fold-in happens whenever you say "Consolidate".

@@ -110,9 +110,7 @@ def ensure_stub(project: Path, title: str, made: list[str]) -> None:
         c.write_text(target, block)
         made.append("CLAUDE.md")
     elif BEGIN not in existing:
-        precedence = ("\n> The text below was written before this project used the brain. It is project knowledge. "
-                      "Where it disagrees with the brain about how a session starts, how state is recorded or how work is released, the brain's way applies.\n")
-        c.write_text(target, block + precedence + "\n" + existing)
+        c.write_text(target, block + "\n" + existing)  # the block itself says which text wins
         made.append("CLAUDE.md (pointer block added above existing content)")
 
 

@@ -32,6 +32,8 @@ def render(project: Path, rows: list[dict]) -> None:
     for r in rows:
         ev = "; ".join(r.get("evidence", [])) or (r.get("reason", "") if r.get("status") == "dropped" else "")
         cell = lambda s: c.clip(str(s), 220).replace("|", "\\|")
+        if r.get("implied"):
+            r = dict(r, quote="(implied) " + r.get("quote", "") + (f" — assumed: {r['assumption']}" if r.get("assumption") else ""))
         out.append(f"| {r['id']} | {cell(r.get('quote', ''))} | {cell(r.get('passes_when', ''))} | {r.get('status', 'open')} | {cell(ev)} |")
     c.write_text(Path(project) / ".brain" / "REQUIREMENTS.md", "\n".join(out) + "\n")
 
@@ -76,6 +78,12 @@ def cmd_add(args) -> int:
         return 0
     row = {"id": next_id(rows), "quote": quote, "passes_when": (args.passes_when or "").strip(),
            "check": (args.check or "").strip(), "status": "open", "evidence": [], "added": c.today()}
+    if args.implied:
+        # Not the owner's words: something the request needs in order to hold.
+        # Kept apart so an assumption is never mistaken for an instruction.
+        row["implied"] = True
+        if args.assumption:
+            row["assumption"] = args.assumption.strip()
     rows.append(row)
     save(project, rows)
     print(f"{row['id']} added" + ("" if row["passes_when"] else " (no 'passes when' yet)"))
@@ -169,7 +177,18 @@ def cmd_check(args) -> int:
         if len(probs) > 20:
             print(f" … {len(probs) - 20} more")
         return 1
-    print(f"requirements: all {len(rows)} line(s) done with evidence or dropped with a reason" if rows else "requirements: ledger is empty (fine for an answer or a small task)")
+    if not rows:
+        # At project size an empty ledger proves nothing: the request's
+        # sentences were never written down, so "done" cannot be checked.
+        from .state import read_state
+        tier = read_state(project).get("tier") or str(c.load_manifest(project).get("tier", ""))
+        stage = read_state(project).get("stage") or ""
+        if tier in ("2", "3") and stage in ("build", "verify", "deliver", "learn", "done"):
+            print("requirements: the ledger is empty at project size; add the request's sentences with `brain req add` before calling anything done")
+            return 1
+        print("requirements: ledger is empty (fine for an answer or a small task)")
+        return 0
+    print(f"requirements: all {len(rows)} line(s) done with evidence or dropped with a reason")
     return 0
 
 
@@ -181,6 +200,8 @@ def register(sub) -> None:
     a.add_argument("--quote", required=True)
     a.add_argument("--passes-when", dest="passes_when")
     a.add_argument("--check", help="command or method that verifies it")
+    a.add_argument("--implied", action="store_true", help="not the owner's words: a need the request implies")
+    a.add_argument("--assumption", help="with --implied: what was assumed and why")
     a.set_defaults(func=cmd_add)
     a = s.add_parser("set", help="set 'passes when' or the check for a line")
     c.add_project_arg(a)

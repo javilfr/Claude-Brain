@@ -23,6 +23,8 @@ FENCE = re.compile(r"```.*?\n(.*?)```", re.S)
 CALL = re.compile(r"(?:^|[\s;&|(])(?:BRAIN|bin/brain|brain)\s+([a-z][a-z-]*)((?:\s+[^\s`]+)*)")
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s#]+)(?:#[^)]*)?\)")
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
+# Marks of a user-role turn the owner did not type (helper reports, notices).
+NOT_OWNER = ("[SYSTEM NOTIFICATION", "Another Claude session sent a message", "Stop hook feedback", "[Subagent hand-back]", "<task-notification>")
 # Words that follow "brain" in prose, not commands.
 PROSE_WORDS = {"is", "and", "or", "the", "repository", "repo", "itself", "works", "holds", "needs", "does", "has", "never", "learns",
                "attached", "not", "to", "in", "side", "only", "can", "will", "contract", "reads", "installs", "command", "commands"}
@@ -273,11 +275,12 @@ def skill_audit(main: Path | None, root: Path | None = None) -> list[str]:
         content = msg.get("content")
         if row.get("type") == "user":
             text = content if isinstance(content, str) else " ".join(str(b.get("text", "")) for b in content or [] if isinstance(b, dict) and b.get("type") == "text")
-            if text.strip() and not text.lstrip().startswith("<"):
+            if text.strip() and not text.lstrip().startswith("<") and not row.get("isMeta") and not any(m in text for m in NOT_OWNER):
                 for name in pending:
                     missed[name] = missed.get(name, 0) + 1
                 low = text.lower()
-                pending = [name for name, ts in triggers.items() if any(t and t in low for t in ts)]
+                pending = [name for name, ts in triggers.items()
+                           if any(t and re.search(r"(?<![a-záéíóúñ])" + re.escape(t) + r"(?![a-záéíóúñ])", low) for t in ts)]
         elif row.get("type") == "assistant":
             for b in content or []:
                 if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Skill":

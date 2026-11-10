@@ -7,4 +7,5 @@ This project is built with Claude Brain, contract v{contract}. Its state, plan a
 - **Brain not attached**: tell the owner once, then work from `.brain/STATE.md`, `.brain/PLAN.md` and the commands in `.brain/project.json`. Checkpoint by editing `.brain/STATE.md`. Put lessons in `.brain/memory/lessons.jsonl` so the brain can collect them later.
 - The owner reads `STATUS.md` and `NEEDS_YOU.md`. Things only they can do go in `NEEDS_YOU.md` as numbered click steps, and work continues on everything else.
 - Project-specific skills, agents and tools belong in `.brain/ext/` or this repository's `.claude/`, not in the brain.
+- Where text below this block disagrees with the brain about how a session starts, where state lives or how work is released, the brain's way applies; the text below is project knowledge.
 <!-- brain:end -->

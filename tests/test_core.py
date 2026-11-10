@@ -308,6 +308,21 @@ class ReqTests(Base):
         self.assertEqual(code, 0, out)
         self.assertIn("| R-001 |", (p / ".brain" / "REQUIREMENTS.md").read_text())
 
+    def test_empty_ledger_fails_at_project_size_once_building(self):
+        p = self.project()
+        os.environ["BRAIN_PROJECT"] = str(p)
+        state.checkpoint(p, stage="build", tier=2, item="T-1")
+        code, out = self.run_cli("req", "check")
+        self.assertEqual(code, 1)
+        self.assertIn("ledger is empty at project size", out)
+
+    def test_implied_lines_are_marked_as_not_the_owners_words(self):
+        p = self.project()
+        os.environ["BRAIN_PROJECT"] = str(p)
+        self.run_cli("req", "add", "--quote", "must work on a phone", "--implied", "--assumption", "he reviews on his phone")
+        self.assertTrue(req.load(p)[0]["implied"])
+        self.assertIn("(implied) must work on a phone", (p / ".brain" / "REQUIREMENTS.md").read_text())
+
     def test_same_words_are_not_added_twice(self):
         p = self.project()
         os.environ["BRAIN_PROJECT"] = str(p)

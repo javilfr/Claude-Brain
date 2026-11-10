@@ -415,7 +415,7 @@ Roles, not model names, appear in playbooks. The mapping lives in one dated file
 | Bulk reader | Haiku 5.5, low or medium, inputs under 100K tokens, output checked by shape or spot check | Extraction, classification, summarising many files |
 | Deterministic work | No model | Formatting, counting, indexing, scheduling, diffing |
 
-You choose the session's model when you start a chat; the brain does not switch it, because a switch throws away the cache. Routing applies to helpers and to the effort level. If you start a chat on Fable for routine work, `boot` says so once and suggests Opus for next time.
+You choose the session's model when you start a chat; the brain does not switch it, because a switch throws away the cache. Routing applies to helpers and to the effort level.
 
 **The learning part.** For each class of task, the ledger records which model and effort were used and whether the check passed the first time. A Thompson-sampling table turns those records into the next suggestion: mostly the cheapest setting that has been passing, with occasional trials of alternatives so it keeps learning. Until a class has at least eight recorded outcomes per option, the defaults above stand, and the weekly digest says how many outcomes each suggestion rests on.
 
