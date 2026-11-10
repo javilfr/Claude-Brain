@@ -718,9 +718,12 @@ def report_lines(brain_root: Path | None = None) -> list[str]:
     except Exception:
         h = hr_state({})
     rack = {t["id"]: t for t in load_rack(root)}
-    lines = [f"rack: {len(rack)} templates · settled hires: {h['settled']}"]
+    lines = [f"rack: {len(rack)} templates · settled hires folded into learning: {h['settled']}"]
+    waiting = sum(1 for f in (root / "learning" / "inbox").glob("*.jsonl") for r in c.read_jsonl(f) if r.get("kind") == "hire")
+    if waiting:
+        lines.append(f"{waiting} settled hire(s) are recorded in the inbox and count once the next consolidation runs (say \"Consolidate\")")
     if not h["t"] and not h["settled"]:
-        return lines + ["no hire has been settled yet: wages use the size bands and every template ranks on fit alone"]
+        return lines + ["until then wages use the size bands and every template ranks on fit alone"]
     used = sorted(h["t"].items(), key=lambda kv: -kv[1][2])[:5]
     for tid, (a, b, n) in used:
         pa, pb, _ = pass_posterior(h, hc, tid, rack.get(tid, {}).get("group", ""))
