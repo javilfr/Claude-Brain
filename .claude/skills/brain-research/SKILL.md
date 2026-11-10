@@ -25,7 +25,7 @@ Write `research/<topic>.md`: the answer in the first five lines with a confidenc
 
 ## 5. Keep it
 
-A fact that other projects will need goes to the learning inbox with its source: `BRAIN learn note --trust external --source <url> --text "…" --class research --evidence "<url and date read>"`.
+A fact that other projects will need goes to the learning inbox with its source: `BRAIN learn note --trust external --source <url> --text "…" --class research`.
 
 ## Tell the owner
 

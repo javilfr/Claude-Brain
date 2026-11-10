@@ -31,6 +31,7 @@ from __future__ import annotations
 import datetime as _dt
 import difflib
 import json
+import posixpath
 import re
 import shutil
 import subprocess
@@ -70,6 +71,19 @@ ML_STATE = "stats/ml.json"
 ML_CONFIG = "memory/ml_config.json"
 KNOWN_IDS = "evals/known_project_ids.txt"
 LEDGER_FILE_RE = re.compile(r"^stats/ledger/\d{4}-\d{2}\.jsonl$")
+# The only files an ADD may name: the item files of the learned zone. Every
+# path a delta names must also be plain (relative, normal form, no '..'), so
+# "memory/../evals/routing.jsonl" cannot pass for a memory file (I-06, I-09).
+ITEM_FILE_RE = re.compile(r"^(?:memory/(?:items|facts)\.jsonl|owner/(?:standing|preferences)\.jsonl|"
+                          r"playbooks/[a-z][a-z0-9-]{0,40}\.jsonl)$")
+INBOX_FILE_RE = re.compile(r"^learning/inbox/[A-Za-z0-9][A-Za-z0-9_.-]{0,120}\.jsonl$")
+# Owner evidence is written only by the script that found the owner's words in
+# a turn he typed: the turn's timestamp and a hash of the normalised quote.
+OWNER_EV_RE = re.compile(r"^owner:turn@[0-9A-Za-z:.+-]{1,40}#[0-9a-f]{12}$")
+MIN_QUOTE = 12
+# Turns that look typed but were injected by the harness or another agent.
+NOT_OWNER_MARKERS = ("[SYSTEM NOTIFICATION", "Another Claude session sent a message", "Stop hook feedback",
+                     "[Subagent hand-back]", "<task-notification>", "<system-reminder")
 NEGATIVE_RE = re.compile(r"\b(never|don't|do not|must not|should not|shouldn't|avoid|no longer|cannot|can't|stop)\b", re.I)
 # Words that carry polarity are removed before comparing meaning, so that
 # "always X" and "never X" are recognised as the same subject.
@@ -92,6 +106,19 @@ PATH_RE = re.compile(r"(?:^|[\s(\"'`])(?:\.{1,2}|~)?/[\w.-]+|\b[\w.-]+/[\w.-]+/[
 
 # Tests inject a stand-in for engine.mlearn here; None means import it lazily.
 MLEARN = None
+
+
+def plain_path_problem(rel) -> str:
+    """Why ``rel`` is not a plain brain-relative path; empty when it is."""
+    if not isinstance(rel, str) or not rel:
+        return "empty path"
+    if rel.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", rel) or "\\" in rel or "\0" in rel:
+        return "absolute or not a plain path"
+    if any(part in ("", ".", "..") for part in rel.split("/")):
+        return "has an empty, '.' or '..' segment"
+    if posixpath.normpath(rel) != rel:
+        return "not in normal form"
+    return ""
 
 
 def mlearn_module(optional: bool = False):
@@ -200,6 +227,19 @@ def pending_inbox(root: Path) -> list[Path]:
     return [p for p in sorted((root / c.INBOX_DIR).glob("*.jsonl")) if p.relative_to(root).as_posix() not in consumed]
 
 
+def inbox_unreadable(root: Path) -> tuple[int, int]:
+    """(unreadable lines, files holding them) among the pending inbox files."""
+    lines = files = 0
+    for p in pending_inbox(root):
+        try:
+            bad = c.read_jsonl_counted(p)[1]
+        except OSError:
+            bad = 1
+        lines += bad
+        files += bool(bad)
+    return lines, files
+
+
 def official_leads(root: Path) -> list[dict]:
     """Radar leads from official sources still waiting in the inbox. A lead
     never changes memory by itself: the model must confirm it at the source."""
@@ -246,10 +286,18 @@ def check_note(rec: dict) -> list[str]:
     if not rec.get("class"):
         errs.append("at least one --class is required")
     ev = rec.get("evidence") or []
-    if not ev:
+    # For a fact read from an official page the source address is the
+    # evidence: there is no gate or owner turn to point at, and the fact is
+    # re-checked against that address when its re-check date comes round.
+    sourced_fact = rec.get("trust") == "external" and str(rec.get("source", "")).startswith("https://")
+    if not ev and not sourced_fact:
         errs.append("evidence is required (a gate, test, outcome or owner turn)")
     elif not all(isinstance(e, str) and EVIDENCE_RE.match(e) for e in ev):
         errs.append("each evidence must start with gate:, test:, outcome:, owner:, run: or review:")
+    elif any(e.startswith("owner:") and not OWNER_EV_RE.match(e) for e in ev):
+        errs.append("owner evidence must be verified against a turn the owner typed (learn note --quote)")
+    if rec.get("trust") == "owner-stated" and not any(isinstance(e, str) and OWNER_EV_RE.match(e) for e in ev):
+        errs.append("owner-stated needs the owner's own words, verified in this session's transcript (--quote)")
     if not I.SCOPE_RE.match(str(rec.get("scope", ""))):
         errs.append("scope must be global, project or family:<family>")
     trust = rec.get("trust")
@@ -268,6 +316,154 @@ def check_note(rec: dict) -> list[str]:
     if c.EMAIL_PATTERN.search(blob):
         errs.append("contains an email address")
     return errs
+
+
+# ---------------------------------------------------------------- owner words and evidence
+def norm_quote(text: str) -> str:
+    """Case-folded, whitespace collapsed: the form quotes are compared in."""
+    return " ".join(str(text).casefold().split())
+
+
+def owner_turns(transcript: Path | str) -> list[tuple[str, str]]:
+    """(timestamp, text) of every turn the owner typed in a transcript: a
+    ``user`` row whose content is a string or text blocks, not a tool result,
+    not flagged ``isMeta`` or ``isSidechain``, and without a marker of text
+    the harness or another agent injected."""
+    out = []
+    for row in c.iter_jsonl_stream(transcript):
+        if row.get("type") != "user" or row.get("isMeta") or row.get("isSidechain"):
+            continue
+        msg = row.get("message") if isinstance(row.get("message"), dict) else {}
+        if msg.get("role", "user") != "user":
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list) and content and all(
+                isinstance(b, dict) and b.get("type") in ("text", "image") for b in content):
+            text = "\n".join(b["text"] for b in content if b.get("type") == "text" and isinstance(b.get("text"), str))
+        else:
+            continue
+        if not text or any(m in text for m in NOT_OWNER_MARKERS):
+            continue
+        out.append((str(row.get("timestamp") or "unknown"), text))
+    return out
+
+
+def verify_owner_quote(quote: str, sid: str | None = None) -> tuple[str, str]:
+    """(evidence, "") when ``quote`` occurs in a turn the owner typed in this
+    session's transcript, else ("", one-line reason). The evidence names the
+    turn and a hash of the quote, never the quote itself."""
+    q = norm_quote(quote or "")
+    if len(q) < MIN_QUOTE:
+        return "", f"--quote must hold at least {MIN_QUOTE} characters of the owner's own words"
+    main, _subs = c.transcript_paths(sid or c.session_id())
+    if main is None or not Path(main).is_file():
+        return "", "no transcript of this session is on disk, so the owner's words cannot be checked"
+    for ts, text in owner_turns(main):
+        if q in norm_quote(text):
+            return f"owner:turn@{ts}#{c.sha256_text(q)[:12]}", ""
+    return "", "the quote is not in any turn the owner typed in this session"
+
+
+def project_words(project: Path | None) -> list[str]:
+    """Names that identify the resolved project: its manifest id and title and
+    its folder name. A brain note naming one belongs in that project (I-05)."""
+    if project is None:
+        return []
+    meta = c.load_manifest(project).get("project") or {}
+    names = [str(meta.get("id") or ""), str(meta.get("title") or ""), Path(project).name]
+    return [n.strip() for n in names if len(n.strip()) >= 3]
+
+
+def _gate_rows(project: Path, sid: str) -> list[dict]:
+    return [r for r in c.read_jsonl(Path(project) / ".brain" / "log" / "gates.jsonl") if str(r.get("session", "")) == sid]
+
+
+def _session_start(project: Path, sid: str) -> str:
+    """When this session began: its open-session marker, else the first
+    timestamp of its transcript; "" when neither is known."""
+    marker = c.read_json(Path(project) / ".brain" / "log" / "open-session.json", {}) or {}
+    if isinstance(marker, dict) and marker.get("session") == sid and marker.get("at"):
+        return str(marker["at"])
+    main, _ = c.transcript_paths(sid)
+    if main is not None and Path(main).is_file():
+        for row in c.iter_jsonl_stream(main):
+            if isinstance(row.get("timestamp"), str) and row["timestamp"]:
+                return row["timestamp"]
+    return ""
+
+
+RUN_LOG_RE = re.compile(r"^(\d{8})-(\d{6})-[0-9a-f]{4,64}\.log$")
+
+
+def _session_run_logs(project: Path, sid: str) -> list[Path]:
+    """Run logs written since this session began (``brain run`` names each log
+    by its UTC start time)."""
+    start = _session_start(project, sid)
+    if not start:
+        return []
+    key = re.sub(r"[^0-9]", "", start)[:14]
+    out = []
+    for p in sorted((Path(project) / ".brain" / "log" / "run").glob("*.log")):
+        m = RUN_LOG_RE.match(p.name)
+        if m and m[1] + m[2] >= key:
+            out.append(p)
+    return out
+
+
+EVIDENCE_HELP = (
+    "Evidence must resolve to something this session did. Accepted forms: "
+    "gate:<gate-id> [words] (a run of that gate by this session in the project's .brain/log/gates.jsonl); "
+    "test:<name> (the name appears in the saved output of a gate run or run log of this session); "
+    "run:<log-file> (a log in the project's .brain/log/run/ written since this session began); "
+    "outcome:<record-id> (an outcome record of this session in the brain inbox); "
+    "review:<file> (an existing file, stored as a hash of its content). "
+    "Owner evidence comes only from --quote. With no managed project, only --quote and review: are accepted.")
+
+
+def resolve_evidence(evidence: list[str], sid: str, project: Path | None, brain_root: Path | None = None,
+                     cwd: Path | None = None) -> tuple[list[str], str]:
+    """(evidence to store, "") when every item resolves to this session's own
+    records, else ([], one-line reason). ``review:`` is stored as a content
+    hash so no project path reaches the brain."""
+    root = Path(brain_root or c.BRAIN_ROOT)
+    out: list[str] = []
+    for e in evidence:
+        e = str(e).strip()
+        kind, _, rest = e.partition(":")
+        token = (rest.split() or [""])[0]
+        if kind == "owner":
+            return [], "owner evidence comes only from --quote, checked against the owner's typed turns"
+        if kind == "review":
+            base = [Path(token)] if Path(token).is_absolute() else \
+                [b / token for b in ([project] if project else []) + [Path(cwd or Path.cwd())]]
+            hit = next((b for b in base if b.is_file()), None)
+            if hit is None:
+                return [], f"{e!r}: no such file"
+            out.append(f"review:sha256-{c.sha256_file(hit)[:12]}")
+            continue
+        if project is None:
+            return [], f"{e!r}: with no managed project only --quote and review:<file> evidence can be checked"
+        if kind == "gate":
+            if not any(str(r.get("gate") or r.get("id") or "") == token for r in _gate_rows(project, sid)):
+                return [], f"{e!r}: no run of gate {token!r} by this session in .brain/log/gates.jsonl"
+        elif kind == "outcome":
+            ids = {with_id(r)["id"] for f in _session_files(root, sid) for r in c.read_jsonl(f)
+                   if r.get("kind") == "outcome" and r.get("session") == sid}
+            if token not in ids:
+                return [], f"{e!r}: no outcome record {token!r} of this session in the inbox"
+        elif kind == "run":
+            if "/" in token or not any(p.name == token for p in _session_run_logs(project, sid)):
+                return [], f"{e!r}: no run log {token!r} written by this session in .brain/log/run/"
+        elif kind == "test":
+            logs = [Path(str(r["log"])) for r in _gate_rows(project, sid) if r.get("log")] + _session_run_logs(project, sid)
+            if not token or not any(token in c.read_text(p) for p in logs if p.is_file()):
+                return [], f"{e!r}: {token!r} is not in the output of any gate run or run log of this session"
+        else:
+            return [], f"{e!r}: unknown evidence kind"
+        out.append(" ".join(e.split()))
+    return out, ""
 
 
 def note_item(rec: dict, day: str, kind: str = "rule", by_model: str = "") -> dict:
@@ -407,13 +603,15 @@ class Workspace:
         kind = op.get("op")
         day = at[:10]
         if kind == "ADD":
-            rel, item = str(op.get("file", "")), op.get("item")
-            if zone_of(rel) != "learned" or not rel.endswith(".jsonl") or rel in (ARCHIVE, MANIFEST) \
-                    or rel.startswith(("stats/", "learning/")):
-                return f"ADD: {rel!r} is not an item file"
+            rel, item = op.get("file", ""), op.get("item")
+            bad = plain_path_problem(rel)
+            if bad or not ITEM_FILE_RE.match(rel) or zone_of(rel) != "learned":
+                return f"ADD: {rel!r} is not an item file" + (f" ({bad})" if bad else "")
             if not isinstance(item, dict):
                 return "ADD: item missing"
             item = I.normalise(item)
+            if item.get("trust") == "owner-stated" and not any(OWNER_EV_RE.match(str(e)) for e in item.get("evidence") or []):
+                return f"ADD: {item.get('id')} is owner-stated without owner evidence verified against a typed turn"
             if self.find(item.get("id", ""))[0]:
                 return f"ADD: id {item.get('id')} already exists"
             self._load_items(rel)
@@ -493,8 +691,8 @@ class Workspace:
         if kind == "SUPERSEDE":
             return self._supersede(str(op.get("old", "")), str(op.get("new", "")), day)
         if kind == "APPEND_STAT":
-            rel = str(op.get("file", ""))
-            if not LEDGER_FILE_RE.match(rel) or not isinstance(op.get("row"), dict):
+            rel = op.get("file", "")
+            if plain_path_problem(rel) or not LEDGER_FILE_RE.match(rel) or not isinstance(op.get("row"), dict):
                 return f"APPEND_STAT: bad file {rel!r} or row"
             self._append(rel, op["row"])
             self.counts["APPEND_STAT"] += 1
@@ -502,8 +700,8 @@ class Workspace:
         if kind == "ML_FOLD":
             return self._ml_fold(op.get("records"))
         if kind == "MARK_INBOX":
-            rel = str(op.get("file", ""))
-            if zone_of(rel) != "inbox":
+            rel = op.get("file", "")
+            if plain_path_problem(rel) or not INBOX_FILE_RE.match(rel) or zone_of(rel) != "inbox":
                 return f"MARK_INBOX: {rel!r} is not an inbox file"
             if rel not in self.inbox_files:
                 self.inbox_files.append(rel)
@@ -834,8 +1032,11 @@ def _record_problem(rec: dict) -> str:
         return "used needs item and followed (true or false)"
     if kind == "correction":
         ev = rec.get("evidence") or []
-        if not isinstance(rec.get("item"), str) or not ev or not all(str(e).startswith("owner:") for e in ev):
-            return "correction needs item and owner: evidence"
+        if not ev or not all(OWNER_EV_RE.match(str(e)) for e in ev):
+            return "correction needs owner evidence verified against a typed turn (learn correction --quote)"
+        sizing = isinstance(rec.get("rule_tier"), int) and isinstance(rec.get("tier"), int)
+        if not isinstance(rec.get("item"), str) and not sizing:
+            return "correction needs an item, or a rule_tier and tier for a sizing correction"
     return ""
 
 
@@ -862,7 +1063,17 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
             else:
                 ops.append(op)
 
-    batch = [(f, n, with_id(rec)) for f in files for n, rec in enumerate(c.read_jsonl(f), 1)]
+    batch = []
+    expected: dict[Path, int] = {}
+    for f in files:
+        try:
+            recs, _bad = c.read_jsonl_counted(f)
+        except OSError:
+            rejected.append(f"{f.name}: cannot be read; left pending")
+            continue
+        expected[f] = len(recs)
+        batch += [(f, n, with_id(rec)) for n, rec in enumerate(recs, 1)]
+    done: dict[Path, int] = {}
     fold: list[dict] = []
     for f, n, rec in batch:
         if rec.get("kind") not in FOLD_KINDS:
@@ -892,6 +1103,7 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
     for f, n, rec in batch:
         label = f"{f.name}:{n}"
         kind = rec.get("kind")
+        done[f] = done.get(f, 0) + 1
         if kind == "ledger":
             month = str(rec.get("at", at))[:7]
             take([{"op": "APPEND_STAT", "file": f"stats/ledger/{month}.jsonl", "row": rec}], label)
@@ -899,7 +1111,7 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
             op = _used_op(rec, outcomes)
             if op:
                 take([op], label)
-        elif kind == "correction" and rec["id"] in good_ids:
+        elif kind == "correction" and rec["id"] in good_ids and isinstance(rec.get("item"), str):
             take([{"op": "INC_HARMFUL", "id": rec["item"], "n": 1, "session": str(rec.get("session", "")),
                    "evidence": list(rec["evidence"])}], label)
         elif kind == "note":
@@ -910,6 +1122,10 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
         elif kind not in KINDS:
             rejected.append(f"{label}: unknown kind {kind!r}")
     for f in files:
+        # A file is handled only when every valid record in it was processed;
+        # its unreadable lines are reported (inbox_unreadable), never silently dropped.
+        if f not in expected or done.get(f, 0) != expected[f]:
+            continue
         rel = f.relative_to(root).as_posix()
         take([{"op": "MARK_INBOX", "file": rel}], rel)
     moves = _transitions(ws, at, min_sessions)
@@ -1074,6 +1290,35 @@ def _append_only(rel: str) -> bool:
     return zone_of(rel) == "inbox" or rel.startswith("learning/digest/")
 
 
+def _one_session(data: bytes) -> str:
+    """The single session every line of an inbox file belongs to, or ""
+    when a line is not a valid record or two sessions are mixed."""
+    sessions = set()
+    for line in data.decode("utf-8", "replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            return ""
+        if not isinstance(rec, dict) or rec.get("kind") not in KINDS or not isinstance(rec.get("session"), str) \
+                or not rec["session"] or not isinstance(rec.get("at"), str):
+            return ""
+        sessions.add(rec["session"])
+    return sessions.pop() if len(sessions) == 1 else ""
+
+
+def _session_rewrite_ok(rel: str, head: bytes, base: bytes, handled: set[str]) -> bool:
+    """``close`` and the Stop hook replace a session's records in its own
+    inbox file until that file is consolidated (S14). Such a rewrite is
+    allowed only for an inbox file not yet marked handled whose old and new
+    lines are all valid records of one and the same session."""
+    if zone_of(rel) != "inbox" or rel in handled:
+        return False
+    sid = _one_session(head)
+    return bool(sid) and _one_session(base) == sid
+
+
 def verify(brain_root: Path | None = None, base: str | None = None) -> tuple[bool, list[str]]:
     """Replay the deltas added since ``base`` on the base files and compare."""
     root = Path(brain_root or c.BRAIN_ROOT)
@@ -1104,10 +1349,12 @@ def verify(brain_root: Path | None = None, base: str | None = None) -> tuple[boo
                 break
         if not problems:
             head, replay = _tree_files(root), _tree_files(tmp)
+            handled = consumed_inbox(root)
             for rel in sorted(set(head) | set(replay)):
                 h, r = head.get(rel), replay.get(rel)
                 if _append_only(rel):
-                    if r is not None and (h is None or not h.startswith(r)):
+                    if r is not None and (h is None or not h.startswith(r)) and \
+                            not (h is not None and _session_rewrite_ok(rel, h, r, handled)):
                         problems.append(f"{rel}: changed other than by appending")
                 elif h != r:
                     problems.append(f"{rel}: {'not produced by any delta' if r is None else 'missing' if h is None else 'differs from the replayed deltas'}")
@@ -1123,23 +1370,66 @@ def verify(brain_root: Path | None = None, base: str | None = None) -> tuple[boo
 
 
 # ---------------------------------------------------------------- cli
-def cmd_note(args) -> int:
-    rec = {"kind": "note", "session": c.session_id(), "at": c.now_iso(), "text": " ".join((args.text or "").split()),
-           "class": args.cls, "scope": args.scope, "trust": args.trust, "evidence": args.evidence}
+def _managed_project(args, root: Path) -> Path | None:
+    proj = c.resolve_project(getattr(args, "project", None), root)
+    return proj if proj is not None and c.is_managed(proj) else None
+
+
+def build_note(args, root: Path) -> tuple[dict | None, Path | None, str]:
+    """(record, project, "") for ``learn note``, or (None, None, reason). Every
+    check runs before anything is written, so a refused text is never stored
+    anywhere in the brain: format, owner words (--quote), project names and
+    paths (I-05), and evidence that resolves to this session's own records."""
+    sid = c.session_id()
+    rec = {"kind": "note", "session": sid, "at": c.now_iso(), "text": " ".join((args.text or "").split()),
+           "class": list(args.cls or []), "scope": args.scope, "trust": args.trust,
+           "evidence": [" ".join(str(e).split()) for e in (args.evidence or [])]}
     if args.signal:
         rec["signal"] = args.signal
     if args.source:
         rec["source"] = args.source
+    if any(e.startswith("owner:") for e in rec["evidence"]):
+        return None, None, "owner evidence comes only from --quote, checked against the owner's typed turns"
+    if args.trust == "owner-stated" and not getattr(args, "quote", None):
+        return None, None, "--trust owner-stated needs --quote with the owner's own words from this session"
+    probe = dict(rec, evidence=rec["evidence"] + (["owner:turn@x#000000000000"] if getattr(args, "quote", None) else []))
+    errs = check_note(probe)
+    if errs:
+        return None, None, "; ".join(errs)
+    project = _managed_project(args, root)
+    if args.scope != "project":
+        names = known_project_ids(root) + project_words(project)
+        if project_specific(rec["text"], names):
+            return None, None, "names a path, file or project: record it with --scope project in that project's .brain/"
+        if any(project_specific(e, names) for e in rec["evidence"] if not e.startswith("review:")):
+            return None, None, "evidence names a path, file or project: name the gate, test or run instead"
+    evidence, why = resolve_evidence(rec["evidence"], sid, project, root)
+    if why:
+        return None, None, why
+    if getattr(args, "quote", None):
+        owner_ev, why = verify_owner_quote(args.quote, sid)
+        if why:
+            return None, None, why
+        evidence.append(owner_ev)
+    rec["evidence"] = evidence
     errs = check_note(rec)
     if errs:
-        print("note refused: " + "; ".join(errs))
+        return None, None, "; ".join(errs)
+    return rec, project, ""
+
+
+def cmd_note(args) -> int:
+    root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+    rec, project, why = build_note(args, root)
+    if rec is None:
+        print("note refused: " + why)
         return 1
     if args.scope == "project":
-        proj = c.need_project(args)
-        if proj is None:
+        if project is None:
+            print("no managed project found (attach one, or run: brain init <path>)")
             return 1
         item = note_item(rec, c.today())
-        path = proj / ".brain" / "memory" / "lessons.jsonl"
+        path = project / ".brain" / "memory" / "lessons.jsonl"
         if any(r.get("id") == item["id"] for r in c.read_jsonl(path)):
             print(f"already recorded as {item['id']}")
             return 0
@@ -1150,14 +1440,93 @@ def cmd_note(args) -> int:
         c.append_jsonl(path, item)
         print(f"project lesson {item['id']} recorded as a candidate in .brain/memory/lessons.jsonl")
         return 0
-    path = _writable_session_file(c.BRAIN_ROOT, rec["session"])
+    path = _writable_session_file(root, rec["session"])
     c.append_jsonl(path, with_id(rec))
     print(f"note recorded in the inbox ({path.name}); it is reviewed at the next consolidation")
     return 0
 
 
+CORRECTION_KINDS = ("sizing", "fact", "quality")
+
+
+def project_salt(project: Path) -> str:
+    """The project's own salt for hashing request words (``.brain/log/salt``),
+    created once: hashes are not comparable across projects and no word
+    leaves the project in clear (I-05)."""
+    import secrets
+    path = Path(project) / ".brain" / "log" / "salt"
+    salt = c.read_text(path).strip()
+    if not re.fullmatch(r"[0-9a-f]{32,128}", salt):
+        salt = secrets.token_hex(16)
+        c.write_text(path, salt + "\n")
+    return salt
+
+
+def hashed_words(text: str, salt: str) -> list[str]:
+    """Sorted distinct salted hashes (12 hex) of a text's content words."""
+    return sorted({c.sha256_text(f"{salt}\n{w}")[:12] for w in c.words(text or "")})
+
+
+def cmd_correction(args) -> int:
+    """An owner correction: the strongest learning signal there is (I-07), so
+    it needs the owner's own words, verified in the transcript like a note."""
+    root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+    sid = c.session_id()
+    if args.kind == "sizing":
+        if args.from_tier is None or args.to_tier is None or args.from_tier == args.to_tier:
+            print("correction refused: --kind sizing needs --from-tier and a different --to-tier")
+            return 2
+    elif not args.item:
+        print(f"correction refused: --kind {args.kind} needs --item (the id of the corrected item)")
+        return 2
+    if args.item and not I.ID_RE.match(args.item):
+        print(f"correction refused: {args.item!r} is not an item id")
+        return 2
+    ev, why = verify_owner_quote(args.quote, sid)
+    if why:
+        print("correction refused: " + why)
+        return 1
+    rec = {"kind": "correction", "session": sid, "at": c.now_iso(), "correction": args.kind, "evidence": [ev]}
+    if args.item:
+        rec["item"] = args.item
+    if args.kind == "sizing":
+        rec["rule_tier"], rec["tier"] = args.from_tier, args.to_tier
+        project = _managed_project(args, root)
+        if args.request and project is not None:
+            rec["words"] = hashed_words(args.request, project_salt(project))
+    path = _writable_session_file(root, sid)
+    c.append_jsonl(path, with_id(rec))
+    print(f"owner correction ({args.kind}) recorded in the inbox ({path.name}); it counts at the next consolidation")
+    return 0
+
+
+def cmd_review(args) -> int:
+    """Two independent review passes: record the counts, answer whether to run
+    another round (capture-recapture, ``mlearn.review_stop``)."""
+    root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+    sid = c.session_id()
+    cls = args.cls or ""
+    rnd = args.round
+    if rnd is None:
+        rnd = 1 + sum(1 for r in pending_session_records(root, sid) if r.get("kind") == "review" and r.get("task_class", "") == cls)
+    try:
+        ans = mlearn_module().review_stop(args.found_a, args.found_b, args.both, rounds=rnd)
+    except (ValueError, ImportError, AttributeError) as e:
+        print(f"review refused: {e}")
+        return 2
+    rec = {"kind": "review", "session": sid, "at": c.now_iso(), "task_class": cls, "round": rnd,
+           "found_a": args.found_a, "found_b": args.found_b, "both": args.both}
+    c.append_jsonl(_writable_session_file(root, sid), with_id(rec))
+    print(f"review round {rnd}: about {max(0.0, ans['estimated_remaining']):g} defect(s) likely remain (a lower bound); "
+          f"another round: {'yes' if ans['another_round'] else 'no'}")
+    return 0
+
+
 def cmd_consolidate(args) -> int:
     leads = official_leads(c.BRAIN_ROOT)
+    bad_lines, bad_files = inbox_unreadable(c.BRAIN_ROOT)
+    if bad_lines:
+        print(f"inbox: {bad_lines} unreadable line(s) in {bad_files} file(s) skipped; the valid records are used")
     delta, rejected = build_consolidation(min_sessions=args.min_sessions)
     if delta is None:
         if rejected:
@@ -1231,12 +1600,15 @@ def status_lines(brain_root: Path | None = None) -> list[str]:
     archived = len(c.read_jsonl(root / ARCHIVE))
     pend = pending_inbox(root)
     recs = sum(len(c.read_jsonl(p)) for p in pend)
+    bad_lines, _bad_files = inbox_unreadable(root)
     rows = manifest_rows(root)
     last = rows[-1] if rows else None
     return [
         "items: " + ", ".join(f"{v} {k}" for k, v in counts.items()) + f"; {archived} archived",
         f"items in a conflict: {conflicts}",
-        f"inbox: {len(pend)} file(s) pending ({recs} record(s)); {len(official_leads(root))} unhandled official lead(s)",
+        f"inbox: {len(pend)} file(s) pending ({recs} record(s)"
+        + (f", {bad_lines} unreadable line(s)" if bad_lines else "")
+        + f"); {len(official_leads(root))} unhandled official lead(s)",
         f"last delta: {last['id']} at {last['at']} ({last['ops_count']} op(s))" if last else "last delta: none yet",
         f"deltas applied: {len(rows)}",
     ]
@@ -1251,16 +1623,37 @@ def register(sub) -> None:
     p = sub.add_parser("learn", help="the learning pipeline (only writer of the learned zone)")
     s = p.add_subparsers(dest="learn_cmd")
 
-    n = s.add_parser("note", help="record a lesson candidate with evidence")
+    n = s.add_parser("note", help="record a lesson candidate with evidence", description=EVIDENCE_HELP)
     n.add_argument("--text", required=True)
     n.add_argument("--class", dest="cls", action="append", default=[], required=True)
-    n.add_argument("--evidence", action="append", default=[], required=True)
+    n.add_argument("--evidence", action="append", default=[],
+                   help="gate:<id>, test:<name>, run:<log>, outcome:<id> or review:<file> (repeatable)")
+    n.add_argument("--quote", help="the owner's own words from a turn he typed in this session (checked in the transcript)")
     n.add_argument("--scope", default="global")
-    n.add_argument("--trust", default="observed", choices=TRUST_NOTE)
+    n.add_argument("--trust", default="observed", choices=TRUST_NOTE,
+                   help="owner-stated needs --quote; external needs --source and must be a fact")
     n.add_argument("--signal", choices=SIGNALS)
     n.add_argument("--source", help="where an external fact comes from")
     c.add_project_arg(n)
     n.set_defaults(func=cmd_note)
+
+    k = s.add_parser("correction", help="record an owner correction (needs --quote of his words)")
+    k.add_argument("--kind", required=True, choices=CORRECTION_KINDS)
+    k.add_argument("--quote", required=True, help="the owner's own words from a turn he typed in this session")
+    k.add_argument("--item", help="id of the corrected memory item (fact, quality)")
+    k.add_argument("--from-tier", type=int, choices=(0, 1, 2, 3), help="sizing: the tier the work was given")
+    k.add_argument("--to-tier", type=int, choices=(0, 1, 2, 3), help="sizing: the tier the owner says it was")
+    k.add_argument("--request", help="sizing: the request text; only salted word hashes are kept, in the project")
+    c.add_project_arg(k)
+    k.set_defaults(func=cmd_correction)
+
+    r = s.add_parser("review", help="record two review passes and say whether to run another round")
+    r.add_argument("--found-a", type=int, required=True, help="defects found by reviewer A")
+    r.add_argument("--found-b", type=int, required=True, help="defects found by reviewer B")
+    r.add_argument("--both", type=int, required=True, help="defects both found")
+    r.add_argument("--class", dest="cls", help="task class reviewed")
+    r.add_argument("--round", type=int, help="review round (default: next for this session and class)")
+    r.set_defaults(func=cmd_review)
 
     k = s.add_parser("consolidate", help="turn pending inbox files into one delta and apply it")
     k.add_argument("--dry-run", action="store_true")

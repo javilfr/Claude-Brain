@@ -173,6 +173,60 @@ class CloseTest(unittest.TestCase):
         self.assertEqual([x["kind"] for x in recs], ["ledger"])
         self.assertEqual(recs[0]["family"], "")
 
+    def close_cmd(self, *argv):
+        import io
+        from contextlib import redirect_stdout
+        p = argparse.ArgumentParser(prog="brain")
+        ledger.register(p.add_subparsers())
+        args = p.parse_args(["close", "--project", str(self.proj), *argv])
+        args.brain_root = self.brain
+        buf = io.StringIO()
+        with mock.patch.dict(os.environ, {"BRAIN_SESSION_ID": "sess-1"}), redirect_stdout(buf):
+            os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
+            code = args.func(args)
+        return code, buf.getvalue()
+
+    def test_close_without_transcript_records_outcomes_with_unknown_usage(self):
+        """S6: no transcript still records the gate outcomes and clears the marker."""
+        ledger.mark_open(self.proj, "sess-1")
+        with mock.patch.dict(os.environ, {"BRAIN_TRANSCRIPT": str(self.tmp / "gone.jsonl")}):
+            code, out = self.close_cmd("--outcome", "ok", "--class", "build", "--tier", "1")
+        self.assertEqual(code, 0, out)
+        self.assertIn("token usage unknown", out)
+        self.assertLessEqual(len(out.splitlines()), 15)
+        _, recs = self.inbox()
+        led = next(r for r in recs if r["kind"] == "ledger")
+        (o,) = [r for r in recs if r["kind"] == "outcome"]
+        self.assertEqual((led["usage"], led["models"]), ("unknown", {}))
+        self.assertEqual((o["usage"], o["tokens"], o["cost"], o["minutes"]), ("unknown", None, None, None))
+        self.assertEqual((o["passed"], o["first_pass"], o["rework"]), (True, False, 1))
+        self.assertFalse((self.proj / ".brain" / "log" / ledger.OPEN_MARKER).exists())
+
+    def test_request_words_are_salted_hashes_kept_with_the_rule_tier(self):
+        """S9: sizing data from close: salted word hashes and the rule tier, never the words."""
+        request = "Fix the colour of the login button"
+        with mock.patch.dict(os.environ, {"BRAIN_TRANSCRIPT": str(MAIN)}):
+            code, out = self.close_cmd("--class", "build", "--tier", "1", "--request", request)
+            self.assertEqual(code, 0, out)
+            _, recs = self.inbox()
+            (o,) = [r for r in recs if r["kind"] == "outcome"]
+            self.assertIsInstance(o["rule_tier"], int)
+            self.assertTrue(o["words"] and all(len(w) == 12 and int(w, 16) >= 0 for w in o["words"]))
+            path, _ = self.inbox()
+            blob = path.read_text()
+            for word in ("colour", "login", "button", request):
+                self.assertNotIn(word, blob)
+            salt = (self.proj / ".brain" / "log" / "salt").read_text().strip()
+            self.assertRegex(salt, r"^[0-9a-f]{32}$")
+            self.assertFalse(list(self.brain.rglob("salt")), "the salt stays in the project")
+            self.assertEqual(o["words"], learn.hashed_words(request, salt))
+            self.assertNotEqual(o["words"], learn.hashed_words(request, "0" * 32))
+            # A later capture without --request (the Stop hook) keeps the sizing fields.
+            ledger.capture(self.brain, "sess-1", MAIN, SUBS, self.proj)
+            _, recs = self.inbox()
+            self.assertEqual(next(r for r in recs if r["kind"] == "outcome")["words"], o["words"])
+
+
 
 class CloseCommandTest(unittest.TestCase):
     def parser(self):

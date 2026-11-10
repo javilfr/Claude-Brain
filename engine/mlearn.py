@@ -950,6 +950,33 @@ def _cmd(kind: str):
     return run
 
 
+def flaky_line(state: dict, cfg: dict, gate_key: str) -> str:
+    """One line for ``brain ml flaky``: how likely a red run of this gate is
+    flaky, and on how many recorded red runs that rests."""
+    g = _ensure(state or {})["gates"].get(gate_key)
+    if not g:
+        return f"gate {gate_key}: no recorded runs; treat a red run as real"
+    p = flaky(state, gate_key, cfg)
+    n = sum(g.get("fs", [0, 0]))
+    advice = "re-run once on the same commit before calling it red" if p >= cfg["flaky"]["rerun"] else "treat a red run as real"
+    return f"gate {gate_key}: {p:.0%} chance a red run is flaky (n={n} red runs followed up); {advice}"
+
+
+def _cmd_flaky(args) -> int:
+    try:
+        cfg = config()
+    except ValueError as e:
+        print(str(e))
+        return 2
+    st = load()
+    line = flaky_line(st, cfg, args.gate)
+    if args.json:
+        print(json.dumps({"gate": args.gate, "flaky": flaky(st, args.gate, cfg), "line": line}, ensure_ascii=False))
+    else:
+        print(line)
+    return 0
+
+
 def register(sub) -> None:
     p = sub.add_parser("ml", help="what the statistical learners have learned, and drift alarms")
     s = p.add_subparsers(dest="ml_cmd")
@@ -959,4 +986,8 @@ def register(sub) -> None:
     a = s.add_parser("alarms", help="open drift alarms and flaky gates (at most 3 lines)")
     a.add_argument("--json", action="store_true")
     a.set_defaults(func=_cmd("alarms"))
+    f = s.add_parser("flaky", help="how likely a red run of one gate is flaky (gate and release do not consult it yet)")
+    f.add_argument("gate", help="gate key as recorded in outcomes (the gate id, e.g. checks)")
+    f.add_argument("--json", action="store_true")
+    f.set_defaults(func=_cmd_flaky)
     p.set_defaults(func=_cmd("report"))

@@ -88,11 +88,10 @@ def checkpoint(project: Path, item: str | None = None, done: str | None = None, 
     if nxt is not None:
         st["next"] = "; ".join(c.clip(n, 100).replace(";", ",") for n in nxt[:3])
     if stage:
+        # The stage lives here only. The manifest is configuration (commands,
+        # gates, release rule): a checkpoint must not edit it, or every
+        # checkpoint would make a green gate look stale.
         st["stage"] = stage
-        m = c.load_manifest(project)
-        if m and m.get("stage") != stage:
-            m["stage"] = stage
-            c.write_json(Path(project) / ".brain" / "project.json", m)
     if tier is not None:
         st["tier"] = str(tier)
     if blockers is not None:

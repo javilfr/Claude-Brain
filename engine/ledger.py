@@ -221,7 +221,7 @@ RISKS = ("trivial", "standard", "high", "one-way-door")   # contract/v1.schema.j
 USED_RE = re.compile(r"^(?P<item>[a-z]{2,8}-[a-z0-9][a-z0-9-]{1,60}):(?P<followed>[01])$")
 # What close may declare about an outcome; a later capture of the same
 # session (the Stop hook, a second close) keeps these unless given again.
-DECLARED = ("risk", "est_tokens", "est_minutes", "explored", "propensity")
+DECLARED = ("risk", "est_tokens", "est_minutes", "explored", "propensity", "words", "rule_tier")
 
 
 def _gate_rows(project: Path, sid: str) -> list[dict]:
@@ -266,7 +266,7 @@ def parse_used(values: list[str] | None) -> tuple[list[tuple[str, bool]], str]:
 
 
 def _outcomes(sid: str, at: str, family: str, classes: list[str], tier, s: dict, gates: list[dict],
-              command_gates: set[str], declared: dict, models_cfg: dict) -> list[dict]:
+              command_gates: set[str], declared: dict, models_cfg: dict, usage_known: bool = True) -> list[dict]:
     """One outcome per task class, judged only by this session's gate exit
     codes (I-07): ``first_pass`` when every gate's first run was green,
     ``passed`` when every gate's last run was, ``rework`` = red runs before
@@ -300,6 +300,13 @@ def _outcomes(sid: str, at: str, family: str, classes: list[str], tier, s: dict,
                "gate_runs": [{"gate": g["gate"], "exit": g["exit_code"],
                               "commit": c.sha256_text(g["commit"])[:12] if g["commit"] else None} for g in gates],
                "evidence": [f"gate:{g['gate']} exit {g['exit_code']}" for g in first.values()]}
+        # Sizing data (S9): salted hashes of the request's words and the tier
+        # the rules gave it; mlearn learns from them in shadow mode only.
+        if isinstance(declared.get("words"), list) and isinstance(declared.get("rule_tier"), int):
+            rec["words"], rec["rule_tier"] = list(declared["words"]), declared["rule_tier"]
+        if not usage_known:
+            # No transcript: the gates still say what happened; the cost does not exist.
+            rec.update(tokens=None, cost=None, minutes=None, usage="unknown")
         out.append(rec)
     return out
 
@@ -322,7 +329,8 @@ def capture(brain_root: Path | None = None, sid: str | None = None, main_path=No
     if main_path is None:
         main_path, sub_paths = c.transcript_paths(sid)
     cfg = models_cfg if models_cfg is not None else c.read_json(root / "memory" / "models.json", {})
-    s = summarise(main_path, sub_paths or [], cfg)
+    usage_known = main_path is not None and Path(main_path).is_file()
+    s = summarise(main_path if usage_known else None, sub_paths if usage_known else [], cfg)
     earlier = learn.pending_session_records(root, sid)
     prev_ledger = next((r for r in earlier if r.get("kind") == "ledger"), {})
     prev_out = {str(r.get("task_class")): r for r in earlier if r.get("kind") == "outcome"}
@@ -331,7 +339,8 @@ def capture(brain_root: Path | None = None, sid: str | None = None, main_path=No
     outcome = outcome or str(prev_ledger.get("outcome") or "")
     declared = {k: v for k, v in (declared or {}).items() if v is not None}
     at = c.now_iso()
-    result = {"session": sid, "summary": s, "run_record": "", "inbox": "", "inbox_records": 0, "skipped": ""}
+    result = {"session": sid, "summary": s, "run_record": "", "inbox": "", "inbox_records": 0, "skipped": "",
+              "usage": "known" if usage_known else "unknown"}
 
     family = ""
     gates: list[dict] = []
@@ -348,6 +357,8 @@ def capture(brain_root: Path | None = None, sid: str | None = None, main_path=No
                   "note": note, "models": _model_rows(s), "totals": s["totals"], "helpers": s["helpers"],
                   "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"],
                   "gates": [{k: g[k] for k in ("gate", "exit_code", "at")} for g in gates]}
+        if not usage_known:
+            record["usage"] = "unknown"
         c.write_json(path, record)
         result["run_record"] = str(path)
 
@@ -355,13 +366,15 @@ def capture(brain_root: Path | None = None, sid: str | None = None, main_path=No
                 "task_class": classes[0] if classes else "", "classes": classes, "tier": tier,
                 "outcome": outcome, "model": _alias(s["main_model"], cfg), "models": _model_rows(s),
                 "helpers": s["helpers"], "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"]}]
+    if not usage_known:
+        records[0].update(models={}, cache_read_share=None, wall_minutes=None, usage="unknown")
     if classes and gates:
         per_class = []
         for cls in classes:
             keep = {k: prev_out.get(cls, {}).get(k) for k in DECLARED}
             per_class.append({**{k: v for k, v in keep.items() if v is not None}, **declared})
         # Classes share one session, so the declared fields of the first class stand for all.
-        records += _outcomes(sid, at, family, classes, tier, s, gates, command_gates, per_class[0], cfg)
+        records += _outcomes(sid, at, family, classes, tier, s, gates, command_gates, per_class[0], cfg, usage_known)
     kinds: tuple[str, ...] = ("ledger", "outcome")
     if used is not None:
         kinds += ("used",)
@@ -470,16 +483,21 @@ def cmd_close(args) -> int:
         print("--propensity must be in (0, 1]")
         return 2
     main, subs = c.transcript_paths(sid)
-    if main is None or not main.is_file():
-        print(f"no transcript found for session {sid}")
-        return 1
-    project = c.resolve_project(args.project)
+    known = main is not None and main.is_file()
+    project = c.resolve_project(args.project, getattr(args, "brain_root", None))
     if project is not None and not c.is_managed(project):
         project = None
     declared = {"risk": args.risk, "model": args.model, "effort": args.effort, "est_tokens": args.est_tokens,
                 "est_minutes": args.est_minutes, "explored": None if args.explored is None else bool(args.explored),
                 "propensity": args.propensity, "has_check": None if args.has_check is None else bool(args.has_check)}
-    r = capture(sid=sid, main_path=main, sub_paths=subs, project=project, outcome=args.outcome or "",
+    if getattr(args, "request", None) and project is not None:
+        # The request text is used here and dropped: only salted hashes of
+        # its words leave this function, and the salt stays in the project.
+        from . import route
+        declared["words"] = learn.hashed_words(args.request, learn.project_salt(project))
+        declared["rule_tier"] = int(route.classify(args.request, c.load_manifest(project))["tier"])
+    r = capture(brain_root=getattr(args, "brain_root", None), sid=sid, main_path=main if known else None,
+                sub_paths=subs if known else [], project=project, outcome=args.outcome or "",
                 classes=args.cls, tier=args.tier, note=args.note or "",
                 used=used if args.used else None, declared=declared)
     if args.json:
@@ -487,10 +505,13 @@ def cmd_close(args) -> int:
         return 0
     s = r["summary"]
     t = s["totals"]
-    print(f"tokens: {_k(_tokens(t))} (in {_k(t['in'])}, cache write {_k(t['cache_write'])}, "
-          f"cache read {_k(t['cache_read'])}, out {_k(t['out'])})")
-    print(f"cost: ${t['cost']:.2f}; helpers {s['helpers']} ({s['helper_cost_share']:.0%} of cost)")
-    print(f"main conversation read from cache: {s['cache_read_share']:.0%}")
+    if not known:
+        print(f"no transcript found for session {sid}: outcomes recorded from the gate log, token usage unknown")
+    else:
+        print(f"tokens: {_k(_tokens(t))} (in {_k(t['in'])}, cache write {_k(t['cache_write'])}, "
+              f"cache read {_k(t['cache_read'])}, out {_k(t['out'])})")
+        print(f"cost: ${t['cost']:.2f}; helpers {s['helpers']} ({s['helper_cost_share']:.0%} of cost)")
+        print(f"main conversation read from cache: {s['cache_read_share']:.0%}")
     print(f"run record: {r['run_record'] or 'none (no managed project)'}")
     print(f"inbox: {r['skipped'] or str(r['inbox_records']) + ' record(s) in ' + Path(r['inbox']).name}")
     return 0
@@ -522,5 +543,6 @@ def register(sub) -> None:
     k.add_argument("--propensity", type=float, help="probability the routing choice had (default 1)")
     k.add_argument("--has-check", type=int, choices=(0, 1),
                    help="override: did a verifying command gate run (default: read from the gate log)")
+    k.add_argument("--request", help="the owner's request; only salted hashes of its words are kept (sizing data)")
     k.add_argument("--json", action="store_true")
     k.set_defaults(func=cmd_close)

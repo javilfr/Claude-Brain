@@ -265,7 +265,7 @@ class StateTests(Base):
         self.assertEqual((st["item"], st["last_done"], st["stage"]), ("B", "A", "build"))
         self.assertEqual(len(st["next_list"]), 3)
         self.assertIn("half done", st["notes"])
-        self.assertEqual(c.load_manifest(p)["stage"], "build")
+        self.assertEqual(c.load_manifest(p)["stage"], "intake", "a checkpoint never edits the manifest")
         text = state.write_status(p)
         self.assertLessEqual(len(text.splitlines()), 40)
         self.assertIn("Working on: B", text)

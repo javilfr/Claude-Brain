@@ -181,7 +181,7 @@
       ],
       "est": 60,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
-      "status": "doing"
+      "status": "done"
     },
     {
       "id": "CB-091",
@@ -195,7 +195,7 @@
       ],
       "est": 30,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
-      "status": "open"
+      "status": "done"
     }
   ],
   "live_checks": [

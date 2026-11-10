@@ -59,6 +59,27 @@ class ZoneTest(unittest.TestCase):
             with self.subTest(path):
                 self.assertEqual(guard.zone_of(path), zone)
 
+    def test_zone_of_normalises_dot_dot(self):
+        """B4: 'memory/../evals/x' is a kernel file, not a memory file."""
+        cases = {
+            "memory/../evals/routing.jsonl": "kernel",
+            "memory/../owner/standing.jsonl": "learned",
+            "learning/inbox/../../CLAUDE.md": "kernel",
+            "learning/inbox/../manifest.jsonl": "learned",
+            "learning/radar/../../engine/learn.py": "kernel",
+            "memory/./items.jsonl": "learned",
+            "memory/../memory/models.json": "kernel",
+            "../memory/items.jsonl": "kernel",
+            "memory/../../x": "kernel",
+            "": "kernel",
+            "..": "kernel",
+        }
+        for path, zone in cases.items():
+            with self.subTest(path):
+                self.assertEqual(guard.zone_of(path), zone)
+        self.assertEqual(guard.normalise_rel("memory/../evals/routing.jsonl"), "evals/routing.jsonl")
+        self.assertIsNone(guard.normalise_rel("memory/../../x"))
+
 
 class PathTest(unittest.TestCase):
     def setUp(self):

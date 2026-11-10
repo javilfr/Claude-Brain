@@ -350,6 +350,22 @@ class Limits(RadarCase):
         res = self.go(f, max_lines=0)
         self.assertEqual(res["lines"], [])
 
+    def test_every_relevant_new_item_becomes_a_lead_beyond_the_printed_lines(self):
+        """S8: max_lines caps what is printed, never what is recorded."""
+        write_config(self.root, only=["llms"])
+        f = Fake("v1")
+        f.override[url_of("llms")] = self.llms_with(2)
+        self.go(f)
+        f.override[url_of("llms")] = self.llms_with(9)
+        res = self.go(f, max_lines=2)
+        self.assertEqual(len(res["lines"]), 2)
+        leads = self.inbox()
+        self.assertEqual(len(leads), 7)
+        self.assertTrue({p["id"] for p in res["new"]} <= {r["id"] for r in leads})
+        self.assertTrue(all("_score" not in r for r in leads))
+        again = self.go(f, max_lines=2)
+        self.assertEqual((again["new"], len(self.inbox())), ([], 7))
+
     def test_state_seen_list_is_bounded(self):
         write_config(self.root, only=["hn"], overrides={"hn": {"seen_cap": 5, "min_points": 0}})
         for rnd in range(6):
@@ -428,7 +444,10 @@ class DueLines(RadarCase):
             return radar_run(self.root, now=NOW, fetch=Fake(self.version), **{**kw, "force": True})
 
         self.version = "v1"
-        with mock.patch.object(radar, "run", run_here):
+        # B1/S18: this test exercises the network path, so it clears the switch
+        # itself and passes whether or not BRAIN_NO_NETWORK is set outside.
+        with mock.patch.dict(os.environ), mock.patch.object(radar, "run", run_here):
+            os.environ.pop("BRAIN_NO_NETWORK", None)
             self.assertEqual(radar.due_lines(brain_root=self.root), [])
             self.version = "v2"
             lines = radar.due_lines(brain_root=self.root)
@@ -438,11 +457,13 @@ class DueLines(RadarCase):
         self.assertEqual(calls[0]["max_seconds"], 4)
 
     def test_any_exception_returns_empty(self):
-        with mock.patch.object(radar, "run", side_effect=RuntimeError("x")):
+        with mock.patch.dict(os.environ), mock.patch.object(radar, "run", side_effect=RuntimeError("x")):
+            os.environ.pop("BRAIN_NO_NETWORK", None)
             self.assertEqual(radar.due_lines(brain_root=self.root), [])
 
     def test_network_errors_inside_run_return_empty(self):
-        with mock.patch.object(radar, "default_fetch", side_effect=OSError("offline")):
+        with mock.patch.dict(os.environ), mock.patch.object(radar, "default_fetch", side_effect=OSError("offline")):
+            os.environ.pop("BRAIN_NO_NETWORK", None)
             self.assertEqual(radar.due_lines(brain_root=self.root), [])
 
     def test_no_network_env_skips_everything(self):
@@ -463,7 +484,7 @@ class Records(RadarCase):
         self.baseline()
         res = self.go(Fake("v2"))
         rows = self.inbox()
-        self.assertEqual(len(rows), len(res["new"]))
+        self.assertTrue({p["id"] for p in res["new"]} <= {r["id"] for r in rows})
         keys = {"kind", "session", "at", "id", "source", "trust", "date", "title", "url", "matched"}
         for r in rows:
             self.assertEqual(set(r), keys)
@@ -519,6 +540,24 @@ class Records(RadarCase):
 
 
 class Cli(unittest.TestCase):
+    def setUp(self):
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("BRAIN_NO_NETWORK", None)
+
+    def test_no_network_switch_is_honoured(self):
+        """S18: `brain radar` does not touch the network when BRAIN_NO_NETWORK is set."""
+        os.environ["BRAIN_NO_NETWORK"] = "1"
+        with mock.patch.object(radar, "run", side_effect=AssertionError("must not run")), \
+                redirect_stdout(io.StringIO()) as out:
+            for argv in ((), ("--force", "--json")):
+                args = self.parse(*argv)
+                self.assertEqual(args.func(args), 0)
+        lines = out.getvalue().splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertIn("network use is switched off", lines[0])
+
     def parse(self, *argv):
         p = argparse.ArgumentParser()
         radar.register(p.add_subparsers())

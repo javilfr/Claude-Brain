@@ -557,6 +557,51 @@ class SmallLearners(unittest.TestCase):
         off = m.sizing_hint(st, cfg(), ["ha", "hb"], 2)
         self.assertFalse(off["acted"], "shadow unless sizing.act")
 
+    def test_outcomes_without_tokens_fold(self):
+        """S6: a close without a transcript records usage as unknown."""
+        c_ = cfg()
+        rec = Rec("u")
+        rows = [rec.outcome(tokens=None, cost=None, minutes=None, usage="unknown"),
+                {k: v for k, v in rec.outcome().items() if k not in ("tokens", "cost", "minutes")},
+                rec.outcome(model="", effort="", model_id="", tokens=None, cost=None, usage="unknown")]
+        st = m.fold(m.empty_state(), rows, c_)
+        self.assertEqual(st["n"], 3)
+        self.assertEqual(st["bandit"]["raw_g"]["opus/medium"][1], 2.0)
+        self.assertTrue(m.report(st, c_))
+
+    def test_outcome_words_feed_the_sizing_learner_in_shadow(self):
+        """S9: close's salted words and rule tier reach the sizing learner as weak labels."""
+        c_ = cfg()
+        rec = Rec("w")
+        rows = [rec.outcome(words=["aa11", "bb22"], rule_tier=2, tier=1) for _ in range(5)]
+        st = m.fold(m.empty_state(), rows, c_)
+        self.assertEqual(set(st["sizing"]["counts"]["1"]), {"aa11", "bb22"})
+        self.assertEqual(st["sizing"]["strong"], 0)
+        got = m.sizing_hint(st, c_, ["aa11", "bb22"], 2)
+        self.assertEqual((got["tier"], got["acted"]), (2, False))
+        self.assertIn("shadow", got["reason"])
+
+    def test_cli_flaky(self):
+        """S9: `brain ml flaky <gate>` exposes the flakiness estimate."""
+        c_ = cfg()
+        rec = Rec()
+        st = m.fold(m.empty_state(), [rec.outcome(gate_runs=[{"gate": "e2e", "commit": f"c{k}", "exit": 1},
+                                                             {"gate": "e2e", "commit": f"c{k}", "exit": 0}])
+                                      for k in range(4)], c_)
+        parser = argparse.ArgumentParser()
+        m.register(parser.add_subparsers())
+        out = {}
+        for argv in (["ml", "flaky", "e2e"], ["ml", "flaky", "unit"], ["ml", "flaky", "e2e", "--json"]):
+            buf = io.StringIO()
+            with mock.patch.object(m, "load", return_value=st), redirect_stdout(buf):
+                args = parser.parse_args(argv)
+                self.assertEqual(args.func(args), 0)
+            out[" ".join(argv[2:])] = buf.getvalue().strip()
+        self.assertIn("re-run once", out["e2e"])
+        self.assertIn("no recorded runs", out["unit"])
+        self.assertEqual(len(out["e2e"].splitlines()), 1)
+        self.assertEqual(json.loads(out["e2e --json"])["flaky"], m.flaky(st, "e2e", c_))
+
 
 # ---------------------------------------------------------------- report and cli
 class ReportAndCli(unittest.TestCase):

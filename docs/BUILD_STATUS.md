@@ -1,0 +1,86 @@
+# Build status
+
+Where the brain stands after the build session of 2026-11-10. Ticket state is in `docs/plan/tickets.json`; this file is the evidence behind it.
+
+## Done and checked in the build session
+
+| Area | What exists | Check and result |
+|---|---|---|
+| Core | `CLAUDE.md`, 10 skills, 6 agents, `bin/brain` with 21 engine modules (about 9,500 lines, standard library only) | `brain doctor`: healthy · `brain lint`: 0 errors |
+| Always-loaded cost | `CLAUDE.md` 5,356 bytes; project stub 1,150 bytes; descriptions | `brain budget`: about 2,534 tokens in total (cap 3,200) |
+| Orientation | `brain boot` | 757 bytes for "Continue" in this session (cap 1,500) |
+| Contract v1 | init, adopt, validate, migrate with manifest backup; frozen schema pinned by hash; three frozen fixtures | `tests/test_core.py`, `tests/test_fixtures.py` |
+| State and release | one state file; checkpoint that pushes; resume; handover; gates as exit codes; release only on green, fast-forward only | `tests/test_core.py`, `tests/test_hygiene.py` |
+| Requirements ledger | strict loader, implied lines, evidence required | `tests/test_core.py::ReqTests` |
+| Token ledger | real usage by model and helper from session records | `tests/test_ledger.py`; this session measured below |
+| Learning pipeline | inbox, verified evidence, admission gate, delta operations, replay check, supersede, decay, digest | `tests/test_learn.py`, `tests/test_guard.py` |
+| Statistical learning | routing bandit, calibration, drift alarms, memory credit, flakiness, forgetting, review stopping, sizing in shadow | `tests/test_mlearn.py` |
+| Recall | built-in full-text search, three items by default, silence allowed | `tests/test_recall.py` with the 60-query labelled set: recall@5 0.781, MRR 0.853 |
+| Scheduler | critical path plus annealing; skips finished tickets | `tests/test_schedule.py`: annealing matched brute force on 25 of 25 small plans |
+| Update radar | 10 sources, conditional requests, leads only | `tests/test_radar.py`; live: 10 of 10 sources in 0.96 s |
+| Evaluation | task and run formats, paired statistics, pre-registration, ablation, 12 tasks, 6 seeded defects | `tests/test_evals.py`; `brain eval audit`: 12 sound, 0 broken |
+| Lint | commands and flags named in instructions exist; budgets; imports; links | `tests/test_lint.py` |
+| End to end | bootstrap → requirement → failing gate → fix → release → close → lesson → consolidate | `tests/test_rehearsal.py` |
+
+**Full gate, last run:** `python3 -m unittest discover -s tests -t .` → 358 tests, OK, with and without `BRAIN_NO_NETWORK=1`; `doctor`, `lint`, `items check`, `eval audit` all exit 0.
+
+## Mutation spot-checks (does a test fail when the rule is broken?)
+
+Each was done in a scratch copy by making the breaking change and running the named tests.
+
+| Invariant | Breaking change | Result |
+|---|---|---|
+| I-12 | release ignores a missing green gate | caught (`test_rehearsal`) |
+| I-12 | release skips the fast-forward check | caught (`test_core`) |
+| I-03 | budget cap changed | caught (`test_core`) |
+| I-15 | an enum value removed from the frozen schema | caught (`test_fixtures`); the schema hash is now pinned as well |
+| I-07 | an external-trust rule allowed | caught (`test_core`, `test_learn`) |
+| I-04 | boot byte cap removed | caught (`test_core`); a second test now asserts the 1,500-byte figure itself |
+| I-07, I-08, I-10, I-11, I-16 | each broken in `mlearn` | caught (`test_mlearn`, reported by its builder) |
+
+The final reviewer ran 24 further mutations and found three that slipped through (forcing push, boot cap, unseeded scheduler). Tests were added for all three: `test_release_never_uses_a_forcing_push`, `test_boot_never_exceeds_its_byte_cap_whatever_the_state_holds`, `test_same_seed_same_schedule_where_annealing_runs`.
+
+## Reviews and what they changed
+
+| Review | Found | Outcome |
+|---|---|---|
+| Audit of the instruction surface (`docs/research/round2/10-audit.md`) | 6 blocking, about 17 should-fix | All blocking and should-fix items applied |
+| Final fresh-context review (`docs/review/2026-11-10-final-review.md`) | 7 blocking, 22 should-fix, 22 minor | All 7 blocking fixed, each with a reproducing test. All 22 should-fix items addressed (S20 by correcting the spec; S9's flakiness score is exposed as a command but not yet consulted by `release`). Minor: about half fixed; the rest listed below |
+
+Blocking items from the final review, all fixed: a model could label its own note as stated by the owner (now verified against what the owner typed); a crafted path could write outside the learned zone; a checkpoint could push ungated work to the release branch; a corrupt ledger line was silently dropped; the test suite depended on the brain's own recorded state; the CI check would have been red by construction; this file was missing.
+
+## Open, with reasons
+
+| Item | Why open |
+|---|---|
+| GitHub's automatic checks do not start on this account | Every run ends as failed within about four seconds, before any step. `NEEDS_YOU.md` item 7. Until fixed, nothing is enforced on GitHub; the same checks pass inside a session |
+| Learned zone not locked | By decision D-08: lock at tag `brain-v1.0.0` after the live checks |
+| The brain is on its working branch, not `main` | `NEEDS_YOU.md` item 1 |
+| No measured comparison against the earlier way of working | Needs live sessions (CB-109). No efficiency claim is made until then |
+| Duplicated wording between memory items and method files | Harmless while both are on demand; five items overlap the always-loaded file. Left in place because the labelled recall set refers to item ids |
+| Minor review items not fixed | M6 (success output mixes the last lines of both streams), M8 (repo map lists generated files), M15 (radar thread shutdown may add seconds at exit; not measured), M16 (logs outside a project go to a temporary folder), M17 (`close` options are declared by the model), M18 (two tunables still inline), M19 (lead field names), M20 (radar state changes the brain tree daily), M22 (routing examples mention trips) |
+| Gate and release do not consult the flakiness score automatically | It is available as `brain ml flaky`; wiring it into `release` waits for real data |
+
+## Needs a live session (cannot be closed from inside the build session)
+
+| Ticket | Check |
+|---|---|
+| CB-101 | The brain's `CLAUDE.md`, skills and agents load beside a project and `boot` runs from the first message. Partly seen: the skills and agents appeared live in the build session |
+| CB-102 | A quick question gets an answer with zero process steps |
+| CB-103 | "New project: …" on an empty repo: contract installed, at most three questions, first item started |
+| CB-104 | End a session mid-item; "Continue" in a new chat resumes the same item |
+| CB-105 | Helpers honour model, effort and skip-handbook settings (visible in the ledger) |
+| CB-106 | Whether hooks installed through the cloud environment load in two-repo sessions |
+| CB-107 | Whether a skill's own hooks fire after it is used |
+| CB-108 | Pushing to both repositories from one session, with branch protection on the brain |
+| CB-109 | An A/A run, then the first paired benchmark with and without the brain |
+| CB-110 | A first real project end to end |
+| CB-111 | The plugin manifest loads on desktop |
+| CB-112 | Whether an effort change keeps the prompt cache |
+
+## What the build itself cost (measured by `brain ledger`)
+
+- About 131 minutes, 30 helpers, about 198 million tokens, about $123 at list prices (a subscription pays no per-token charge; this is the list-price equivalent).
+- Helpers were 73% of the cost. The first ten analysts ran on the session's model because nothing set theirs; later helpers used the brain's own agents or an explicit cheaper model. That is the reason every brain agent file sets its model.
+- The main conversation read 99% of its input from cache. Three tool results exceeded 5,000 tokens.
+- This was a deliberately heavy session: two research rounds of ten agents each were asked for by name. It is not a baseline for normal work.

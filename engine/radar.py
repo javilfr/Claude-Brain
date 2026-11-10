@@ -427,7 +427,7 @@ def _line(it: dict) -> str:
 
 
 def _write_leads(root: Path, items: list[dict], when: dt.datetime) -> None:
-    """Append one ``lead`` record per reported item (no bodies), skipping ids
+    """Append one ``lead`` record per relevant new item (no bodies), skipping ids
     already in today's file so a forced re-run cannot duplicate them."""
     if not items:
         return
@@ -498,6 +498,7 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     ex.shutdown(wait=False, cancel_futures=True)
 
     candidates: list[tuple[int, dict, int]] = []
+    leads: list[dict] = []  # every relevant new item; max_lines caps only what is printed
     for order, s in enumerate(due):
         fut = futs[s["id"]]
         if not fut.done() or fut.cancelled():
@@ -522,6 +523,7 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
         picked.sort(key=lambda x: x["id"])
         picked.sort(key=lambda x: x["date"], reverse=True)
         picked.sort(key=lambda x: -x["_score"])
+        leads += [{k: v for k, v in p.items() if k != "_score"} for p in picked]
         candidates += [(order, p, 0) for p in picked[: int(s.get("max_lines", DEFAULT_SOURCE_LINES))]]
 
     # Global order: trust, then score, then newest date; ties keep source order.
@@ -537,7 +539,7 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
 
     try:
         c.write_json(state_path, state)
-        _write_leads(root, chosen, when)
+        _write_leads(root, leads, when)
     except OSError as e:
         result["errors"].append(f"write failed: {type(e).__name__}")
 
@@ -559,6 +561,9 @@ def due_lines(max_seconds: float = 4, max_lines: int = 2, trust: str | None = "o
 
 # ---------------------------------------------------------------- cli
 def cmd_radar(args) -> int:
+    if os.environ.get("BRAIN_NO_NETWORK"):
+        print("radar: network use is switched off (BRAIN_NO_NETWORK is set); nothing checked")
+        return 0
     res = run(force=args.force, max_lines=args.max, trust=args.trust)
     if args.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
