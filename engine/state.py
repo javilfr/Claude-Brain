@@ -1111,8 +1111,9 @@ def brain_status_lines(brain_root: Path | None = None) -> list[str]:
         branch = current_branch(root)
         head += f" · branch {branch}"
         base = next((b for b in ("origin/main", "main") if git(root, "rev-parse", "--verify", "--quiet", b)), "")
-        if base and branch != "main":
-            head += f" · {git(root, 'rev-list', '--count', f'{base}..HEAD') or '?'} commit(s) not on main"
+        n = git(root, "rev-list", "--count", f"{base}..HEAD") if base and branch != "main" else ""
+        if n.isdigit() and int(n):
+            head += f" · {n} commit(s) not on main"
         dirty = changed_files(root)
         if dirty:
             lines.append(f"uncommitted: {len(dirty)} change(s) ({', '.join(dirty[:3])}{', …' if len(dirty) > 3 else ''})")
