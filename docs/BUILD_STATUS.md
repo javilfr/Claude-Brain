@@ -127,3 +127,22 @@ Every line below is a command run at the start of this session, before any chang
 | `brain learn verify` | 1 delta replayed on `origin/main`; learned zone matches |
 
 Differs from the handover: the build session's 407 tests and clean audits reproduce exactly. The "brain is on its working branch, not `main`" line above is out of date (commit `19fb016`: the owner merged it); CB-209 corrects it.
+
+### CB-202 End-to-end trial on a scratch project
+
+A tip calculator (Python CLI, split between people, tests) in a scratch repository with a local bare remote, run through the real flow: `boot` → `init` → 4 ledger lines (one implied) → plan and tickets → `plan schedule` (2 parallel, 2.0x) → `hr staff` (2 plain builders, $1.20 payroll) → 2 × `hr hire` → 2 builder helpers on sonnet in parallel → `hr settle` (both checks passed when the brain re-ran them; 5,234 and 5,220 of 20,000 output-equivalent tokens, 0.26x of wage) → `req check` → `gate` (12 tests) → `release` (refused uncommitted work, then pushed on green) → `checkpoint --push` → `resume` → `handover` (refused while the brain had uncommitted work, then ready).
+
+Found and fixed, each with a test:
+
+| Found | Fix |
+|---|---|
+| `boot` and `detect` ignored `--project`, `BRAIN_PROJECT` and the current repository; only siblings counted | Same precedence as every other command (`test_explicit_project_wins_over_siblings_like_every_other_command`) |
+| "a command-line tip calculator in Python … with tests" routed as `knowledge.longform`: the typo matcher read "tests" as Spanish "tesis" | A vocabulary word never matches another as a slip; software vocabulary gains python, cli, script, program; the request joins `evals/routing.jsonl` |
+| `req evidence --done` accepted typed evidence; I typed "13 unit tests", the gate ran 12 | `--done` runs a line's command check and refuses on failure; `req check --run` re-runs them; brain-verify uses it |
+| `init` wrote no root `.gitignore`; the first release committed 7 `__pycache__` files | `init` writes one (secrets files and build caches); `adopt` still adds nothing outside `.brain/` |
+| brain-plan told the lead to put implied needs in `--passes-when`; the CLI has `--implied --assumption` | Skill text matches the CLI |
+| `method/quality.md` said an empty ledger passes; it fails at project size once building | Text matches the code |
+
+Seen and left, with reasons: `hr hire` found no template for either Python item and offered unrelated "closest" ones (rubric-mapper, accessibility-auditor) — evidence for CB-204. `checkpoint --push` also committed the brain's learning inbox to the brain branch (only `learning/inbox/`; it left work in progress alone) — as designed. The local push printed a protocol warning caused by this container's `push.negotiate` git setting, not by the brain.
+
+Cost from `brain ledger` at this point of the session: 12.5M tokens, $5.57 at list prices, helpers 43% (the CB-205 reviewer included); the two trial builders together $0.10. Cache read 99%.
