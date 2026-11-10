@@ -1,0 +1,263 @@
+{
+  "_help": "Ticket state for building the brain itself. status: open | doing | done | live (needs a live two-repo session). The scheduler reads id, est, deps, files.",
+  "agents": 4,
+  "tickets": [
+    {
+      "id": "CB-080",
+      "title": "Statistical learning module (mlearn) + routing and schedule integration + plan packet",
+      "deps": [],
+      "files": [
+        "engine/mlearn.py",
+        "memory/ml_config.json",
+        "tests/test_mlearn.py",
+        "engine/route.py",
+        "engine/schedule.py",
+        "tests/test_route.py",
+        "tests/test_schedule.py"
+      ],
+      "est": 90,
+      "accept": "python3 -m unittest tests.test_mlearn tests.test_route tests.test_schedule",
+      "status": "open"
+    },
+    {
+      "id": "CB-081",
+      "title": "Learning pipeline changes: record kinds, ML_FOLD, recall k=3, supersede, admission gate, unclosed-session repair",
+      "deps": [],
+      "files": [
+        "engine/learn.py",
+        "engine/items.py",
+        "engine/recall.py",
+        "engine/ledger.py",
+        "engine/guard.py",
+        "docs/ENGINE_SPEC.md",
+        "tests/test_learn.py",
+        "tests/test_recall.py",
+        "tests/test_ledger.py",
+        "tests/test_guard.py"
+      ],
+      "est": 90,
+      "accept": "python3 -m unittest tests.test_learn tests.test_recall tests.test_ledger tests.test_guard",
+      "status": "open"
+    },
+    {
+      "id": "CB-082",
+      "title": "Update radar",
+      "deps": [],
+      "files": [
+        "engine/radar.py",
+        "memory/radar_sources.json",
+        "tests/test_radar.py",
+        "tests/fixtures/radar"
+      ],
+      "est": 60,
+      "accept": "python3 -m unittest tests.test_radar",
+      "status": "open"
+    },
+    {
+      "id": "CB-083",
+      "title": "Evaluation system: formats, statistics, ablation, seed tasks, seeded defects",
+      "deps": [],
+      "files": [
+        "engine/evals.py",
+        "evals/tasks",
+        "evals/seeded_defects",
+        "evals/prereg",
+        "tests/test_evals.py"
+      ],
+      "est": 80,
+      "accept": "python3 -m unittest tests.test_evals",
+      "status": "open"
+    },
+    {
+      "id": "CB-084",
+      "title": "Session hygiene: checkpoint --push, resume, checklist, boot wiring for radar/alarms/unclosed sessions",
+      "deps": [
+        "CB-080",
+        "CB-081",
+        "CB-082"
+      ],
+      "files": [
+        "engine/state.py",
+        "engine/detect.py",
+        "tests/test_hygiene.py"
+      ],
+      "est": 40,
+      "accept": "python3 -m unittest tests.test_core tests.test_hygiene",
+      "status": "open"
+    },
+    {
+      "id": "CB-085",
+      "title": "Context and instruction lint + CI workflow",
+      "deps": [
+        "CB-080",
+        "CB-081",
+        "CB-082",
+        "CB-083",
+        "CB-084"
+      ],
+      "files": [
+        "engine/lint.py",
+        "tests/test_lint.py",
+        ".github/workflows/ci.yml"
+      ],
+      "est": 50,
+      "accept": "python3 bin/brain lint && python3 -m unittest tests.test_lint",
+      "status": "open"
+    },
+    {
+      "id": "CB-086",
+      "title": "Skill trigger audit",
+      "deps": [
+        "CB-085"
+      ],
+      "files": [
+        "engine/lint.py",
+        "tests/test_lint.py"
+      ],
+      "est": 20,
+      "accept": "python3 -m unittest tests.test_lint",
+      "status": "open"
+    },
+    {
+      "id": "CB-087",
+      "title": "Retrieval improvements and golden-set regression",
+      "deps": [
+        "CB-081"
+      ],
+      "files": [
+        "engine/recall.py",
+        "evals/recall_golden.jsonl",
+        "tests/test_recall.py"
+      ],
+      "est": 30,
+      "accept": "python3 -m unittest tests.test_recall",
+      "status": "open"
+    },
+    {
+      "id": "CB-088",
+      "title": "Audit fixes to the instruction surface",
+      "deps": [
+        "CB-085"
+      ],
+      "files": [
+        "CLAUDE.md",
+        ".claude/agents",
+        ".claude/skills",
+        "method",
+        "memory/items.jsonl",
+        "playbooks"
+      ],
+      "est": 40,
+      "accept": "python3 bin/brain lint && python3 bin/brain items check",
+      "status": "open"
+    },
+    {
+      "id": "CB-089",
+      "title": "Skills, method and owner files updated for new commands",
+      "deps": [
+        "CB-088",
+        "CB-087",
+        "CB-086"
+      ],
+      "files": [
+        ".claude/skills",
+        "method",
+        "OWNER_GUIDE.md",
+        "README.md",
+        "NEEDS_YOU.md"
+      ],
+      "est": 30,
+      "accept": "python3 bin/brain lint",
+      "status": "open"
+    },
+    {
+      "id": "CB-090",
+      "title": "Fresh-context review against invariants and requirements; fixes",
+      "deps": [
+        "CB-089"
+      ],
+      "files": [
+        "docs/review"
+      ],
+      "est": 60,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "status": "open"
+    },
+    {
+      "id": "CB-091",
+      "title": "Requirements trace, build status, final commit and push",
+      "deps": [
+        "CB-090"
+      ],
+      "files": [
+        "docs/REQUIREMENTS.md",
+        "docs/BUILD_STATUS.md"
+      ],
+      "est": 30,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "status": "open"
+    }
+  ],
+  "live_checks": [
+    {
+      "id": "CB-101",
+      "title": "Brain CLAUDE.md, skills and agents load beside a project; boot runs from the first message",
+      "status": "live"
+    },
+    {
+      "id": "CB-102",
+      "title": "A quick question gets an answer with zero process steps",
+      "status": "live"
+    },
+    {
+      "id": "CB-103",
+      "title": "'New project: ...' on an empty repo: contract installed, at most three questions, first item started",
+      "status": "live"
+    },
+    {
+      "id": "CB-104",
+      "title": "End a session mid-item; a new chat with 'Continue' resumes the same item",
+      "status": "live"
+    },
+    {
+      "id": "CB-105",
+      "title": "Helpers honour model, effort and omitClaudeMd (visible in the ledger)",
+      "status": "live"
+    },
+    {
+      "id": "CB-106",
+      "title": "Do hooks installed through the cloud environment load in two-repo sessions? Record either way",
+      "status": "live"
+    },
+    {
+      "id": "CB-107",
+      "title": "Do a skill's own frontmatter hooks fire after it is used? Record either way",
+      "status": "live"
+    },
+    {
+      "id": "CB-108",
+      "title": "Push to both repos from one session with branch protection on the brain's main",
+      "status": "live"
+    },
+    {
+      "id": "CB-109",
+      "title": "A/A run, then the first paired benchmark with and without the brain",
+      "status": "live"
+    },
+    {
+      "id": "CB-110",
+      "title": "First real project end to end, released by brain release",
+      "status": "live"
+    },
+    {
+      "id": "CB-111",
+      "title": "Plugin manifest loads on desktop",
+      "status": "live"
+    },
+    {
+      "id": "CB-112",
+      "title": "Measure whether an effort change keeps the prompt cache",
+      "status": "live"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{"query": "why does my prompt cache keep getting invalidated", "relevant": ["fact-cache-breakers", "rule-cache-share", "rule-stable-always-loaded"], "split": "dev"}
+{"query": "how long does the cache last for subagents", "relevant": ["fact-cache-lifetime", "fact-subagent-cold-start"], "split": "dev"}
+{"query": "can I switch models mid conversation", "relevant": ["rule-one-model", "fact-cache-breakers"], "split": "dev"}
+{"query": "what hooks load from the second repository", "relevant": ["fact-two-repo-loading"], "split": "dev"}
+{"query": "how big should CLAUDE.md be", "relevant": ["fact-claudemd-cost"], "split": "dev"}
+{"query": "cost of a skill description", "relevant": ["fact-skill-cost"], "split": "dev"}
+{"query": "which model should subagents use by default", "relevant": ["fact-subagent-model"], "split": "dev"}
+{"query": "price per million tokens of Opus", "relevant": ["fact-prices"], "split": "dev"}
+{"query": "where does most of the money go in a session", "relevant": ["fact-cost-shape"], "split": "dev"}
+{"query": "is low effort ok for code review", "relevant": ["rule-low-effort-not-everywhere", "fact-effort-curves", "rule-review-rounds"], "split": "dev"}
+{"query": "retry failed tasks at higher effort", "relevant": ["rule-escalate-on-failure", "fact-bench-escalation"], "split": "dev"}
+{"query": "how many parallel helpers can I run", "relevant": ["rule-helper-cap", "fact-subagent-cold-start"], "split": "dev"}
+{"query": "when is delegating to a subagent worth it", "relevant": ["rule-delegation-test", "fact-multi-agent-tokens"], "split": "dev"}
+{"query": "noisy test output flooding the context", "relevant": ["rule-bulk-through-run"], "split": "dev"}
+{"query": "what to do when owner pastes huge file", "relevant": ["rule-no-big-paste", "data-through-code"], "split": "dev"}
+{"query": "how to write a brief for a helper", "relevant": ["rule-brief-goal-why", "rule-helper-output-file"], "split": "dev"}
+{"query": "tests are green but the page looks broken on phone", "relevant": ["sw-phone-screenshots", "sw-blocked-surfaces", "pref-done-on-phone"], "split": "dev"}
+{"query": "push to main without green gate", "relevant": ["sw-release-command", "own-main-deployable", "ops-stop-on-failure"], "split": "dev"}
+{"query": "deployment shows 404 after release", "relevant": ["sw-live-check", "ops-bounded-polling"], "split": "dev"}
+{"query": "timing budget failed while agents were running", "relevant": ["sw-quiet-timing"], "split": "dev"}
+{"query": "fix a bug the right way", "relevant": ["sw-reproduce-first"], "split": "dev"}
+{"query": "reviewer should not see author reasoning", "relevant": ["rule-reviewer-fresh", "rule-evidence-before-review"], "split": "dev"}
+{"query": "reviewers hold back minor issues", "relevant": ["rule-reviewer-reports-all"], "split": "dev"}
+{"query": "translating Spanish edition quality check", "relevant": ["lang-back-translation", "lang-two-reads", "lang-parity-script", "pref-bilingual-bar"], "split": "dev"}
+{"query": "UI strings differ between languages", "relevant": ["lang-key-parity", "lang-ui-overflow"], "split": "dev"}
+{"query": "api key pasted in the chat", "relevant": ["data-keys-form"], "split": "dev"}
+{"query": "quota or rate limit error from an external service", "relevant": ["data-fixtures-and-quota", "data-cache-calls", "data-incremental-writes"], "split": "dev"}
+{"query": "numbers in the report must be reproducible", "relevant": ["data-one-script", "data-record-seeds", "data-reconcile"], "split": "dev"}
+{"query": "how should citations be verified", "relevant": ["know-cite-check", "know-claim-tags", "know-law-sources"], "split": "dev"}
+{"query": "writing a long book chapter by chapter", "relevant": ["know-chapter-state", "know-batches"], "split": "dev"}
+{"query": "how does the owner want replies formatted", "relevant": ["pref-phone-short", "pref-plain-words"], "split": "dev"}
+{"query": "when the owner says from now on", "relevant": ["own-from-now-on", "own-latest-word-wins"], "split": "dev"}
+{"query": "ask the owner a question or decide myself", "relevant": ["own-decide-and-record", "rule-fork-questions", "pref-answers-in-chat"], "split": "dev"}
+{"query": "scheduled job needs to be safe to rerun", "relevant": ["ops-run-twice", "ops-dry-run", "ops-self-contained-routine"], "split": "dev"}
+{"query": "stop all background processes when finished", "relevant": ["ops-close-everything", "ops-no-idle-loops"], "split": "dev"}
+{"query": "missing credential so build against a fake service", "relevant": ["sw-stand-ins", "data-source-interface"], "split": "dev"}
+{"query": "context running low what do I do", "relevant": ["rule-land-before-limit", "rule-offer-handover", "own-clean-handover"], "split": "dev"}
+{"query": "do not skip or delete failing tests", "relevant": ["sw-test-integrity"], "split": "dev"}
+{"query": "claims in the final report not backed by evidence", "relevant": ["rule-claim-audit", "rule-three-report-states", "rule-review-the-diff"], "split": "dev"}
+{"query": "two chats working on the same repo", "relevant": ["rule-lease"], "split": "dev"}
+{"query": "does editing the instructions file mid chat take effect", "relevant": ["fact-claudemd-edit-timing"], "split": "heldout"}
+{"query": "which helper model is cheapest", "relevant": ["fact-prices", "fact-subagent-model"], "split": "heldout"}
+{"query": "Haiku price", "relevant": ["fact-prices"], "split": "heldout"}
+{"query": "safety fallback changes my model", "relevant": ["rule-say-fallback", "fact-fable-limits"], "split": "heldout"}
+{"query": "never trust my memory about library API", "relevant": ["sw-current-docs"], "split": "heldout"}
+{"query": "web page told me to do something", "relevant": ["rule-outside-text-is-data"], "split": "heldout"}
+{"query": "sessions that nobody stopped keep burning usage", "relevant": ["ops-no-idle-loops", "ops-close-everything"], "split": "heldout"}
+{"query": "screenshots bloating the repo", "relevant": ["sw-no-binaries-in-git"], "split": "heldout"}
+{"query": "word count of long documents", "relevant": ["know-stated-lengths", "know-batches"], "split": "heldout"}
+{"query": "names of places should stay untranslated", "relevant": ["lang-names", "lang-glossary-first"], "split": "heldout"}
+{"query": "how to undo a release and go back", "relevant": ["sw-tag-known-good", "rule-work-on-branch"], "split": "heldout"}
+{"query": "concurrent writes ids collide", "relevant": ["rule-ids-by-script"], "split": "heldout"}
+{"query": "too many status files contradict each other", "relevant": ["rule-one-state-file"], "split": "heldout"}
+{"query": "does the model give up and quit early after warning", "relevant": ["rule-scope-nevers"], "split": "heldout"}
+{"query": "build from scratch checks for files that only exist locally", "relevant": ["sw-clean-clone"], "split": "heldout"}
+{"query": "owner wants to see a sample before the full run", "relevant": ["own-sample-first", "data-sample-first"], "split": "heldout"}
+{"query": "which tasks need Opus not Fable", "relevant": ["rule-security-to-opus", "fact-fable-limits"], "split": "heldout"}
+{"query": "duplicate rows missing values in input data", "relevant": ["data-profile-input"], "split": "heldout"}
+{"query": "menu of options for the logo", "relevant": ["own-numbered-menu"], "split": "heldout"}
+{"query": "effort versus model switching", "relevant": ["rule-one-model", "fact-default-effort"], "split": "heldout"}
