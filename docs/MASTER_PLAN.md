@@ -468,7 +468,7 @@ The evidence is consistent: checks that can be *run* beat a model reflecting on 
 
 ## 5.2 Attention to detail
 
-- **Definitions of done, by deliverable.** Nine short checklists in `playbooks/dod/`: code change, new app or feature, screen, research memo, plan, data analysis, written or translated content, automation, and an answer to a question. Each has five to nine yes/no items read at the moment of delivery.
+- **Definitions of done, by deliverable.** Nine short checklists in `method/dod/`: code change, new app or feature, screen, research memo, plan, data analysis, written or translated content, automation, and an answer to a question. Each has five to nine yes/no items read at the moment of delivery.
 - **Detectors for false "done".** The research catalogued 21 ways an agent claims success wrongly (tests not run, tests skipped, stubbed code, invented citations, partial coverage of the request, quietly reduced scope). `bin/brain gate` and `req check` detect the ones a script can: a gate with no recorded exit code, skip markers added in the change, TODO stubs in new code, links that do not resolve, ledger lines with no evidence, word counts off target.
 - **Visual work is checked by looking.** Screenshots at phone size and desktop size, saved outside git history by default (the Travel Journal put 390 MB of screenshots in its repo).
 - **"Done" for an app means visible to you.** Deployed, the live address serving the new version, and a note of what to check on your phone.

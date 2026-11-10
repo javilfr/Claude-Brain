@@ -46,7 +46,7 @@ Between two sizes, choose the smaller; moving up later is fine, and say why. "Qu
 ## Where things are
 
 - `method/` — lifecycle, routing, efficiency, quality, models. Read the one you need.
-- `playbooks/<family>.md` and `playbooks/dod/` — practice and definitions of done for software, data, knowledge, language and operations work.
+- `playbooks/<family>.md` and `method/dod/` — practice and definitions of done for software, data, knowledge, language and operations work.
 - `memory/models.json` — which model and effort for which role.
 - `docs/MASTER_PLAN.md` — the design. Read it only when changing the brain itself.
 - Project side: `.brain/project.json` (commands, gates, release rule), `.brain/STATE.md`, `.brain/PLAN.md`, `.brain/ext/` (project-specific tools), `STATUS.md`, `NEEDS_YOU.md`.

@@ -1,0 +1,1 @@
+{"type": "assistant", "timestamp": "2026-11-10T10:10:00Z", "effort": "low", "message": {"id": "msg_3", "model": "mystery-model", "role": "assistant", "usage": {"input_tokens": 1000, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1000}, "content": [{"type": "text", "text": "x"}]}}
