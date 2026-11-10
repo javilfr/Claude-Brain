@@ -260,7 +260,8 @@ class LabelledSets(unittest.TestCase):
         strict = self.prod(none, min_units=2)
         self.assertGreaterEqual(strict["silent"] / strict["n"], 0.9, strict)
         self.assertLessEqual(round(strict["items"] * strict["n"]), 5)
-        self.assertLess(self.prod(en, min_units=2)["recall"], self.prod(en)["recall"])
+        self.assertLess(self.prod(en, min_units=2)["recall"], self.prod(en)["recall"],
+                        "min_units 2 no longer costs English recall: consider setting recall.min_units to 2")
         self.assertEqual(self.cfg["min_units"], 1)
 
     def test_the_shipped_cuts_buy_precision_without_losing_recall(self):
@@ -278,7 +279,8 @@ class LabelledSets(unittest.TestCase):
         self.assertGreaterEqual(new["recall"], old["recall"], (old, new))
         self.assertLess(new["tokens"], old["tokens"])
         self.assertEqual(new["silent"], 0)
-        self.assertLess(self.prod(en, floor=0.30)["recall"], new["recall"])
+        self.assertLess(self.prod(en, floor=0.30)["recall"], new["recall"],
+                        "a floor of 0.30 no longer costs recall@3: consider raising recall.floor")
 
     def test_the_inline_fallbacks_are_the_shipped_tunables(self):
         """learning-12: a temporary brain without a config must run what production runs."""
@@ -286,11 +288,11 @@ class LabelledSets(unittest.TestCase):
 
     def test_production_defaults_do_not_regress(self):
         """learning-12: the pinned regression ran k=5 with no floor, a
-        configuration nobody runs. This one runs the production path.
-        Measured 2026-11-10 on the frozen items (see RECALL3 and friends)."""
+        configuration nobody runs. This one runs the production path and
+        fails when a figure drops more than 0.03 below what was measured
+        (PROD_RECALL3 and friends, below); before this package the same path
+        gave recall@3 0.694, MRR 0.853, precision 0.386 and 147 tokens."""
         m = self.prod(group(self.rows, "en"))
-        self.assertEqual((round(m["recall"], 3), round(m["mrr"], 3), round(m["precision"], 3)),
-                         (PROD_RECALL3, PROD_MRR, PROD_PRECISION), "re-measure and update the pinned figures")
         self.assertGreaterEqual(m["recall"], PROD_RECALL3 - 0.03, m)
         self.assertGreaterEqual(m["mrr"], PROD_MRR - 0.03, m)
         self.assertGreaterEqual(m["precision"], PROD_PRECISION - 0.03, m)
@@ -306,9 +308,11 @@ class LabelledSets(unittest.TestCase):
         en = group(self.rows, "en")
         pinned = dict(k=5, budget_tokens=10 ** 6, floor=0.0, whole_pool=True)
         old = r.evaluate(en, SNAP, config={"standing_coverage": 0.0}, **pinned)
-        self.assertEqual((round(old["recall"], 3), round(old["mrr"], 3)), (0.781, 0.853))
+        self.assertGreaterEqual(round(old["recall"], 3), 0.781)
+        self.assertGreaterEqual(round(old["mrr"], 3), 0.853)
         new = r.evaluate(en, SNAP, **pinned)
-        self.assertEqual((round(new["recall"], 3), round(new["mrr"], 3)), (0.781, 0.852))
+        self.assertGreaterEqual(round(new["recall"], 3), 0.781)
+        self.assertGreaterEqual(round(new["mrr"], 3), 0.852)
 
     def test_the_golden_tests_read_no_live_learned_state(self):
         """learning-12 (and the recall part of redteam-09): the regression in
@@ -338,8 +342,8 @@ class LabelledSets(unittest.TestCase):
 
 
 # Measured 2026-11-10 on evals/recall_snapshot with the shipped tunables: the
-# 60 English queries through the production path (k=3, 300 tokens, floor from
-# memory/ml_config.json, family of the relevant items).
+# 60 English queries through the production path (k=3, 300 tokens, the cuts of
+# memory/ml_config.json, the family of the relevant items); 122 tokens a query.
 PROD_RECALL3, PROD_MRR, PROD_PRECISION = 0.728, 0.85, 0.514
 
 

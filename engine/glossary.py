@@ -188,7 +188,9 @@ _ENGLISH = frozenset(
     "cargo compile compiles fallen fines gusto lance lances llama llamas males media median medias mire page pages "
     "pagan pare pares probe probes pulse pulses quite revise revises segue usa valor".split())
 
-# Phrases whose words mean something else one at a time.
+# Phrases whose words mean something else one at a time. A phrase may map to a
+# word memory does not use yet (background, database): it is there so the
+# words are not read one by one ("segundo plano" is not "second").
 _PHRASES = """
 captura de pantalla=screenshot capturas de pantalla=screenshot segundo plano=background
 por defecto=default dos veces=twice una vez=once mayor parte=most en vez de=instead en lugar de=instead
