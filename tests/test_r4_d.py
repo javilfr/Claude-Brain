@@ -356,6 +356,28 @@ class VerifyTests(Base):
         self.assertEqual(marker.read_text().count("x"), 1)
         self.assertEqual(len(out.splitlines()), 1, out)
 
+    def test_verify_leaves_a_dropped_line_dropped(self):
+        self.add(check="true")
+        self.cli("req", "drop", "R-001", "--reason", "later")
+        code, out = self.cli("req", "verify", "R-001")
+        self.assertEqual(code, 1, out)
+        self.assertIn("brain req reopen R-001", out)
+        self.assertEqual(self.cli("req", "verify")[0], 0)
+        self.assertEqual(self.row()["status"], "dropped")
+
+    def test_many_failing_checks_do_not_flood_the_output(self):
+        for i in range(9):
+            self.add(f"requirement number {i} of the request", "the suite passes", check=f"test -f missing-{i}.txt")
+        self.building()
+        code, out = self.cli("req", "verify")
+        self.assertEqual(code, 1)
+        lines = out.splitlines()
+        self.assertLessEqual(len(lines), 7, out)
+        self.assertIn("9 failed", lines[-1])
+        self.assertIn("R-007", lines[-1])  # the ones not shown are named
+        self.assertRegex(lines[0], r"full output: \.brain/log/run/\S+\.log$")
+        self.assertNotIn(str(self.ws), out)
+
     def test_reopen_returns_a_line_to_open_and_regenerates_the_view(self):
         """e2e-trial-06: with no reopen the ledger had to be edited by hand,
         which left REQUIREMENTS.md stale."""
@@ -454,6 +476,24 @@ class RequestTests(Base):
         self.assertEqual(code, 1, out)
         self.assertIn("brain req reopen R-001", out)
         self.assertEqual(self.ledger(), before)
+
+
+    def test_a_changed_check_is_recorded_and_its_old_result_is_dropped(self):
+        """quality-path-02 (d), for the check: swapping a failing check for an
+        easy one must leave a trace and must not keep the old result."""
+        self.add(check="true")
+        self.building()
+        self.assertEqual(self.cli("req", "verify")[0], 0)
+        self.cli("req", "reopen", "R-001", "--reason", "look again")
+        self.assertEqual(self.cli("req", "verify")[0], 0)
+        self.cli("req", "reopen", "R-001", "--reason", "look once more")
+        self.cli("req", "evidence", "R-001", "README.md")
+        code, out = self.cli("req", "set", "R-001", "--check", "")
+        self.assertEqual(code, 0, out)
+        self.assertIn("check was: true", out)
+        r = self.row()
+        self.assertEqual((r["check"], r["check_was"]), ("", ["true"]))
+        self.assertFalse(any(e.startswith("check:") for e in r["evidence"]))
 
 
 class DroppedTests(Base):
@@ -677,6 +717,28 @@ class DoneTests(Base):
         self.assertTrue(lines[0].startswith("not done: R-004"), out)  # the worst first
         self.assertTrue(all(len(l) <= 200 for l in lines), out)
 
+    def test_done_is_never_given_on_an_empty_ledger_at_project_size(self):
+        """quality-path-02 (a) seen from `brain done`: nothing recorded proves nothing."""
+        self.save_and_push()
+        code, out, last = self.done()
+        self.assertEqual(code, 1, out)
+        self.assertIn("ledger is empty at project size", last)
+        state.checkpoint(self.p, tier=1)
+        self.save_and_push()
+        code, out, last = self.done()
+        self.assertEqual(code, 0, out)  # a small task has no ledger to hold
+        self.assertIn("requirements: none recorded", out)
+
+    def test_done_with_every_line_dropped_does_not_say_nothing_was_recorded(self):
+        self.add()
+        self.building()
+        self.cli("req", "drop", "R-001", "--reason", "later")
+        code, out, last = self.done()
+        self.assertEqual(code, 1)
+        self.assertNotIn("none recorded", out)
+        self.assertIn("dropped: 1", out)
+        self.assertIn("every line is dropped", last)
+
     def test_done_says_when_the_request_is_not_in_the_ledger(self):
         req.record_request(self.p, "Please add a calendar view that shows every booking of the month.")
         self.add()
@@ -706,6 +768,37 @@ class CompatibilityTests(Base):
         self.assertEqual(code, 0, out)
         self.assertEqual(self.row()["status"], "done")
         self.assertEqual(self.cli("req", "evidence", "R-001")[0], 1)  # nothing given, nothing to do
+
+    def test_a_dropped_line_that_is_then_closed_loses_its_drop_reason(self):
+        self.add()
+        self.cli("req", "drop", "R-001", "--reason", "later")
+        self.assertEqual(self.cli("req", "evidence", "R-001", "README.md", "--done")[0], 0)
+        self.assertEqual(self.row()["status"], "done")
+        self.assertNotIn("reason", self.row())
+        self.assertNotIn("later", (self.p / ".brain" / "REQUIREMENTS.md").read_text())
+
+    def test_odd_line_numbers_are_text_not_a_crash(self):
+        self.add()
+        for text in ("README.md:\u00b2", "README.md:0", "README.md:99999999999"):
+            code, out = self.cli("req", "evidence", "R-001", text)
+            self.assertIn(code, (0, 1), out)
+        self.assertEqual(self.row()["status"], "open")
+
+    def test_a_hand_edited_row_of_the_wrong_shape_is_read_without_a_traceback(self):
+        """T9 (fragile on bad input), for the ledger's new fields."""
+        req.save(self.p, [{"id": "R-001", "quote": "q one two three", "passes_when": "w", "status": "done", "evidence": "looks fine",
+                           "passes_when_was": "x", "check": None},
+                          {"id": "R-002", "quote": 7, "status": "dropped", "reason": None, "evidence": None}])
+        m = c.load_manifest(self.p)
+        m["paths"], m["gates"] = "docs", {"id": "checks"}
+        c.write_json(self.p / ".brain" / "project.json", m)
+        self.building()
+        for argv in (("req", "check"), ("req", "list"), ("done",), ("req", "evidence", "R-001", "README.md"), ("req", "verify")):
+            code, out = self.cli(*argv)
+            self.assertIn(code, (0, 1), f"{argv}: {out}")
+        self.assertIsInstance(req.status_lines(self.p), list)
+        self.assertEqual(req.evidence_of({"evidence": "looks fine"}), ["looks fine"])  # one item, not ten letters
+        self.assertEqual(req.evidence_of({"evidence": None}), [])
 
     def test_list_marks_lines_done_on_a_note(self):
         self.add()

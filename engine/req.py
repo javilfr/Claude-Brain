@@ -93,7 +93,8 @@ def render(project: Path, rows: list[dict]) -> None:
         ev = r.get("reason", "") if status == "dropped" else "; ".join(evidence_of(r))
         if status == "done" and not verified(r):
             status = "done (not verified)"
-        passes = r.get("passes_when", "") + (f" (was: {r['passes_when_was'][0]})" if r.get("passes_when_was") else "")
+        was = r.get("passes_when_was")
+        passes = str(r.get("passes_when") or "") + (f" (was: {was[0]})" if isinstance(was, list) and was else "")
         quote = r.get("quote", "")
         if r.get("implied"):
             quote = "(implied) " + quote + (f" — assumed: {r['assumption']}" if r.get("assumption") else "")
@@ -113,7 +114,10 @@ def find(rows: list[dict], rid: str) -> dict | None:
 
 # ---------------------------------------------------------------- what a line's state is
 def evidence_of(r: dict) -> list[str]:
-    return [str(e) for e in (r.get("evidence") or []) if str(e).strip()]
+    """The line's evidence items, blanks left out (a hand-edited row may hold
+    one string where a list belongs)."""
+    ev = r.get("evidence") or []
+    return [str(e) for e in (ev if isinstance(ev, list) else [ev]) if str(e).strip()]
 
 
 def verified(r: dict) -> bool:
@@ -200,7 +204,7 @@ def sentences(text: str) -> list[str]:
     for part in re.split(r"(?<=[.!?])\s+|\s*[\n;]\s*", text or ""):
         part = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s+", "", part).strip()
         if c.words(part):
-            out.append(c.clip(part, 400))
+            out.append(c.clip(part, 2000))
     return out
 
 
@@ -258,7 +262,7 @@ def ledger_problems(project: Path, rows: list[dict], strict_mode: bool | None = 
             out.append(f"… {len(missing) - 3} more sentence(s) of the request are missing too (.brain/log/request.jsonl)")
         if rows and all(r.get("status") == "dropped" for r in rows):
             out.append("every line is dropped, so nothing of the request is left: reopen what still stands (`brain req reopen <id> --reason …`) or tell the owner")
-        if not rows and not missing and (stage in BUILD_ON or work_recorded(project)):
+        if not rows and not missing and (strict_mode or stage in BUILD_ON or work_recorded(project)):
             out.append("the ledger is empty at project size; add the request's sentences with `brain req add` before calling anything done")
     return out + problems(rows, strict_now(project) if strict_mode is None else strict_mode)
 
@@ -292,14 +296,18 @@ def status_lines(project: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------- evidence the engine resolves
-def _log_exit(log: Path) -> int | None:
-    """The exit code in the header `brain run` writes under the command."""
+def _log_text(log: Path, limit: int) -> str:
+    """The start of a run log; a cap, because a log can be hundreds of megabytes."""
     try:
         with open(log, "r", encoding="utf-8", errors="replace") as f:
-            head = f.read(65536)
+            return f.read(limit)
     except OSError:
-        return None
-    m = re.search(r"^\[exit (-?\d+) in ", head, re.M)
+        return ""
+
+
+def _log_exit(log: Path) -> int | None:
+    """The exit code in the header `brain run` writes under the command."""
+    m = re.search(r"^\[exit (-?\d+) in ", _log_text(log, 65536), re.M)
     return int(m[1]) if m else None
 
 
@@ -314,7 +322,7 @@ def _path_evidence(project: Path, text: str) -> tuple[str, str]:
     ev_dir = paths.get("evidence") if isinstance(paths, dict) else ""
     bases = [root] + ([root / ev_dir] if isinstance(ev_dir, str) and ev_dir.strip() else [])
     name, _, line = text.rpartition(":")
-    for cand, want in [(text, 0)] + ([(name, int(line))] if name and line.isdigit() else []):
+    for cand, want in [(text, 0)] + ([(name, int(line))] if name and re.fullmatch(r"[0-9]{1,7}", line) else []):
         for base in bases:
             try:
                 hit = (base / cand).resolve()
@@ -370,7 +378,7 @@ def _test_evidence(project: Path, name: str) -> tuple[str, str]:
     from . import gate
     if len(name) >= 3:
         for log in sorted(gate.log_dir(project).glob("*.log"), reverse=True)[:30]:
-            if _log_exit(log) == 0 and name in c.read_text(log):
+            if _log_exit(log) == 0 and name in _log_text(log, 4_000_000):
                 return f"test:{name} in {log.name}", ""
     return "", f"{name!r} is not in the output of any passing run in .brain/log/run/; run it with `brain run -- <command>` so its name is printed"
 
@@ -437,7 +445,9 @@ def resolve(project: Path, text: str) -> tuple[str, str]:
             return _url_evidence(token)
         if kind == "owner":
             return _owner_evidence(rest)
-        found = next((f for f in (_path_evidence(project, rest), _path_evidence(project, token)) if any(f)), ("", ""))
+        found = _path_evidence(project, rest)
+        if not any(found) and token != rest:
+            found = _path_evidence(project, token)
         if not any(found):
             return "", f"no such path in the project: {c.clip(rest, 80)}"
     else:
@@ -454,6 +464,10 @@ def resolve(project: Path, text: str) -> tuple[str, str]:
 def _secret(*texts) -> str:
     """The refusal line when any of the texts holds a credential, else ""."""
     return c.secret_problem(" \n ".join(str(t) for t in texts if t))
+
+
+def _history(value) -> list:
+    return list(value) if isinstance(value, list) else []
 
 
 def _parse_line(text: str) -> dict:
@@ -555,10 +569,13 @@ def cmd_set(args) -> int:
     if args.passes_when and args.passes_when.strip() != r.get("passes_when", ""):
         if r.get("passes_when"):
             # A rewritten test is kept: the first wording is what was agreed.
-            r.setdefault("passes_when_was", []).append(r["passes_when"])
+            r["passes_when_was"] = _history(r.get("passes_when_was")) + [r["passes_when"]]
             was = f" (passes-when was: {c.clip(r['passes_when'], 90)})"
         r["passes_when"] = args.passes_when.strip()
     if args.check is not None and args.check.strip() != r.get("check", ""):
+        if r.get("check"):
+            r["check_was"] = _history(r.get("check_was")) + [r["check"]]
+            was += f" (check was: {c.clip(r['check'], 90)})"
         r["check"] = args.check.strip()
         r["evidence"] = [e for e in evidence_of(r) if not e.startswith("check: ")]  # a result of the old command
     save(project, rows)
@@ -606,6 +623,7 @@ def cmd_evidence(args) -> int:
             print(f"{r['id']}: not marked done, nothing stored: {why}")
             return 1
         r["status"], r["done"] = "done", c.today()
+        r.pop("reason", None)  # a line closed after a drop is no longer dropped for that reason
     r["evidence"] = ev
     save(project, rows)
     print(f"{r['id']}: {len(ev)} evidence item(s), status {r.get('status', 'open')}" + (f" ({notes} kept as a note, which proves nothing)" if notes else ""))
@@ -625,6 +643,9 @@ def cmd_verify(args) -> int:
         r = find(rows, args.id)
         if not r:
             print(f"no requirement {args.id}")
+            return 1
+        if r.get("status") == "dropped":
+            print(f"{r['id']} is dropped; `brain req reopen {r['id']} --reason \"…\"` first")
             return 1
         if not (r.get("check") or "").strip():
             print(f"{r['id']} has no check; set one with `brain req set {r['id']} --check \"<command>\"`, or attach evidence ({FORMS})")
@@ -656,13 +677,14 @@ def cmd_verify(args) -> int:
                 r["status"], r["reopened"] = "open", f"{c.today()} (was done): its check exited {res['exit']}"
                 r.pop("done", None)
             failed.append(r["id"])
-            print(f"{r['id']}: check FAILED (exit {res['exit']}), the line is open · full output: {res['log']}")
+            if len(failed) <= 6:
+                print(f"{r['id']}: check FAILED (exit {res['exit']}), the line is open · full output: .brain/log/run/{Path(res['log']).name}")
     if ran:
         save(project, rows)
     if not ran:
         print("verify: no line has a check; set one with `brain req set <id> --check \"<command>\"`")
         return 0
-    print(f"verify: {len(passed)} passed and done, {len(failed)} failed"
+    print(f"verify: {len(passed)} passed and done, {len(failed)} failed" + (f" ({', '.join(failed[6:12])} not shown above)" if len(failed) > 6 else "")
           + (f"; passed but still open for lack of a 'passes when': {', '.join(unset[:5])}" if unset else "")
           + (f"; {len(nocheck)} line(s) have no check" if nocheck else ""))
     return 1 if failed else 0
@@ -750,7 +772,7 @@ def cmd_check(args) -> int:
         if len(probs) > 8:
             print(f" … {len(probs) - 8} more (brain req list --open)")
     else:
-        print(f"requirements: all {len(rows)} line(s) done with evidence or dropped with a reason ({summary(rows)})")
+        print(f"requirements: ok, all {len(rows)} line(s) are done or dropped with a reason ({summary(rows)})")
     for line in dropped_lines(rows):
         print(line)
     return 1 if probs else 0
@@ -807,14 +829,14 @@ def cmd_done(args) -> int:
     rest = [r["state"] for r in reqs[len(shown):]]
     if rest:
         print(f"… {len(rest)} more: " + ", ".join(f"{rest.count(s)} {s}" for s in ("not done", "done but not verified", "verified") if s in rest) + " (brain req list)")
-    print(("requirements: none recorded · " if not reqs else "") + f"gates: {c.clip(rep['gates'], 70)} · tree: {c.clip('; '.join(rep['tree']), 60) or 'clean and pushed'}"
+    print(("requirements: none recorded · " if not reqs and not rep["dropped"] else "") + f"gates: {c.clip(rep['gates'], 70)} · tree: {c.clip('; '.join(rep['tree']), 60) or 'clean and pushed'}"
           + (f" · dropped: {rep['dropped']} (brain req check lists them)" if rep["dropped"] else ""))
     waits = f"{rep['needs_you']} item(s) wait for the owner in NEEDS_YOU.md" if rep["needs_you"] else ""
     if rep["done"]:
         print("DONE" + (f" · {waits}" if waits else ""))
         return 0
     more = len(rep["reasons"]) - 1
-    print(f"NOT DONE: {c.clip(rep['reasons'][0], 150)}" + (f" · {waits}" if waits else "") + (f" (+{more} more)" if more else ""))
+    print(f"NOT DONE: {c.clip(rep['reasons'][0], 150)}" + (f" (+{more} more)" if more else "") + (f" · {waits}" if waits else ""))
     return 1
 
 
