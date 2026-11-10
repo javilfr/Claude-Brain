@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 151 from 9 analyst report(s) (core, e2e-trial, instructions, lead, learning, owner-docs, quality-path, quality2, redteam). Decisions: 131 do, 2 do in part, 0 reproduce first, 18 later.
+Findings in: 170 from 10 analyst report(s) (core, e2e-trial, instructions, lead, learning, owner-docs, quality-path, quality2, redteam, research-platform). Decisions: 144 do, 2 do in part, 0 reproduce first, 24 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -141,6 +141,7 @@ Owns: `engine/common.py`, `engine/contract.py`, `engine/doctor.py`, `engine/budg
 | core-11 | should-fix | S | do | 'stale-brain' mode says 'write nothing to .brain/' but checkpoint, status and boot itself write there |  |
 | quality-path-10 | should-fix | S | do | The secret scanner misses 13 of 20 common credential formats |  |
 | redteam-07 | should-fix | M | do | No secret scan before the brain commits and pushes; a key written into a note, evidence, NEEDS_YOU or a helper brief reaches the remote, and the patterns miss 13 of 19 common formats |  |
+| research-platform-05 | should-fix | S | do | `brain adopt` on a repository that relies on AGENTS.md silently switches its instructions off |  |
 | core-14 | minor | M | do | Smaller slips, each reproduced: adopt accepts the brain itself, STATUS.md cost lines are wrong, an open owner item with the word 'unresolved' vanishes, the total token cap is not enforced by `brain budget`, a … |  |
 | core-16 | idea | L | part | Idea: one project context with a health check that every command goes through, plus a seeded fuzz test that no core command ever tracebacks on malformed contract files | fuzz test only; rest deferred: the refactor is large; its fuzz test is done under package B, the single project context is deferred |
 | core-18 | idea | M | part | Idea: make the contract's dormant keys real (paths.never_touch, privacy.share_lessons, owner and checklist gates) or mark them reserved | validate names reserved keys; never_touch is implemented under quality2-05; rest deferred: implemented only as: reserved keys are named by … |
@@ -205,7 +206,9 @@ Owns: `engine/ledger.py`, `engine/guard.py`, `engine/lint.py`, `.claude/hooks`, 
 | quality-path-09 | should-fix | S | do | Hook commands fail closed when the script path does not resolve: python3 exits 2, which blocks every edit and blocks stopping |  |
 | quality-path-13 | should-fix | M | do | Lint gaps: invalid option values, missing required options and two call forms pass; repeated sentences only note although the spec says fail; one transcript rule is missing; handover, memory items and HR templ… |  |
 | quality2-03 | should-fix | M | do | What the ledger feeds the learners is in units that do not mean work: tokens is 93% cache reads and minutes counts idle time |  |
+| research-platform-09 | should-fix | S | do | omitClaudeMd may not keep both repositories' CLAUDE.md out of a helper in a two-repo session, and the ledger cannot show it |  |
 | quality2-04 | minor | S | do | Ledger pricing blind spots: an unknown model is silently priced at the fallback rate; fast mode is ignored |  |
+| research-platform-12 | minor | S | do | No hook restates the project's position after compaction in sessions where the brain's hooks do load |  |
 | instructions-18 | idea | M | do | Idea: extend the lint to the gaps found here |  |
 | quality-path-18 | idea | M | later | Idea: ledger units and accuracy notes (output-equivalent tokens, fallback-priced models, tiered and fast prices, active minutes) | done under quality2-03 and quality2-04 (same point, measured) |
 | quality-path-20 | idea | S | do | Idea: generated facts in status documents, checked by lint |  |
@@ -214,7 +217,7 @@ Owns: `engine/ledger.py`, `engine/guard.py`, `engine/lint.py`, `.claude/hooks`, 
 
 ### Package F: Learning pipeline (CB-217)
 
-Owns: `engine/learn.py`, `learning/`, `memory/items.jsonl`, `memory/facts.jsonl`, `owner/`, `playbooks/`, `tests/test_rehearsal.py`. New tests go in `tests/test_r4_f.py`.
+Owns: `engine/learn.py`, `learning/`, `tests/test_rehearsal.py`. New tests go in `tests/test_r4_f.py`.
 
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
@@ -308,12 +311,19 @@ Owns: `CLAUDE.md`, `.claude/skills`, `.claude/agents`, `method/`, `.claude-plugi
 | instructions-07 | should-fix | S | do | "Continue on your own at most three times in a row" has no reason, no unit, and refers to a re-prompt mechanism that does not exist |  |
 | instructions-08 | should-fix | M | do | brain-new leaves the contract uncommitted and the release rule unset, and "Ship it" under rule `none` has no instruction |  |
 | lead-03 | should-fix | S | do | A copy of the brain made with cp -a keeps the real remote: an auditor's scratch copy pushed three test records to this branch |  |
+| research-platform-01 | should-fix | M | do | Workflows and ultracode have no rule in the brain: workflow agents default to the session's model and a 65K-token start |  |
+| research-platform-02 | should-fix | S | do | The plugin manifest fails the platform's own validator: the name 'claude-brain' is reserved |  |
+| research-platform-03 | should-fix | M | do | Brain skills declare no hooks, although skill-frontmatter hooks are the documented way to get the guard and session capture into a two-repo session |  |
+| research-platform-04 | should-fix | M | do | NEEDS_YOU item 5 and CB-106 point at an undocumented route; the documented one is a hooks-only plugin turned on for the claude.ai account |  |
+| research-platform-11 | should-fix | M | do | Cloud sessions now carry tools for environment changes, credentials, schedules and adding a repository; the brain still hands the owner click lists |  |
 | e2e-trial-14 | minor | M | do | Process weight on a three-item project: 36 process commands, 3 required reads and 5 help look-ups around 11 build commands, and several output lines mislead |  |
-| instructions-11 | minor | S | do | Review rounds are stated three ways, and the review-stopping learner needs two reviewers that the method forbids |  |
 | instructions-12 | minor | S | do | The size-0 row forbids scripts that three skills run at size 0, brain-create runs its full pass for a list of names, and the project stub says boot always comes first |  |
 | instructions-13 | minor | S | do | All six agent files set a token cap that the guidelines forbid and the briefs contradict, and builder.md relies on a `brain run` path no brief gives |  |
 | instructions-14 | minor | S | do | "Go back" is offered to the owner, but its steps sit in a file nothing points to and "the last release he accepted" is recorded nowhere |  |
 | e2e-trial-18 | idea | S | do | Idea: a small-project lane stated in one place |  |
+| research-platform-14 | idea | S | later | Idea: bound helpers with maxTurns, and keep the Haiku scout under its 100K price step with autoCompactWindow | a turn cap set without settled-hire data would cut helpers short; revisit from `brain hr report` |
+| research-platform-15 | idea | S | later | Idea: a project agent named Explore, because the built-in one runs on Opus under a Fable lead | needs a pre-registered comparison first |
+| research-platform-18 | idea | S | later | Idea: let brain-start inject the boot output itself and save one round trip per session | needs a live test in one- and two-repository sessions first |
 
 ### Package L: Owner documents and status files (CB-223)
 
@@ -325,7 +335,23 @@ Owns: `OWNER_GUIDE.md`, `NEEDS_YOU.md`, `README.md`, `docs/`, `GUIA.md`, `VERSIO
 | owner-docs-03 | should-fix | S | do | NEEDS_YOU.md: the clicks for protecting main create a ruleset that is disabled by default and may need a paid plan; the resolved item is shown first with stale steps; the real blocker is last |  |
 | owner-docs-07 | should-fix | M | do | Numbers are restated by hand in five documents and have drifted; nothing checks them (lint covers neither docs/ nor numbers) |  |
 | owner-docs-10 | should-fix | S | do | OWNER_GUIDE.md has no answer for a chat that dies, where to see the result, how to merge on GitHub, or how to stop at once, and gives Spanish for three of nine phrases |  |
+| research-platform-07 | should-fix | S | do | Cloud sessions on 1M-token models compact only near 900K tokens and get no idle compaction; one environment variable bounds it |  |
 | owner-docs-14 | minor | M | do | Five smaller statements that are untrue or that a new lead would misread |  |
+| research-platform-08 | minor | S | do | A workflow runs only two agents at a time on the 4-CPU cloud VM |  |
+| research-platform-13 | minor | S | do | The owner guide does not warn that the brain does not work inside a Project |  |
 | owner-docs-17 | idea | M | later | Idea: a Spanish edition of the guide, checked for parity | a second guide to keep in step; the guide gets Spanish phrases now, a full Spanish edition waits for the owner to ask |
 | owner-docs-19 | idea | M | later | Idea: a first-project walkthrough in the guide, then frozen as a rehearsal | needs the first real project (CB-110) |
+| research-platform-16 | idea | S | later | Idea: offer Opus 5.5 with Fable 5.2 as advisor as a third way to start a chat | needs a live test of the advisor command first |
+| research-platform-17 | idea | S | later | Idea: one phrase for unattended runs, `/goal` with the requirements check as its condition | needs a live test in a cloud session first |
+| research-platform-19 | idea | M | later | Idea: a brain-first layout, starting on the brain alone so its hooks load and letting Claude add the project | needs a live test; listed under 'Needs a live session' |
+
+### Package Z: Facts and lessons recorded through the learning pipeline (the lead) (CB-207)
+
+Owns: `memory/facts.jsonl`, `memory/items.jsonl`, `owner/`, `playbooks/`. New tests go in `tests/test_r4_z.py`.
+
+| Id | Severity | Size | Decision | Finding | Why later or in part |
+|---|---|---|---|---|---|
+| research-platform-06 | should-fix | S | do | The cache-breakers fact is partly stale, and CB-112 can be closed from the docs |  |
+| instructions-11 | minor | S | do | Review rounds are stated three ways, and the review-stopping learner needs two reviewers that the method forbids |  |
+| research-platform-10 | minor | S | do | Smaller stale statements, and no platform fact carries the URL it was checked against |  |
 

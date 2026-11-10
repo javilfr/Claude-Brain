@@ -1,0 +1,318 @@
+{
+ "summary": "Platform re-check done against official pages fetched today (2026-11-10): 67 pages of code.claude.com/docs (changelog up to v2.1.322), 12 of platform.claude.com, 2 of claude.com/docs; no host was blocked. Memo written to /home/user/Claude-Brain/docs/research/round4/01-platform.md (326 lines, ends with the 19-row table \"What the brain should change\"; rows 1-13 are the findings below, 14-19 the ideas).\n\nMain results:\n1. The two-repository rule is unchanged (no hooks, permissions, env or .mcp.json from any repository), but two documented routes now reach around it and the brain uses neither: a skill's own `hooks` frontmatter (registered on invocation, for the rest of the session) and a plugin turned on for the claude.ai account (synced plugins and their hooks run in cloud sessions since v2.1.287). The cloud-environment route in NEEDS_YOU item 5 / CB-106 has no documentation behind it; the docs say user settings are \"not read\".\n2. Workflows and ultracode appear nowhere in the brain's instructions, and they are where this session's cost went: measured 17 workflow agents, all on Fable 5.2, about $112 at list prices, each starting from about 65,300 prompt tokens; the brain's scout started from 5,489. A workflow script can name a brain agent, model and effort per call.\n3. Two defects found by running things: `claude plugin validate .` rejects the brain's plugin manifest (name \"claude-brain\" is reserved), and `brain adopt` on a repository that relies on AGENTS.md creates a CLAUDE.md that makes Claude Code stop reading AGENTS.md.\n4. All 18 facts in memory/facts.jsonl re-checked: 14 true as written, 4 need a correction (materially: what breaks the prompt cache). CB-112 can be closed from the docs plus Anthropic's October 2026 measurement. All 18 facts cite internal memo sections, none a URL.\n5. Cloud specifics that matter for cost and speed: 1M-token windows compact only near 900K in the cloud and idle compaction does not apply there; a workflow runs 2 agents at a time on the 4-CPU VM (measured). Both are one environment variable each.\n\nNot verified (needs the first live two-repo session; five checks are listed in the memo): skill hooks and account-plugin hooks with two repositories, what CLAUDE_PROJECT_DIR is there, whether omitClaudeMd holds once a helper reads a file inside a repository, /advisor and /goal from the phone. The \"4x / 15x\" multi-agent figures were not re-fetched.",
+ "strengths": [
+  "Memory kept in the repository, recalled by a script and changed through a gated pipeline is the only design that survives a new cloud VM: the platform's own auto memory is 'machine-local ... Files are not shared across machines or cloud environments' (code.claude.com/docs/en/memory.md) and loads up to 25 KB on every request. Do not replace any of it with auto memory, imports or rules.",
+  "Core rule 7 (checkpoint and push) matches the platform exactly: after a VM is reclaimed only 'your conversation history' is restored; background work, subagents and session timers are not (claude-code-on-the-web.md, Environment expired).",
+  "Every brain agent file sets tools, model, effort and omitClaudeMd. Measured in this session: the brain's scout started from 5,489 prompt tokens on Haiku, a default workflow agent from about 65,300 on Fable. Keep the tight tool lists; they are most of that difference.",
+  "'Helpers only when they pay' is what Anthropic's own measurements say: delegation 'came out ahead in only two situations' (routine work with a long cost tail; work larger than one context window), otherwise the lead alone at lower effort won (platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence.md).",
+  "Nothing required depends on hooks, plugins or MCP; both hook scripts fail open and find the brain from their own file path; the `brain-` skill prefix avoids the prefixed-name rule for clashing skills from added directories; skill descriptions are 207-269 characters against a 1,536 cap; the ledger already reads workflow-agent transcripts one level down."
+ ],
+ "findings": [
+  {
+   "title": "Workflows and ultracode have no rule in the brain: workflow agents default to the session's model and a 65K-token start",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "method/routing.md",
+    ".claude/skills/brain-build/SKILL.md",
+    "CLAUDE.md",
+    "engine/hr.py",
+    "engine/lint.py"
+   ],
+   "evidence": "https://code.claude.com/docs/en/workflows.md (fetched 2026-11-10): \"Claude Code picks each workflow agent's model in the same order it uses for subagents ... When nothing else assigns one, the agent runs on your session's model.\" With ultracode on: \"Claude plans a workflow for each substantive task\" and \"The session's concurrent subagent limit isn't enforced\". Bundled /workflow-authoring reference loaded in this session: agent(prompt, {label, phase, schema, model, effort, isolation, agentType}); \"opts.agentType uses a custom subagent type ... resolved from the same registry as the Agent tool\". Measured from this session's transcripts (~/.claude/projects/<project>/<session>/subagents/workflows/*/agent-*.jsonl): 17 workflow agents, all model claude-fable-5-2, $111.59 at list prices; first request 65,317-67,503 prompt tokens when cold (53,6xx read from a sibling + ~12,000 written otherwise) against 5,489 for the brain's scout. grep -i 'workflow|ultracode' over CLAUDE.md, .claude/skills/*/SKILL.md, method/*.md, playbooks/*.md, hr/GUIDELINES.md, OWNER_GUIDE.md printed nothing.",
+   "proposed_fix": "Add a short 'Workflows' section to method/routing.md and three lines to brain-build: when ultracode is on or the owner asks for a workflow, every agent() call passes agentType (one of the six brain agents) plus model and effort taken from `brain hr hire`; the default workflow agent is used only for a stage that truly needs the lead's instructions; fan-out follows the helper cap unless the owner raises it. Add one clause to CLAUDE.md rule 4 ('including agents a workflow script starts'). Make `brain hr hire` print one extra line a script can copy, e.g. `workflow: agentType=builder model=sonnet effort=medium`. Add a lint rule that routing.md and brain-build name agentType.",
+   "acceptance": "grep -c agentType method/routing.md .claude/skills/brain-build/SKILL.md is at least 1 for each; a new unit test asserts `brain hr hire \"<goal>\" --check true` prints a line containing agentType, model and effort; `brain budget` still under its 3,200-token cap; `brain lint` 0 errors. Live: after the next ultracode session `brain ledger` shows workflow helpers on at least one model other than the session's.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "research-platform-01"
+  },
+  {
+   "title": "The plugin manifest fails the platform's own validator: the name 'claude-brain' is reserved",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    ".claude-plugin/plugin.json",
+    "engine/doctor.py",
+    "tests/",
+    "docs/REQUIREMENTS.md"
+   ],
+   "evidence": "Command run in the scratch copy: `/opt/claude-code/bin/claude plugin validate .` printed: \"× Found 1 error: > name: Plugin name \\\"claude-brain\\\" is reserved: it passes as one of Anthropic's own. A third party's plugin name cannot start with \\\"claude-\\\", \\\"anthropic-\\\", \\\"anthropics-\\\", or \\\"cc-plugin-\\\" ...\" then \"‼ author: No author information provided\" and \"× Validation failed\". The same command on .claude/skills and on .claude/agents printed \"√ Validation passed\". No file under tests/ or engine/ mentions the manifest (grep 'claude-plugin|claude-brain' found only engine/cache.py's temp-folder name). docs/REQUIREMENTS.md:20 says \"plugin loading on desktop is live (CB-111)\" while docs/BUILD_STATUS.md lists CB-111 under 'Needs a live session'. Validator documented at https://code.claude.com/docs/en/skills.md: \"To find SKILL.md files whose frontmatter doesn't parse, run claude plugin validate on the skills directory ... Requires Claude Code v2.1.233 or later.\"",
+   "proposed_fix": "Rename the plugin to a name that does not start with claude- or anthropic- (for example `brain`), add an `author`. In `brain doctor`, when a `claude` binary is found (PATH or /opt/claude-code/bin/claude), run `claude plugin validate` on the repository root, .claude/skills and .claude/agents with a timeout and report any failure; print a one-line 'skipped, no claude binary' note otherwise. Add a standard-library test that the manifest name has no reserved prefix. Correct R-12's status wording.",
+   "acceptance": "`claude plugin validate .` ends with 'Validation passed' (warnings allowed); the new test fails when the name is set back to claude-brain; `brain doctor` exits 0 both with the binary on PATH and with PATH emptied; full unittest suite still green.",
+   "effort": "S",
+   "confidence": "high",
+   "repro": "cp -a /home/user/Claude-Brain <scratch>/brain && cd <scratch>/brain && /opt/claude-code/bin/claude plugin validate .",
+   "id": "research-platform-02"
+  },
+  {
+   "title": "Brain skills declare no hooks, although skill-frontmatter hooks are the documented way to get the guard and session capture into a two-repo session",
+   "severity": "should-fix",
+   "kind": "opportunity",
+   "files": [
+    ".claude/skills/brain-start/SKILL.md",
+    ".claude/skills/brain-new/SKILL.md",
+    ".claude/skills/brain-build/SKILL.md",
+    ".claude/hooks/",
+    "docs/BUILD_STATUS.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/hooks.md (fetched 2026-11-10): \"Skill hooks: Claude Code registers them when you or Claude invoke the skill and keeps running them for the rest of the session, on turns after the skill's own turn as well.\" and \"Frontmatter hooks in a project skill follow the same workspace trust rule as hooks in settings files. Claude Code registers them when you or Claude invoke the skill, including in a -p run in a folder you haven't trusted.\" Same page: `${CLAUDE_PROJECT_DIR}` is \"the project root where the session started\", and settings.md says a session with several repositories \"starts above the clones\", so the brain's present command path would not resolve there. Measured: all ten brain skills have only `name` and `description`; BUILD_STATUS CB-201 records CB-107 as \"Not applicable: no brain skill declares hooks\". A 9-line locator tested in a simulated two-clone layout (scratch brain with learned_zone_locked true): write to brain/memory/_x.tmp -> \"memory/_x.tmp is in the learned zone ...\" exit 2; write to the project -> exit 0; start directory = the brain itself -> exit 0 (left to the repo's settings hook); no brain -> exit 0.",
+   "proposed_fix": "Add a `hooks:` block to the frontmatter of brain-start, brain-new and brain-build with the same two entries as .claude/settings.json (PreToolUse on Edit|Write|MultiEdit -> guard_paths.py; Stop -> session_end.py), each run through a small locator script that searches \"$CLAUDE_PROJECT_DIR\" and its child folders for bin/brain, exits 0 when the start directory is the brain (its settings file already runs the hook) and exits 0 when no brain is found. Teach lint the new frontmatter key. Change CB-107 from 'not applicable' to a real check.",
+   "acceptance": "A unit test builds a temp folder with two clones and asserts the locator's four exit codes (2, 0, 0, 0) and the guard's message; `claude plugin validate .claude/skills` still passes; `brain lint` 0 errors and `brain budget` unchanged (frontmatter is not in the listing). Live check 1 in the memo: in a two-repo session, after brain-start has been invoked, a guarded write is refused with the hook's message, and the hook prints the value of CLAUDE_PROJECT_DIR into BUILD_STATUS.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "research-platform-03"
+  },
+  {
+   "title": "NEEDS_YOU item 5 and CB-106 point at an undocumented route; the documented one is a hooks-only plugin turned on for the claude.ai account",
+   "severity": "should-fix",
+   "kind": "opportunity",
+   "files": [
+    ".claude-plugin/marketplace.json",
+    "plugins/brain-hooks/",
+    "NEEDS_YOU.md",
+    "docs/BUILD_STATUS.md",
+    "docs/plan/tickets.json"
+   ],
+   "evidence": "NEEDS_YOU.md item 5: \"What is needed: one setting in your cloud environment.\" But https://code.claude.com/docs/en/settings.md (Settings in cloud sessions): \"User and project local settings (~/.claude/settings.json and .claude/settings.local.json): not read.\" The only file a setup script is documented to plant is ~/.claude/CLAUDE.md (cloud-environments.md). Documented route: https://claude.com/docs/plugins/overview.md: \"Add > Add marketplace: add a plugin marketplace, a Git repository that contains plugins ... To add a private GitHub repository, connect your GitHub account when the dialog asks and give the Claude GitHub App access to the repository.\" https://claude.com/docs/plugins/platform-support.md: \"A plugin you install on your account also appears in Claude Code as a synced plugin at the next session start\"; hooks/hooks.json: Claude Code \"Loads\". https://code.claude.com/docs/en/changelog.md v2.1.287 (October 1, 2026): \"Fixed SessionStart hooks from synced plugins not running in new cloud sessions\"; v2.1.314: scheduled runs \"now load the plugins enabled on your claude.ai account\". Observed here: CLAUDE_CODE_SYNC_PLUGINS=1 and an empty ~/.claude/plugins/synced/. Draft built in scratch (marketplace `brain-tools`, plugin `brain-hooks` with plugin.json, hooks/hooks.json, locator): `claude plugin validate` printed \"√ Validation passed with warnings\" and \"√ Validation passed\".",
+   "proposed_fix": "Add .claude-plugin/marketplace.json listing one plugin, plugins/brain-hooks/, that carries only hooks (PreToolUse guard, Stop capture, later SessionStart) and finds the attached brain at run time; it must carry no skills or agents, or every brain skill would be listed twice when the repository is also attached. Rewrite NEEDS_YOU item 5 as click steps (claude.ai -> Customize -> Plugins -> Add -> Add marketplace -> the brain repository -> Add 'brain-hooks') and say it is optional. Retarget CB-106 at this route and drop the environment-setting wording.",
+   "acceptance": "`claude plugin validate .` and `claude plugin validate plugins/brain-hooks` both pass; the locator unit test from the previous finding covers the plugin's script; NEEDS_YOU item 5 contains the click path and no mention of an environment setting. Live check 2: with the plugin on, in a two-repo session and with no skill invoked, a guarded write is refused and a ledger record for the session exists after the first turn.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "research-platform-04"
+  },
+  {
+   "title": "`brain adopt` on a repository that relies on AGENTS.md silently switches its instructions off",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "engine/contract.py",
+    "contract/template/CLAUDE.stub.md",
+    "tests/"
+   ],
+   "evidence": "https://code.claude.com/docs/en/memory.md (fetched 2026-11-10), table under AGENTS.md: \"An AGENTS.md and a CLAUDE.md or CLAUDE.local.md in your working directory or above it | Your CLAUDE.md files only\" and \"A CLAUDE.md that already imports AGENTS.md | Your CLAUDE.md, with AGENTS.md included through the import\"; for added directories: \"Their CLAUDE.md loads | Their AGENTS.md doesn't load\". Reproduced: scratch project containing only AGENTS.md; `brain adopt . --family software --title \"Agents test\"` printed \"adopted proj-agents: family software; added 12 contract file(s); existing files untouched\"; the new CLAUDE.md holds only the brain's pointer block; `grep -c AGENTS CLAUDE.md` printed 0. engine/contract.py:103-113 creates CLAUDE.md when none exists; grep for AGENTS.md in engine/ and contract/ finds nothing.",
+   "proposed_fix": "Where the pointer block is written: if AGENTS.md exists at the project root and CLAUDE.md does not already import it, add a line `@AGENTS.md` just below `<!-- brain:end -->` (outside the managed block, so the stub size check is unaffected). Report it in adopt's output and in `--survey`; have `validate` note an AGENTS.md that is not imported. Same for `init` on a non-empty repository.",
+   "acceptance": "New test: temp repo with only AGENTS.md -> after adopt, CLAUDE.md has a line `@AGENTS.md` after the end marker; running adopt again adds nothing; a repo whose CLAUDE.md already imports AGENTS.md is left unchanged; `brain validate` passes; the three frozen fixtures still pass.",
+   "effort": "S",
+   "confidence": "high",
+   "repro": "mkdir p && cd p && git init -q && printf '# Agents\\n\\nRun `make test` before committing.\\n' > AGENTS.md && git add -A && git commit -qm init && python3 <copy>/bin/brain adopt . --family software --title T && grep -c AGENTS CLAUDE.md",
+   "id": "research-platform-05"
+  },
+  {
+   "title": "The cache-breakers fact is partly stale, and CB-112 can be closed from the docs",
+   "severity": "should-fix",
+   "kind": "stale-fact",
+   "files": [
+    "memory/facts.jsonl",
+    "docs/BUILD_STATUS.md",
+    "docs/plan/tickets.json"
+   ],
+   "evidence": "memory/facts.jsonl fact-cache-breakers says \"adding or removing MCP servers\" breaks the cache. https://code.claude.com/docs/en/prompt-caching.md (fetched 2026-11-10): \"Tools deferred: Claude Code keeps the tool list from the conversation's first request for the whole conversation, so a server connecting or disconnecting mid-session doesn't disturb anything already cached.\" (deferral is \"the default on supported models\"). The page's list of breakers also has entries the fact lacks: \"Enabling or disabling a plugin\", \"Denying an entire tool\", \"Accumulating many images\", \"Upgrading Claude Code\". CB-112 (BUILD_STATUS: \"Whether an effort change keeps the prompt cache\"): same page, \"With an API key or a Claude subscription, changing effort keeps the cache on Fable 5.1 and later, Opus 5.5, Sonnet 5.5, and Haiku 5.5.\" Measurement at https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence.md: \"With no change, and with a per-message effort change, the request read all 101,000 tokens and wrote none.\"",
+   "proposed_fix": "Through `brain learn` (not by hand) supersede fact-cache-breakers with: breakers = model switch (including a skill naming another model and a safety fallback), fast-mode toggle, compaction, plugin enable or disable, a Claude Code upgrade, many accumulated images; MCP changes and whole-tool deny rules break it only when tool search is off; keepers unchanged. Mark CB-112 done in tickets.json and BUILD_STATUS with the two URLs.",
+   "acceptance": "`brain recall \"what breaks the prompt cache\"` returns the new fact and it names tool search; `brain items check` valid; `brain learn verify` passes; CB-112 no longer appears under 'Needs a live session'.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "research-platform-06"
+  },
+  {
+   "title": "Cloud sessions on 1M-token models compact only near 900K tokens and get no idle compaction; one environment variable bounds it",
+   "severity": "should-fix",
+   "kind": "opportunity",
+   "files": [
+    ".claude/skills/brain-start/SKILL.md",
+    "method/efficiency.md",
+    "NEEDS_YOU.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/model-config.md: \"Fable models, Sonnet 5 and later, Haiku 5.5, and Opus 4.7 and later run with the 1M window by default\"; \"compact before the window fills, at about 967K tokens by default\"; \"Cloud sessions compact as the conversation approaches the model's limit\". https://code.claude.com/docs/en/claude-code-on-the-web.md: \"To change the auto-compact window instead, set CLAUDE_CODE_AUTO_COMPACT_WINDOW in your environment variables\". https://code.claude.com/docs/en/settings-reference.md (idleCompaction): on by default only for \"an interactive terminal session, ... the VS Code extension's chat panel, or ... the desktop app's Code tab when the session runs on your machine or over SSH\". https://code.claude.com/docs/en/costs.md: \"your first message after a break longer than the cache lifetime misses the cache and reprocesses your full context\". Prices (platform.claude.com/docs/en/about-claude/pricing.md): Fable 5.2 one-hour cache write $16/MTok, read $0.20/MTok, so a return after an hour to 900K tokens rewrites about $14.40 in one request against $6.40 at 400K. Measured here: main conversation 86,208 prompt tokens at the first request, 296,898 after 35 minutes; observed CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=92; get_environment shows the Default environment has no variables. grep for AUTO_COMPACT or autocompact in the brain's instructions finds nothing.",
+   "proposed_fix": "Once, at the start of a project session, propose through the session's environment tool (the owner taps approve) CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000, and record the choice and its reason in DECISIONS. Add two lines to method/efficiency.md: context size is paid on every request and in full after an hour's pause, so hand over to a new chat rather than resuming a very large one cold. Treat 400000 as a starting value and compare cost per finished item before and after with a pre-registered ledger comparison.",
+   "acceptance": "get_environment lists CLAUDE_CODE_AUTO_COMPACT_WINDOW; in a later session `env | grep AUTO_COMPACT` prints 400000 and the ledger's largest main-conversation prompt stays under about 370,000 tokens across a long session; after a compaction `brain resume` output is present (skill body re-injected); the decision is recorded.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "research-platform-07"
+  },
+  {
+   "title": "A workflow runs only two agents at a time on the 4-CPU cloud VM",
+   "severity": "minor",
+   "kind": "opportunity",
+   "files": [
+    ".claude/skills/brain-start/SKILL.md",
+    "method/routing.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/workflows.md (Behavior and limits): \"Up to 16 concurrent agents by default, fewer when Claude Code has fewer CPUs available, including inside a CPU-limited container. To change the limit, set CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS to a value from 1 to 256, which requires Claude Code v2.1.269 or later\". Bundled workflow reference: \"capped at min(16, available CPUs - 2) per workflow\". Measured: `nproc` prints 4; overlap of first and last timestamps in each of this session's six workflow runs gives a maximum of 2 agents active at once per run (11 across runs only because several workflows were started side by side); `env | grep -i WORKFLOW` prints nothing.",
+   "proposed_fix": "In the same environment proposal as the compaction window, add CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS=4, matching the brain's helper cap (method/routing.md records that twenty parallel agents once hit the rate limit, so do not go higher by default). Note the variable beside the helper cap in routing.md.",
+   "acceptance": "In the next workflow run, the overlap computed from subagents/workflows/<run>/agent-*.jsonl timestamps reaches 4 and no agent in journal.jsonl ended on a rate-limit error; one workflow replaces the several side-by-side runs seen today.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "research-platform-08"
+  },
+  {
+   "title": "omitClaudeMd may not keep both repositories' CLAUDE.md out of a helper in a two-repo session, and the ledger cannot show it",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "engine/ledger.py",
+    "docs/BUILD_STATUS.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/sub-agents.md (What loads at startup, fetched 2026-11-10): \"For Explore, Plan, and subagents with omitClaudeMd, a subdirectory's CLAUDE.md and matching path-scoped rules still load when the subagent works with files there.\" https://code.claude.com/docs/en/settings.md: a session with several repositories \"starts above the clones\", so each repository's CLAUDE.md sits in a subdirectory of the start directory. BUILD_STATUS CB-201 verified the setting only in a one-repository session. Measured here from the first row of each helper transcript: scout (omitClaudeMd, three tools, Haiku) 5,489 prompt tokens; default workflow agents 65,317-67,503. `brain ledger` reports helpers' totals but not their first-request size.",
+   "proposed_fix": "Have `brain ledger` print, per helper, its model and first-request prompt tokens (first assistant row: input + cache read + cache write), and flag a brain agent whose first request is far above its expected start (for example over 15,000 tokens). Rewrite CB-105's check to require those numbers from a two-repo session, plus a search of the helper's transcript for the project's CLAUDE.md text after its first file read.",
+   "acceptance": "Unit test with two fixture transcripts (first rows of 5,489 and 65,341 tokens): the ledger prints both sizes and flags only the brain agent over the threshold. Live check 3 recorded in BUILD_STATUS with the measured numbers.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "research-platform-09"
+  },
+  {
+   "title": "Smaller stale statements, and no platform fact carries the URL it was checked against",
+   "severity": "minor",
+   "kind": "stale-fact",
+   "files": [
+    "memory/facts.jsonl",
+    "docs/REQUIREMENTS.md",
+    "README.md"
+   ],
+   "evidence": "(a) fact-default-effort: \"Thinking cannot be turned off on Fable 5.2 or Opus 5.5\"; https://code.claude.com/docs/en/model-config.md now: \"You can't turn thinking off on Opus 5.5, Sonnet 5.5, Haiku 5.5, or the Fable models.\" (b) fact-effort-curves: \"Fable 5.2 high bought 3.2 points for 3.2 times the cost\"; https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence.md: \"scored 3.3 points higher at high than at low ... for 3.2 times the cost\". (c) fact-two-repo-loading omits that account-synced skills and plugins load and that a Projects thread loads only CLAUDE.md. (d) docs/REQUIREMENTS.md:20: \"Skills (they load in cloud sessions; plugins do not)\"; changelog v2.1.287 and v2.1.314 show account plugins load in cloud sessions and scheduled runs. (e) Measured: `grep -c '\"source\": \"docs/research' memory/facts.jsonl` = 18 and `grep -c 'https://' memory/facts.jsonl` = 0, so a 30- or 60-day recheck has to go through a memo to find the page. (f) docs/research/02 worried about CLAUDE_CODE_VERSION=2.1.42; `/opt/claude-code/bin/claude --version` prints 2.1.322.",
+   "proposed_fix": "Through `brain learn`, amend the three facts and add the checked page URLs to every platform fact (in `source`, or in a new optional `url` list if the item schema needs one). Correct R-12 and README line 14 to say repository-declared plugins do not load in cloud sessions while account plugins do. Add a doctor or lint check that every active fact with class platform or models names at least one https URL.",
+   "acceptance": "`brain items check` valid; the new check passes and fails when a URL is removed from one fact; `brain recall \"thinking cannot be turned off\"` returns text naming all four model families; `grep -c 'https://' memory/facts.jsonl` is at least the number of platform facts.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "research-platform-10"
+  },
+  {
+   "title": "Cloud sessions now carry tools for environment changes, credentials, schedules and adding a repository; the brain still hands the owner click lists",
+   "severity": "should-fix",
+   "kind": "opportunity",
+   "files": [
+    "NEEDS_YOU.md",
+    ".claude/skills/brain-learn/SKILL.md",
+    "playbooks/operations.md",
+    "method/dod/automation.md",
+    "OWNER_GUIDE.md"
+   ],
+   "evidence": "Observed in this session: the tool list includes get_environment, update_environment, create_environment, request_credential, create_trigger, send_later and add_repo; a live get_environment call returned {\"name\":\"Default\",\"scope\":\"personal\",\"network\":{\"type\":\"unrestricted\"},\"has_setup_script\":false,\"network_secrets\":[],\"editable_by_you\":true}. Each change is shown to the owner on an approval card. https://code.claude.com/docs/en/routines.md (fetched 2026-11-10): \"Run /schedule in any session to create a scheduled task conversationally.\"; https://code.claude.com/docs/en/changelog.md v2.1.312: \"Added an effort level to the model picker when you create or edit a routine that runs in the cloud\" and \"Improved the step shown when Claude adds a repository to a cloud session\". https://code.claude.com/docs/en/cloud-environments.md: \"A network secret is an API key or token you store on a cloud environment so Claude can call that API from any session in the environment without seeing the key.\" NEEDS_YOU items 5 and 6 and the secrets wording in CLAUDE.md rule 10 describe click paths or a later promise.",
+   "proposed_fix": "Say in brain-learn, playbooks/operations.md and method/dod/automation.md: when the session offers an environment, credential or schedule tool, use it (the owner approves one card) and fall back to NEEDS_YOU click steps only when it is absent; keys always go through the credential form or a network secret, never an environment variable. Have brain-learn create the weekly learning run itself when the owner says the phrase in NEEDS_YOU item 6: a fresh session on the brain alone, a cheap model at low effort, a complete standalone prompt, a time away from the top of the hour. Word it by capability, not tool name, so lint and desktop sessions are unaffected.",
+   "acceptance": "`brain lint` 0 errors; NEEDS_YOU items 5 and 6 mention the approval-card path; a unit test or lint rule checks the weekly-run prompt template is self-contained (names the repository, the commands and the branch rule). Live: the owner says 'schedule the weekly learning run' and a weekly routine with only the brain repository appears under Routines; its first run leaves a digest on a claude/ branch.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "research-platform-11"
+  },
+  {
+   "title": "No hook restates the project's position after compaction in sessions where the brain's hooks do load",
+   "severity": "minor",
+   "kind": "opportunity",
+   "files": [
+    ".claude/settings.json",
+    ".claude/hooks/"
+   ],
+   "evidence": "https://code.claude.com/docs/en/context-window.md (What survives compaction): \"SessionStart hooks that match the compact source | Claude Code runs them and adds their output to the compacted context\"; https://code.claude.com/docs/en/hooks.md SessionStart matcher table: \"compact | Auto or manual compaction\". .claude/settings.json has only PreToolUse and Stop entries. CB-201 confirmed the brain's settings hooks load in a one-repository session (which is also how a scheduled run on the brain alone starts). Measured: `brain resume` takes 0.12 s and prints 3 lines in the scratch copy; engine/state.py cmd_resume returns 1 with no project, so the hook must fail open.",
+   "proposed_fix": "Add a SessionStart entry with matcher `compact` that runs a small fail-open wrapper around `brain resume` (print its lines, always exit 0, timeout 10 s). The same script can later be listed in the hooks-only plugin so two-repo sessions get it too.",
+   "acceptance": "Unit test: feeding the wrapper a SessionStart JSON with source compact prints at most 12 lines and exits 0 with and without a managed project. In a one-repository session, after /compact the next reply uses the restated position without a tool call to read state files.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "research-platform-12"
+  },
+  {
+   "title": "The owner guide does not warn that the brain does not work inside a Project",
+   "severity": "minor",
+   "kind": "risk",
+   "files": [
+    "OWNER_GUIDE.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/claude-projects.md (What threads pick up from your repositories, fetched 2026-11-10): \"Cloud threads load each repository's CLAUDE.md instructions but not its skills, .mcp.json servers, or .claude/settings.json, whether the project has one repository or several.\" and \"Agents and commands under .claude/ | Not loaded.\" OWNER_GUIDE.md 'Starting a chat' says only to start a new session with two repositories; grep for 'Project' as a product name in OWNER_GUIDE.md, README.md and CLAUDE.md finds nothing.",
+   "proposed_fix": "Add one sentence under 'Starting a chat': use an ordinary new session, not a Project; inside a Project the brain's phrases and helpers are missing because only its CLAUDE.md is loaded.",
+   "acceptance": "grep finds the sentence in OWNER_GUIDE.md; `brain lint` 0 errors; the guide stays within its length check.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "research-platform-13"
+  },
+  {
+   "title": "Idea: bound helpers with maxTurns, and keep the Haiku scout under its 100K price step with autoCompactWindow",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    ".claude/agents/scout.md",
+    ".claude/agents/builder.md",
+    "docs/BUILD_STATUS.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/sub-agents.md frontmatter table: \"maxTurns | Maximum number of agentic turns before the subagent stops. When the subagent reaches the limit, Claude Code returns its output marked as partial, and Claude can resume it\" and \"autoCompactWindow | Lower the auto-compact window for this subagent to a token count from 100000 to 1000000. Requires Claude Code v2.1.296 or later\". https://platform.claude.com/docs/en/about-claude/pricing.md: Haiku 5.5 is $0.10/$0.50 up to 100,000 prompt tokens and $0.50/$2.50 above. BUILD_STATUS 'Open for HR' says \"Claude Code has no per-helper token cap\": true for tokens, but a turn cap exists. No agent file sets either field.",
+   "proposed_fix": "Add `autoCompactWindow: 100000` to scout.md, and a `maxTurns` to each agent sized from settled hires (start generous, tighten from `brain hr report`). Update the HR note in BUILD_STATUS to say a turn cap exists.",
+   "acceptance": "`claude plugin validate .claude/agents` passes; a scout hire that reads many files shows no request above 100,000 prompt tokens in its transcript; a helper stopped by maxTurns returns marked partial and settles as 'not done' rather than as a pass.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "research-platform-14"
+  },
+  {
+   "title": "Idea: a project agent named Explore, because the built-in one runs on Opus under a Fable lead",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    ".claude/agents/"
+   ],
+   "evidence": "https://code.claude.com/docs/en/sub-agents.md (Built-in subagents): \"When the main conversation runs Fable ... With a Claude subscription ... Explore runs on the Opus model that the opus alias resolves to.\" and \"A user or project subagent named Explore overrides the built-in and keeps its own model field, so define one with model: haiku to run exploration on a lower-cost model.\" Caution from https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence.md: on defect search, Opus 5.5 \"with Claude Sonnet 5.5 subagents: 0.831 ... with Claude Haiku 5.5 subagents: 0.677\".",
+   "proposed_fix": "Try an Explore override on Sonnet at low effort (not Haiku, given the defect-search numbers), read-only tools, omitClaudeMd, and keep it only if a pre-registered comparison on the brain's eval tasks shows no loss.",
+   "acceptance": "`brain eval` paired run with and without the override: pass rate not lower, cost per task lower; otherwise the file is removed.",
+   "effort": "S",
+   "confidence": "low",
+   "id": "research-platform-15"
+  },
+  {
+   "title": "Idea: offer Opus 5.5 with Fable 5.2 as advisor as a third way to start a chat",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "NEEDS_YOU.md",
+    "method/models.md",
+    "OWNER_GUIDE.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/advisor.md (fetched 2026-11-10; marked experimental): \"The advisor tool lets Claude consult a second, typically stronger model at key moments during a task\"; pairing table: \"Opus 5 or Opus 5.5 | Fable, Opus 5 or later\"; \"pairing a faster main model with a stronger advisor typically costs less than running the stronger model throughout.\" https://code.claude.com/docs/en/prompt-caching.md: toggling it \"keeps the cached prefix intact\". Unverified: the page does not say whether /advisor works in a cloud session; on some plans a Fable advisor bills to usage credits.",
+   "proposed_fix": "In the first live session, type `/advisor fable` on an Opus 5.5 chat and note whether it is accepted; only if it is, add it to NEEDS_YOU item 3 and method/models.md as the option between 'Opus alone' and 'Fable alone'.",
+   "acceptance": "A line in BUILD_STATUS records whether /advisor is available in a cloud session; if yes, one paired ledger comparison on a real project item before recommending it.",
+   "effort": "S",
+   "confidence": "low",
+   "id": "research-platform-16"
+  },
+  {
+   "title": "Idea: one phrase for unattended runs, `/goal` with the requirements check as its condition",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "OWNER_GUIDE.md",
+    ".claude/skills/brain-start/SKILL.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/goal.md (fetched 2026-11-10): \"The /goal command sets a completion condition and Claude keeps working toward it without you prompting each step. After each turn, a model checks whether the condition holds.\" and \"The evaluator judges your condition against what Claude has surfaced in the conversation. It doesn't run commands or read files independently\". It \"works in non-interactive mode, in the desktop app, and through Remote Control\"; availability when typed from the phone in a cloud session is unverified. brain-start today stops after continuing on its own three times.",
+   "proposed_fix": "Test `/goal brain req check passes` in a live cloud session. If it works, add it to the owner guide as the way to ask for a run that continues until the ledger is green, and have brain-start print the `brain req check` result at the end of each turn so the evaluator can see it.",
+   "acceptance": "BUILD_STATUS records whether /goal is accepted from the phone; if yes, a run with an open ledger continues past three turns and stops on the turn where `brain req check` prints its pass line.",
+   "effort": "S",
+   "confidence": "low",
+   "id": "research-platform-17"
+  },
+  {
+   "title": "Idea: let brain-start inject the boot output itself and save one round trip per session",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    ".claude/skills/brain-start/SKILL.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/skills.md (Inject dynamic context): \"The !`<command>` syntax runs shell commands before the skill content is sent to Claude. The command output replaces the placeholder\"; `${CLAUDE_SKILL_DIR}` is substituted in the body and in `allowed-tools` Bash rules. Risks on the same page: \"A failed command aborts the entire skill invocation, not just its own placeholder\" and outside auto mode \"when a command's permission check returns anything other than allow, Claude Code aborts the invocation\". Measured: `brain boot` with no request prints the position in 0.33 s and exits 0; the session's first request already carries 86,208 prompt tokens, so each saved round trip avoids re-reading at least that much.",
+   "proposed_fix": "Only after a live test in both one- and two-repo sessions: add `allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/../../../bin/brain *)` and a line that injects `python3 ${CLAUDE_SKILL_DIR}/../../../bin/brain boot || true` (no request text in the command, since the owner's dictated words must not reach a shell). Keep the written instruction to run boot as the fallback.",
+   "acceptance": "In a live session, invoking brain-start shows the boot lines in the skill message with no separate tool call; with the brain path deliberately broken the skill still loads (the `|| true` path) and tells Claude to run boot by hand.",
+   "effort": "S",
+   "confidence": "low",
+   "id": "research-platform-18"
+  },
+  {
+   "title": "Idea: a brain-first layout, starting on the brain alone so its hooks load and letting Claude add the project",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "OWNER_GUIDE.md",
+    ".claude/skills/brain-start/SKILL.md",
+    "docs/BUILD_STATUS.md"
+   ],
+   "evidence": "https://code.claude.com/docs/en/cloud-environments.md: repository hooks and .mcp.json load \"in a session with one repository\". https://code.claude.com/docs/en/changelog.md v2.1.312 (October 27, 2026): \"Improved the step shown when Claude adds a repository to a cloud session\"; v2.1.316: \"Fixed the SDK register_repo_root control request not loading the CLAUDE.md of a directory outside the working directory\"; v2.1.219: \"Added DirectoryAdded hook that fires after /add-dir or the SDK register_repo_root control request registers a new working directory mid-session\". Observed: this one-repository session has the add-repository tool, described as loading the added repository's CLAUDE.md, skills and plugins on the next turn. Unverified: whether the added repository is pushable without an extra approval each time and whether the brain's hooks keep firing for files in it.",
+   "proposed_fix": "Run live check 5 from the memo: start a session on the brain alone, say 'Continue <project>', have Claude add the project repository, then confirm the guard fires, the project's CLAUDE.md is loaded, and a push to the project succeeds. If all three hold, document it in the owner guide as the alternative to selecting two repositories.",
+   "acceptance": "BUILD_STATUS records the three results; adopted only if all pass and the owner prefers typing the project's name to selecting a second repository.",
+   "effort": "M",
+   "confidence": "low",
+   "id": "research-platform-19"
+  }
+ ],
+ "data": "Memo: /home/user/Claude-Brain/docs/research/round4/01-platform.md (the only file written in the brain; 326 lines). Scratch work (not part of the brain): /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/research-platform/ with dl/ (downloaded pages), brain/ (scratch copy, VERSION.json altered there for the hook test), proj-agents/ (AGENTS.md repro), mk/ (draft marketplace and hooks-only plugin that passed `claude plugin validate`).\n\nFact re-verification (memory/facts.jsonl, 18 rows): TRUE as written: fact-claudemd-cost, fact-skill-cost, fact-cache-lifetime, fact-claudemd-edit-timing, fact-subagent-model, fact-subagent-cold-start, fact-prices, fact-bench-coding, fact-bench-escalation, fact-bench-orchestrator, fact-fast-mode; fact-cost-shape is a past measurement, not re-run. NEEDS CORRECTION: fact-cache-breakers (MCP changes keep the cache when tools are deferred, the default; four breakers missing), fact-default-effort (thinking cannot be turned off on Sonnet 5.5 and Haiku 5.5 either), fact-effort-curves (3.3 points, not 3.2), fact-two-repo-loading (true but omits account-synced plugins and skills, user settings 'not read', Projects threads). PARTLY RE-VERIFIED: fact-multi-agent-tokens (7x confirmed; 4x and 15x not re-fetched), fact-fable-limits (fallback sentence confirmed; capability sentence left to the models memo).\n\nMeasurements from this live one-repository cloud session (Fable 5.2, ultracode on, Claude Code 2.1.322):\n- main conversation first request 86,208 prompt tokens; 296,898 after 35 min and 142 requests\n- main cache writes: 525,846 one-hour, 0 five-minute; helper cache writes: 0 one-hour, 6,334,727 five-minute\n- 19 helpers: 18 on claude-fable-5-2, 1 on claude-haiku-5-5; 17 workflow agents = $111.59 at list prices; largest single agent $16.44\n- first request: default workflow agent about 65,300 tokens; brain scout 5,489\n- agents active at once inside one workflow: 2 (nproc = 4)\n- helper pauses longer than 5 minutes: 0 in 950 requests (a one-hour helper cache would not have paid)\n- brain boot 0.33 s, brain resume 0.12 s\n- CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1, CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=92, CLAUDE_CODE_SYNC_PLUGINS=1; environment Default, no variables, no setup script, network unrestricted"
+}
