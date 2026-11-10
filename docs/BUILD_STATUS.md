@@ -146,3 +146,17 @@ Found and fixed, each with a test:
 Seen and left, with reasons: `hr hire` found no template for either Python item and offered unrelated "closest" ones (rubric-mapper, accessibility-auditor) — evidence for CB-204. `checkpoint --push` also committed the brain's learning inbox to the brain branch (only `learning/inbox/`; it left work in progress alone) — as designed. The local push printed a protocol warning caused by this container's `push.negotiate` git setting, not by the brain.
 
 Cost from `brain ledger` at this point of the session: 12.5M tokens, $5.57 at list prices, helpers 43% (the CB-205 reviewer included); the two trial builders together $0.10. Cache read 99%.
+
+### CB-201 Live platform checks in a one-repository session
+
+Observations from this session (2026-11-10), not official statements; none is recorded as a fact because no official page was read for it.
+
+| Question | Observed | How |
+|---|---|---|
+| Does the `PreToolUse` guard hook in `.claude/settings.json` fire? | **Yes.** With `learned_zone_locked` set to true for the test, an Edit to `memory/facts.jsonl` was refused by the platform: "PreToolUse:Edit hook error: memory/facts.jsonl is in the learned zone …". `VERSION.json` was restored at once (`git status` clean) | Edit tool call, then `git checkout VERSION.json` |
+| Is the guard a no-op today? | Yes, by design (D-08): unlocked, it exits 0 for every path. `memory/ml_config.json` is a kernel file, not learned, so the guard never blocks it even when locked | Manual runs of `.claude/hooks/guard_paths.py`: exit 0 unlocked, exit 2 on `memory/facts.jsonl` locked |
+| Does the `Stop` hook fire? | Not observable inside one turn; checked at the end of the session (see CB-209) | — |
+| Do a skill's frontmatter hooks fire? | Not tested: no brain skill declares hooks (`grep -l '^hooks:' -r .claude/skills` finds none) | — |
+| Do helpers honour the agent file's model and effort? | **Yes.** The CB-205 reviewer, launched with no override, ran every turn on `claude-opus-5-5` at effort `high`, as `.claude/agents/reviewer.md` sets. The two builders ran on `claude-sonnet-5-5` at effort `medium` (model also passed explicitly) | `"model"` and `"effort"` fields in each helper transcript under `~/.claude/projects/…/subagents/` |
+| Is `omitClaudeMd` honoured? | **Yes.** No helper transcript contains the brain's `CLAUDE.md` text ("First, size the request"); the main transcript contains it 3 times | `grep -c` over the transcripts |
+| Does an effort change mid-session keep the prompt cache? | Not testable from inside a session: the lead cannot change its own effort with a tool | Still open as CB-112 |
