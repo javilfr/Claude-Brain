@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 266 from 14 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, redteam, research-platform, templates-a, templates-b). Decisions: 228 do, 3 do in part, 1 reproduce first, 34 later.
+Findings in: 285 from 15 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, redteam, research-models, research-platform, templates-a, templates-b). Decisions: 240 do, 3 do in part, 1 reproduce first, 41 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -144,6 +144,7 @@ Owns: `engine/common.py`, `engine/contract.py`, `engine/doctor.py`, `engine/budg
 | performance-03 | should-fix | S | do | Every brain call costs about 240 ms in a fresh clone: no bytecode cache, and all 21 modules imported for any command |  |
 | quality-path-10 | should-fix | S | do | The secret scanner misses 13 of 20 common credential formats |  |
 | redteam-07 | should-fix | M | do | No secret scan before the brain commits and pushes; a key written into a note, evidence, NEEDS_YOU or a helper brief reaches the remote, and the patterns miss 13 of 19 common formats |  |
+| research-models-01 | should-fix | S | do | Token estimates use 4 characters per token; current models use about 2.5, so every estimate is about 1.6 times too low |  |
 | research-platform-05 | should-fix | S | do | `brain adopt` on a repository that relies on AGENTS.md silently switches its instructions off |  |
 | core-14 | minor | M | do | Smaller slips, each reproduced: adopt accepts the brain itself, STATUS.md cost lines are wrong, an open owner item with the word 'unresolved' vanishes, the total token cap is not enforced by `brain budget`, a … |  |
 | performance-08 | minor | S | do | Help pages and usage errors are among the largest outputs: 3,553 B for `--help`, 250-760 B per mistyped flag |  |
@@ -216,6 +217,8 @@ Owns: `engine/ledger.py`, `engine/guard.py`, `engine/lint.py`, `.claude/hooks`, 
 | quality-path-09 | should-fix | S | do | Hook commands fail closed when the script path does not resolve: python3 exits 2, which blocks every edit and blocks stopping |  |
 | quality-path-13 | should-fix | M | do | Lint gaps: invalid option values, missing required options and two call forms pass; repeated sentences only note although the spec says fail; one transcript rule is missing; handover, memory items and HR templ… |  |
 | quality2-03 | should-fix | M | do | What the ledger feeds the learners is in units that do not mean work: tokens is 93% cache reads and minutes counts idle time |  |
+| research-models-06 | should-fix | M | later | Nothing outside the model keeps an unattended run going; Anthropic recommends a bounded automatic continue | a hook that makes the lead continue loads only in one-repository chats and can loop; it needs a live test before it is switched on |
+| research-models-07 | should-fix | S | do | The ledger misprices Haiku requests over 100,000 prompt tokens, fast mode, and any model outside the four |  |
 | research-platform-09 | should-fix | S | do | omitClaudeMd may not keep both repositories' CLAUDE.md out of a helper in a two-repo session, and the ledger cannot show it |  |
 | quality2-04 | minor | S | do | Ledger pricing blind spots: an unknown model is silently priced at the fallback rate; fast mode is ignored |  |
 | research-platform-12 | minor | S | do | No hook restates the project's position after compaction in sessions where the brain's hooks do load |  |
@@ -249,6 +252,7 @@ Owns: `engine/learn.py`, `learning/`, `tests/test_rehearsal.py`. New tests go in
 | redteam-09 | should-fix | S | do | The brain's own test suite goes red after the first real lesson is consolidated, and again after the first decay |  |
 | redteam-11 | should-fix | M | do | Three red sessions in a row demote the rules that were followed, including facts and the release rule |  |
 | redteam-14 | should-fix | L | do | Learning dead ends: lessons noted once are never shown again, the routing learner can never start, and one item over 400 stops every later consolidation |  |
+| research-models-04 | should-fix | M | do | Learning admits unscoped absolutes and a rule that gives outside text the owner's authority |  |
 | owner-docs-12 | minor | S | do | After "What did you learn?" the next "Hand over" cannot pass: the digest command writes a file in the brain that no command commits |  |
 | performance-11 | minor | M | later | Every consolidated record is stored twice and never pruned: about 7 KB of git history per session | about 7 KB of history per session; changing the delta format risks the replay check, so it waits with the yearly archive (redteam-19) |
 | core-20 | idea | M | do | Idea: a two-container continuity rehearsal in the test suite, so CB-104 ('Continue in a new chat resumes the same item') is checked on every change instead of waiting for a live session |  |
@@ -290,6 +294,7 @@ Owns: `engine/mlearn.py`, `engine/route.py`, `engine/schedule.py`, `memory/ml_co
 | ml-planning-09 | should-fix | M | do | Drift alarms are tuned for a noise level real sessions are unlikely to have: many false alarms on heavy-tailed sizes, little power at realistic spread |  |
 | owner-docs-09 | should-fix | M | do | Phrases the owner is told to type are not recognised by route or by any skill, and his real opening message today was sized "1 small task, data" |  |
 | performance-02 | should-fix | S | do | `plan schedule` takes 85 s on 200 tickets for the same answer it gives in 0.26 s |  |
+| research-models-02 | should-fix | M | do | Escalation ladder omits Sonnet high and Opus xhigh and does not choose effort versus model by the kind of failure |  |
 | ml-planning-10 | minor | S | do | Review stopping asks for another round in most small cases even when the estimate says nothing remains, and `learn review` is not in any skill |  |
 | ml-planning-11 | minor | S | do | The scheduler's file-conflict check is literal text, tickets without files run in parallel silently, --agents above the cap is accepted, and parallelism is shown as free by default |  |
 | ml-planning-12 | minor | S | do | `plan schedule` takes 16 s for 100 tickets and 74 s for 200 while changing nothing |  |
@@ -311,7 +316,9 @@ Owns: `engine/radar.py`, `engine/repomap.py`, `engine/evals.py`, `evals/`, `memo
 
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
+| research-models-08 | should-fix | M | do | The eval design cannot detect modest effects with 12 tasks and never says so |  |
 | performance-09 | minor | M | do | The repo map's cache is defeated by the brain's own bookkeeping, and bookkeeping files are ranked as source (measurement and fix for open item M8) |  |
+| research-models-10 | minor | S | do | memory/models.json lacks sizes and source URLs, and its 90-day re-check would have missed five launches and a price change in 70 days |  |
 | learning-19 | idea | S | do | Idea: a `brain eval recall` command that reports recall, precision, silence and token cost under production settings |  |
 
 ### Package I: HR engine and selection (CB-220)
@@ -333,11 +340,16 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 | templates-b-07 | should-fix | S | do | With no check command the brief throws away the template's own done check |  |
 | e2e-trial-12 | minor | S | do | The tickets file has two undocumented shapes: `hr staff` ignores `check` and reports "no acceptance command" |  |
 | owner-docs-13 | minor | S | do | "HR report" tells him to say "Consolidate" for hires that are already folded in |  |
+| research-models-12 | minor | S | do | Brief by pointer saves about 4 to 7 cents per hire by derivation; the guideline claims a ledger measurement that does not exist |  |
+| research-models-13 | minor | S | do | The prompt audit has no pattern for asking a model to show its reasoning, which current models may refuse and bill |  |
 | templates-b-18 | minor | S | do | `hr staff` ignores a template's `role` and prices the helper on the wrong model |  |
 | templates-b-20 | minor | S | do | Nine planning templates carry a third pitfall that no helper ever sees |  |
 | templates-b-21 | minor | S | do | 38 of 200 method lines carry no reason, and the audit does not look |  |
 | e2e-trial-19 | idea | S | do | Idea: show what a template adds to the done condition before the lead delegates |  |
 | ml-planning-15 | idea | L | later | Idea: make the HR contract the unit of learning for model choice, calibration and drift | a redesign of what the learners learn from; the first step (sealed hires feed the model choice) is done under ml-planning-02 |
+| research-models-14 | idea | S | later | Idea: show elapsed time to long-running research helpers | needs a pre-registered comparison first |
+| research-models-17 | idea | S | later | Idea: let a template raise effort for its kind of work, starting with bug fixing | needs evidence from settled hires first |
+| research-models-18 | idea | S | later | Idea: hand every helper of a parallel batch one shared conventions file | no parallel batch has needed shared conventions yet |
 | templates-a-32 | idea | S | do | Idea: an audit rule for methods the base agent's tools cannot carry out |  |
 | templates-a-33 | idea | S | do | Idea: record whether the lead kept or overrode the selected template, so selection is measured by use |  |
 | templates-a-34 | idea | M | do | Idea: match keyword phrases as phrases, and stem Spanish gender and verb forms |  |
@@ -390,6 +402,7 @@ Owns: `hr/rack`. New tests go in `tests/test_r4_j.py`.
 | templates-b-16 | minor | S | do | Three templates compare options and recommend one: architecture-decider, option-comparer, strategy-memo-writer |  |
 | templates-b-17 | minor | S | do | Keyword-overlap pairs: keep every template, sharpen the words (six pairs) |  |
 | templates-b-19 | minor | S | do | rollback-restorer is marked one-way-door although its own method makes the work undoable |  |
+| research-models-19 | idea | S | later | Idea: for extraction work, one writer per output file and exact quotes for terms and figures | the template pass in this programme fixes confirmed defects only; this is a new method line to trial |
 | templates-a-31 | idea | M | later | Idea: history-digger on the scout agent, as a paired trial | moving a template to the cheapest agent needs a paired trial first (I-16) |
 | templates-a-35 | idea | M | later | Idea: transcript-cleaner and copy-editor at the Sonnet price, as a paired trial | a cheaper model for two writing templates needs a paired trial first (I-16) |
 | templates-b-22 | idea | M | later | Idea: the scout has no template, so bulk reading is hired at Opus prices | the scout stays available to the lead directly; giving it templates needs a paired trial first (I-16) |
@@ -408,6 +421,9 @@ Owns: `CLAUDE.md`, `.claude/skills`, `.claude/agents`, `method/`, `.claude-plugi
 | instructions-07 | should-fix | S | do | "Continue on your own at most three times in a row" has no reason, no unit, and refers to a re-prompt mechanism that does not exist |  |
 | instructions-08 | should-fix | M | do | brain-new leaves the contract uncommitted and the release rule unset, and "Ship it" under rule `none` has no instruction |  |
 | lead-03 | should-fix | S | do | A copy of the brain made with cp -a keeps the real remote: an auditor's scratch copy pushed three test records to this branch |  |
+| research-models-03 | should-fix | M | do | A hired helper gets two return contracts that disagree, and the verification paragraph drops the clauses Anthropic tested |  |
+| research-models-05 | should-fix | M | do | Learning guidance says when to write instead of what memory is for, rejects checked observations, and never re-reads a note against its session |  |
+| research-models-09 | should-fix | S | do | method/models.md and the model facts carry statements the docs have overtaken |  |
 | research-platform-01 | should-fix | M | do | Workflows and ultracode have no rule in the brain: workflow agents default to the session's model and a 65K-token start |  |
 | research-platform-02 | should-fix | S | do | The plugin manifest fails the platform's own validator: the name 'claude-brain' is reserved |  |
 | research-platform-03 | should-fix | M | do | Brain skills declare no hooks, although skill-frontmatter hooks are the documented way to get the guard and session capture into a two-repo session |  |
@@ -418,6 +434,8 @@ Owns: `CLAUDE.md`, `.claude/skills`, `.claude/agents`, `method/`, `.claude-plugi
 | instructions-13 | minor | S | do | All six agent files set a token cap that the guidelines forbid and the briefs contradict, and builder.md relies on a `brain run` path no brief gives |  |
 | instructions-14 | minor | S | do | "Go back" is offered to the owner, but its steps sit in a file nothing points to and "the last release he accepted" is recorded nowhere |  |
 | e2e-trial-18 | idea | S | do | Idea: a small-project lane stated in one place |  |
+| research-models-15 | idea | S | do | Idea: route context-heavy side tasks to a fork instead of a cold helper |  |
+| research-models-16 | idea | S | later | Idea: run Anthropic's prompt audit over agents, skills and the rack at every model release | a release-time habit; added to the model release checklist when the next model ships |
 | research-platform-14 | idea | S | later | Idea: bound helpers with maxTurns, and keep the Haiku scout under its 100K price step with autoCompactWindow | a turn cap set without settled-hire data would cut helpers short; revisit from `brain hr report` |
 | research-platform-15 | idea | S | later | Idea: a project agent named Explore, because the built-in one runs on Opus under a Fable lead | needs a pre-registered comparison first |
 | research-platform-18 | idea | S | later | Idea: let brain-start inject the boot output itself and save one round trip per session | needs a live test in one- and two-repository sessions first |
@@ -434,6 +452,7 @@ Owns: `OWNER_GUIDE.md`, `NEEDS_YOU.md`, `README.md`, `docs/`, `GUIA.md`, `VERSIO
 | owner-docs-10 | should-fix | S | do | OWNER_GUIDE.md has no answer for a chat that dies, where to see the result, how to merge on GitHub, or how to stop at once, and gives Spanish for three of nine phrases |  |
 | research-platform-07 | should-fix | S | do | Cloud sessions on 1M-token models compact only near 900K tokens and get no idle compaction; one environment variable bounds it |  |
 | owner-docs-14 | minor | M | do | Five smaller statements that are untrue or that a new lead would misread |  |
+| research-models-11 | minor | S | later | Anthropic's measurements do not support the advisor pairing proposed in part 1 of this round | no action: the advisor pairing (research-platform-16) is not pursued; the measurement is recorded as a fact |
 | research-platform-08 | minor | S | do | A workflow runs only two agents at a time on the 4-CPU cloud VM |  |
 | research-platform-13 | minor | S | do | The owner guide does not warn that the brain does not work inside a Project |  |
 | owner-docs-17 | idea | M | later | Idea: a Spanish edition of the guide, checked for parity | a second guide to keep in step; the guide gets Spanish phrases now, a full Spanish edition waits for the owner to ask |
