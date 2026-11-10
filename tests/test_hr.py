@@ -544,6 +544,18 @@ class ReviewFindings(Base):
             hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "M", "band_tokens": 1000, "actual_tokens": 1000})
         self.assertEqual(len(hr.hr_state(state)["ratios"]["_all"]), hr.DEFAULT_CFG["ratio_cap"])
 
+    def test_plain_brief_for_a_deliverable_is_not_read_only(self):
+        # Found in the template evaluation: a plain brief for a data task went
+        # to the researcher and said "Read-only: change nothing" while asking
+        # for total.json.
+        for fam in ("data", "knowledge", "language"):
+            code, out = self.run_cli("hr", "hire", "--dry-run", "--check", "true", "--template", "plain", "--family", fam,
+                                     "Write total.json with the north total from orders.csv")
+            self.assertEqual(code, 0, out)
+            self.assertNotIn("agent: researcher", out, fam)
+        brief = hr.compose_brief(None, "researcher", "Write memo.md", "", ["memo.md"], [], "true", "sonnet", "medium", "n.md")
+        self.assertNotIn("Read-only", brief)
+
     def test_template_plain_forces_a_plain_brief(self):
         # The control arm of a template evaluation needs a brief with no template
         # even when one would fit.

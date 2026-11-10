@@ -351,7 +351,7 @@ def _doc(t: dict) -> list[str]:
 
 
 _REVIEW_VERBS = {"review", "audit", "verify", "inspect", "revisa", "revisar", "audita", "verifica", "comprueba"}
-_MAKE_VERBS = {"write", "build", "create", "make", "add", "implement", "escribe", "crea", "construye", "hazme", "haz", "implementa"}
+_MAKE_VERBS = {"write", "build", "create", "make", "add", "implement", "translate", "fix", "change", "escribe", "crea", "construye", "hazme", "haz", "implementa", "traduce", "arregla", "cambia"}
 
 
 def _lead_verb(task: str) -> str:
@@ -455,6 +455,7 @@ def wage(size: str, model_alias: str, tid: str | None, state: dict | None, hc: d
 
 
 PLAIN = "plain"  # --template value that forces a plain brief
+PLAIN_AGENT = {"software": "builder", "data": "builder", "operations": "builder", "knowledge": "writer", "language": "writer"}
 
 
 def hire_or_not(material_tokens: int | None, has_check: bool, parallel: bool, hc: dict) -> tuple[bool, str]:
@@ -492,7 +493,8 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
         lines.append(f"Work in {workdir}; paths below are relative to it.")
     if t:
         lines += ["", t["role_line"].rstrip(".") + "."]
-    scope = (t or {}).get("scope_rule") or ("Read-only: change nothing." if base_agent not in WRITES else "Change only the files you own; at the edge, report instead of fixing.")
+    scope = (t or {}).get("scope_rule") or ("Read-only: change nothing." if base_agent not in WRITES and not owns
+                                            else "Change only the files you own; at the edge, report instead of fixing.")
     owned = ("Owns: " + ", ".join(owns) + ". ") if owns else ""
     lines += ["", f"<scope>{owned}{scope}</scope>"]
     if inputs:
@@ -597,7 +599,9 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     else:
         chosen = select(task, rack, state, hc, family, risk, base_agent)
     t = chosen[0]["template"] if chosen else None
-    agent = (t or {}).get("base_agent") or base_agent or ("builder" if family == "software" else "researcher")
+    # With no template, the default agent is one that can make the deliverable:
+    # a researcher's brief is read-only, which contradicts "write total.json".
+    agent = (t or {}).get("base_agent") or base_agent or PLAIN_AGENT.get(family, "builder")
     role = (t or {}).get("role") or ROLE_OF[agent]
     # The riskier of what the lead said and what this kind of work usually is.
     if t and t.get("risk") in RISKS and RISKS.index(t["risk"]) > RISKS.index(risk):
