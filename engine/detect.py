@@ -112,6 +112,8 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
     age = c.days_since(models.get("verified_on", ""))
     if age > int(models.get("recheck_days", 90)):
         lines.append(f"note: model facts were verified {age} days ago; re-check memory/models.json before relying on prices or model names")
+    if mode == "brain-only":
+        lines += brain_work_lines(root)
     lines += session_start_lines(root, proj if proj and c.is_managed(proj) and mode in ("work", "choose") else None)
     if request:
         try:
@@ -138,6 +140,23 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
         if size > BOOT_LIMIT:
             break
         out.append(l)
+    return out
+
+
+def brain_work_lines(root: Path) -> list[str]:
+    """With only the brain attached, the work is the brain itself: its open
+    tickets are the position, and docs/NEXT_SESSION.md is the handover."""
+    data = c.read_json(root / "docs" / "plan" / "tickets.json", {}) or {}
+    tickets = [t for t in data.get("tickets", []) if isinstance(t, dict)]
+    done = {t.get("id") for t in tickets if t.get("status") == "done"}
+    todo = [t for t in tickets if t.get("status") != "done"]
+    if not todo:
+        return []
+    ready = [t for t in todo if all(d in done for d in t.get("deps", []) or [])]
+    first = (ready or todo)[0]
+    out = [f"brain work: {len(todo)} open ticket(s) in docs/plan/tickets.json · next: {first.get('id')} {c.clip(str(first.get('title', '')), 70)}"]
+    if (root / "docs" / "NEXT_SESSION.md").is_file():
+        out.append("handover: read docs/NEXT_SESSION.md first, then `brain plan schedule docs/plan/tickets.json`")
     return out
 
 

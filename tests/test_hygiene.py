@@ -160,6 +160,24 @@ class HygieneTests(unittest.TestCase):
         c.write_json(brain / "learning" / "radar" / "state.json", {"sources": {"a": {"last_checked": c.now_iso()}}})
         self.assertFalse(detect.radar_due(brain))
 
+    def test_brain_only_boot_shows_the_brains_own_open_work(self):
+        from engine import detect
+        brain = self.ws / "solo" / "Claude-Brain"
+        (brain / "docs" / "plan").mkdir(parents=True)
+        (brain / "memory").mkdir()
+        c.write_json(brain / "memory" / "models.json", {"verified_on": c.today(), "recheck_days": 90})
+        c.write_json(brain / "docs" / "plan" / "tickets.json", {"tickets": [
+            {"id": "A-1", "title": "finished", "status": "done"},
+            {"id": "A-3", "title": "blocked one", "deps": ["A-2"], "status": "open"},
+            {"id": "A-2", "title": "ready one", "deps": ["A-1"], "status": "open"}]})
+        (brain / "docs" / "NEXT_SESSION.md").write_text("x")
+        os.environ["BRAIN_NO_NETWORK"] = "1"
+        blob = "\n".join(detect.boot_lines("Continue", brain))
+        self.assertIn("mode: brain-only", blob)
+        self.assertIn("2 open ticket(s)", blob)
+        self.assertIn("next: A-2 ready one", blob)   # the first ticket whose dependencies are done
+        self.assertIn("docs/NEXT_SESSION.md", blob)
+
     def test_bookkeeping_definition_is_shared_with_gates(self):
         self.assertIs(gate.is_bookkeeping, state.is_bookkeeping)
         self.assertTrue(state.is_bookkeeping(".brain/log/gates.jsonl"))
