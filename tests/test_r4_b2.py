@@ -432,6 +432,50 @@ class StartUpTests(Base):
         self.assertIn("req (SyntaxError", doctor.stdout)
 
 
+class BytecodeHousekeepingTests(Base):
+    def stale_and_live(self):
+        prefix = self.ws / "xdg-cache" / "claude-brain" / "pyc"
+        gone, live = self.ws / "gone" / "engine", self.ws / "live" / "engine"
+        live.mkdir(parents=True)
+        for src in (gone, live):
+            d = prefix / str(src).lstrip("/")
+            d.mkdir(parents=True)
+            (d / "common.cpython-313.pyc").write_bytes(b"\0")
+        return prefix, prefix / str(gone).lstrip("/"), prefix / str(live).lstrip("/")
+
+    def test_bytecode_of_a_brain_copy_that_is_gone_is_removed(self):
+        """performance-03 (1), the cost of the cache: every temporary copy of
+        the brain (the test suite makes several) would leave its compiled
+        files behind for good. cache.prune_bytecode drops the folders whose
+        source folder no longer exists and keeps the rest."""
+        from engine import cache
+        prefix, gone, live = self.stale_and_live()
+        self.assertEqual(cache.prune_bytecode(prefix), 1)
+        self.assertFalse(gone.exists())
+        self.assertFalse((prefix / str(self.ws / "gone").lstrip("/")).exists(), "the emptied parent folders go too")
+        self.assertTrue((live / "common.cpython-313.pyc").is_file())
+        self.assertEqual(cache.prune_bytecode(prefix), 0)
+        self.assertEqual(cache.prune_bytecode(self.ws / "no-such-folder"), 0)
+
+    def test_doctor_tidies_only_the_brains_own_bytecode_folder(self):
+        """performance-03 (1): `brain doctor` is where the tidy-up runs (the
+        full gate runs it after the tests). It never touches a folder the
+        user chose with PYTHONPYCACHEPREFIX."""
+        prefix, gone, live = self.stale_and_live()
+        r = self.brain("doctor")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertFalse(gone.exists())
+        self.assertTrue(live.is_dir())
+        self.assertEqual(r.stdout.strip().splitlines()[-1], "brain is healthy")
+        self.assertNotIn("pyc", r.stdout, "the tidy-up is silent: doctor prints what it printed before")
+        mine = self.ws / "mine"
+        stale = mine / str(self.ws / "gone2" / "engine").lstrip("/")
+        stale.mkdir(parents=True)
+        (stale / "x.cpython-313.pyc").write_bytes(b"\0")
+        self.brain("doctor", env=dict(os.environ, PYTHONPYCACHEPREFIX=str(mine)))
+        self.assertTrue((stale / "x.cpython-313.pyc").is_file())
+
+
 class UsageTests(Base):
     def test_help_is_short_and_lists_each_command_once(self):
         """performance-08: `brain --help` printed the list of commands three

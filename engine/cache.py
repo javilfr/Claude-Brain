@@ -12,11 +12,14 @@ a cache there would leak project-derived data into the shared brain.
 from __future__ import annotations
 
 import json
-import tempfile
+import os
 from pathlib import Path
-from typing import Any
 
 from . import common as c
+
+TYPE_CHECKING = False
+if TYPE_CHECKING:  # annotations only; importing typing costs every call a few milliseconds
+    from typing import Any
 
 TEMP_CACHE_NAME = "claude-brain-cache"
 KEEP_DAYS = 30  # an entry not rewritten for this long is dropped
@@ -44,6 +47,7 @@ def default_dir(project: Path | str | None = None) -> Path:
         cand = Path(project) / ".brain" / "cache"
         if not _inside_brain(cand):
             return cand
+    import tempfile  # here, not at the top: it is slow to import and most calls have a project
     return Path(tempfile.gettempdir()) / TEMP_CACHE_NAME
 
 
@@ -103,4 +107,32 @@ def prune(days: int, cache_dir: Path | str | None = None) -> int:
                 removed += 1
             except OSError:
                 continue
+    return removed
+
+
+def prune_bytecode(prefix: Path | str) -> int:
+    """Remove compiled files whose source folder is gone (a deleted clone, a
+    temporary copy made by a test); returns how many folders were dropped.
+    ``prefix`` is the brain's own bytecode folder (bin/brain sets it under the
+    user's cache directory), where each file mirrors the absolute path of its
+    source. Only called for that folder, never for one the user chose."""
+    root = Path(prefix)
+    if os.sep != "/" or not root.is_dir():
+        return 0  # the path mapping below is the POSIX one: never delete on a guess
+    removed = 0
+    for folder, _dirs, files in os.walk(root, topdown=False):
+        here = Path(folder)
+        compiled = [f for f in files if f.endswith(".pyc")]
+        if compiled and not (Path("/") / here.relative_to(root)).is_dir():
+            for f in compiled:
+                try:
+                    (here / f).unlink()
+                except OSError:
+                    pass
+            removed += 1
+        if here != root:
+            try:
+                here.rmdir()  # only succeeds when nothing is left in it
+            except OSError:
+                pass
     return removed

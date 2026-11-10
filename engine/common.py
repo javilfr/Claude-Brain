@@ -12,14 +12,16 @@ Conventions every module follows:
 from __future__ import annotations
 
 import datetime as _dt
-import hashlib
 import json
 import math
 import os
 import re
 import stat
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+
+TYPE_CHECKING = False
+if TYPE_CHECKING:  # annotations only; importing typing costs every call a few milliseconds
+    from typing import Any, Iterable, Iterator
 
 BRAIN_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_VERSION = 1
@@ -251,10 +253,12 @@ def iter_jsonl_stream(path: Path | str) -> Iterator[dict]:
 
 
 def sha256_text(text: str) -> str:
+    import hashlib  # here, not at the top: most calls never hash anything
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def sha256_file(path: Path | str) -> str:
+    import hashlib
     h = hashlib.sha256()
     try:
         with open(path, "rb") as f:

@@ -166,7 +166,17 @@ def project_checks(project: Path) -> tuple[list[tuple[str, str]], str]:
     return problems, f"ok   project {project.name}: contract v{ver} valid, git ready on {branch}"
 
 
+def own_bytecode_dir() -> str | None:
+    """The bytecode folder bin/brain chose for this call, or None when the
+    user chose one (PYTHONPYCACHEPREFIX) or there is none."""
+    prefix = sys.pycache_prefix
+    return prefix if prefix and Path(prefix).name == "pyc" and Path(prefix).parent.name == "claude-brain" else None
+
+
 def cmd_doctor(args) -> int:
+    if own_bytecode_dir():
+        from . import cache
+        cache.prune_bytecode(own_bytecode_dir())  # compiled files of brain copies that no longer exist
     if getattr(args, "project", None) is not None:
         project, why = c.locate_project(args.project or None)
         if project is None:
