@@ -1,12 +1,18 @@
-"""Tests for engine/route.py: sizing on the labelled set, Thompson sampling,
-the cascade rule, and the exact assignment against brute force."""
+"""Tests for engine/route.py: sizing on the labelled set, the delegation of
+model choice to engine/mlearn.py, the cascade rule, and the exact assignment
+against brute force."""
+import argparse
+import io
 import itertools
 import json
 import random
+import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
-from engine import route
+from engine import mlearn, route
 
 EVAL = Path(__file__).resolve().parents[1] / "evals" / "routing.jsonl"
 CFG = {"roles": {"lead": {"model": "opus", "effort": "medium"}, "builder": {"model": "sonnet", "effort": "medium"}},
@@ -57,35 +63,69 @@ class Classify(unittest.TestCase):
         self.assertEqual(route.classify("trnaslate the whole website to japanese")["family"], "language")
 
 
+def outcomes(model, n, passed=True, start=0):
+    return [{"kind": "outcome", "id": f"{model}{start + i}", "at": f"2026-01-01T{start + i:05d}",
+             "task_class": "software.feature", "family": "software", "tier": 1, "risk": "standard", "model": model,
+             "effort": "medium", "has_check": True, "passed": passed, "first_pass": passed, "tokens": 100_000}
+            for i in range(n)]
+
+
+def ml_cfg():
+    out = json.loads(json.dumps(mlearn.config()))
+    out["models"] = CFG
+    out["bandit"]["arms"] = [["sonnet", "medium"]]
+    return out
+
+
 class Suggest(unittest.TestCase):
+    """route.suggest only delegates to mlearn.suggest_arm; the statistics are
+    tested in tests/test_mlearn.py. These check the wiring."""
+
     def test_defaults_without_enough_outcomes(self):
-        stats = {"classes": {"software.feature": {"sonnet/medium": {"pass": 9, "fail": 1}, "opus/medium": {"pass": 3}}}}
-        got = route.suggest("software.feature", "builder", stats, CFG, seed=1)
-        self.assertEqual((got["model"], got["effort"]), ("sonnet", "medium"))
-        self.assertIn("default", got["basis"])
+        c_ = ml_cfg()
+        state = mlearn.fold(mlearn.empty_state(), outcomes("sonnet", 9) + outcomes("opus", 3), c_)
+        got = route.suggest("software.feature", "lead", "software", "standard", 1, True, state, c_, seed=1)
+        self.assertEqual((got["model"], got["effort"], got["explored"]), ("opus", "medium", False))
+        self.assertIn("role default", got["basis"])
+        self.assertIn("12 pooled", got["basis"])
 
-    def test_thompson_prefers_cheap_option_that_passes(self):
-        stats = {"classes": {"software.feature": {
-            "sonnet/medium": {"pass": 40, "fail": 4, "tokens": 44 * 100_000},
-            "opus/high": {"pass": 42, "fail": 2, "tokens": 44 * 300_000}}}}
-        picks = [route.suggest("software.feature", "builder", stats, CFG, seed=k)["model"] for k in range(200)]
-        # Cheaper and nearly as good: chosen most of the time, while the
-        # stronger option is still tried now and then (that is the learning).
-        self.assertGreater(picks.count("sonnet"), 100)
-        self.assertGreater(picks.count("opus"), 0)
-        got = route.suggest("software.feature", "builder", stats, CFG, seed=3)
-        self.assertIn("88 outcomes over 2 options", got["basis"])
+    def test_no_check_means_role_default(self):
+        c_ = ml_cfg()
+        state = mlearn.fold(mlearn.empty_state(), outcomes("sonnet", 30) + outcomes("opus", 30, False, 100), c_)
+        for seed in range(20):
+            got = route.suggest("software.feature", "lead", "software", "standard", 1, False, state, c_, seed=seed)
+            self.assertEqual(got["model"], "opus")
+        self.assertIn("no verifying check", got["basis"])
 
-    def test_thompson_avoids_option_that_fails(self):
-        stats = {"software.bugfix": {
-            "haiku/low": {"pass": 3, "fail": 17, "tokens": 20 * 10_000},
-            "sonnet/medium": {"pass": 18, "fail": 2, "tokens": 20 * 100_000}}}
-        picks = [route.suggest("software.bugfix", "builder", stats, CFG, seed=k)["model"] for k in range(200)]
-        self.assertGreater(picks.count("sonnet"), 190)
+    def test_learns_once_two_arms_have_outcomes(self):
+        c_ = ml_cfg()
+        state = mlearn.fold(mlearn.empty_state(), outcomes("sonnet", 30) + outcomes("opus", 30, False, 100), c_)
+        picks = [route.suggest("software.feature", "lead", "software", "standard", 1, True, state, c_, seed=k)
+                 for k in range(40)]
+        self.assertGreater(sum(p["model"] == "sonnet" for p in picks), 30)
+        self.assertIn("Thompson on 60 outcomes over 2 arms", picks[0]["basis"])
 
     def test_reproducible_with_seed(self):
-        stats = {"classes": {"x": {"a/low": {"pass": 5, "fail": 5}, "b/low": {"pass": 5, "fail": 5}}}}
-        self.assertEqual(route.suggest("x", "lead", stats, CFG, seed=42), route.suggest("x", "lead", stats, CFG, seed=42))
+        c_ = ml_cfg()
+        state = mlearn.fold(mlearn.empty_state(), outcomes("sonnet", 10) + outcomes("opus", 10, start=50), c_)
+        a = route.suggest("software.feature", "lead", "software", "standard", 1, True, state, c_, seed=42)
+        self.assertEqual(a, route.suggest("software.feature", "lead", "software", "standard", 1, True, state, c_, seed=42))
+
+    def test_cli_two_lines_with_basis_and_exploration(self):
+        parser = argparse.ArgumentParser()
+        route.register(parser.add_subparsers())
+        with tempfile.TemporaryDirectory() as d:
+            for argv in (["route", "fix the typo in the footer", "--seed", "1", "--check", "--project", d],
+                         ["route", "what is a bandit?", "--project", d]):
+                buf = io.StringIO()
+                with redirect_stdout(buf), mock.patch.object(mlearn, "load", return_value=mlearn.empty_state()):
+                    args = parser.parse_args(argv)
+                    self.assertEqual(args.func(args), 0)
+                lines = buf.getvalue().strip().splitlines()
+                self.assertTrue(1 <= len(lines) <= 2, lines)
+                self.assertIn("model basis:", lines[-1])
+                self.assertRegex(lines[-1], r"exploration")
+                self.assertRegex(lines[-1], r"\d+")
 
     def test_cascade_rule(self):
         self.assertTrue(route.cheap_first(0.8, 10, 5, 100))

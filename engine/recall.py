@@ -63,8 +63,8 @@ ML_STATE = "stats/ml.json"
 
 # ---------------------------------------------------------------- tokenizer
 def _fold(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text.lower())
-    return "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in text if not unicodedata.combining(ch)).lower()
 
 
 def _vowel(ch: str, y_is_vowel: bool) -> bool:

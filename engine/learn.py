@@ -44,7 +44,10 @@ from .guard import zone_of
 OPS = ("ADD", "INC_HELPFUL", "INC_HARMFUL", "EDIT_TEXT", "SET_STATUS", "MOVE_SCOPE", "LINK", "SUPERSEDE",
        "APPEND_STAT", "ML_FOLD", "MARK_INBOX")
 KINDS = ("ledger", "outcome", "used", "note", "review", "correction", "lead")
-FOLD_KINDS = ("outcome", "used", "review", "correction")   # what mlearn learns from
+FOLD_KINDS = ("outcome", "used", "review", "correction")   # inbox records mlearn learns from
+# ML_FOLD also carries "promotion" records the consolidation itself makes, so
+# a drift alarm can name the item promoted just before a shift.
+ML_KINDS = FOLD_KINDS + ("promotion",)
 DEFAULT_BUDGET = 400
 SIMILAR = 0.6             # word Jaccard at or above which a note restates an item
 CONTAINED = 0.8           # share of the shorter text's words found in the other
@@ -54,7 +57,7 @@ MIN_EDIT_CHARS = 40       # and may not leave fewer characters than this
 PROMOTE_MULTIPLIER = 1.0  # mlearn.item_score needed for probation -> active
 DEMOTE_AFTER_DAYS = 90    # fallback when mlearn.retention is unavailable
 RETIRE_AFTER_DAYS = 90 + 180
-RETENTION_FLOOR = 0.3     # tunable: memory/ml_config.json retention.demote_below
+RETENTION_FLOOR = 0.15    # fallback for memory/ml_config.json retention.threshold
 TRUST_NOTE = ("observed", "owner-stated", "external")
 SIGNALS = ("gate-failed", "rework", "owner-correction", "token-outlier", "first-success")
 # Evidence must point at an event a script can check: a gate, a test, an
@@ -541,17 +544,24 @@ class Workspace:
         and keep the state it returns (written with sorted keys so replays
         are byte-identical)."""
         if not isinstance(records, list) or not records or not all(
-                isinstance(r, dict) and r.get("kind") in FOLD_KINDS and r.get("id") for r in records):
-            return "ML_FOLD: records must be a non-empty list of outcome, used, review or correction records with ids"
+                isinstance(r, dict) and r.get("kind") in ML_KINDS and r.get("id") for r in records):
+            return "ML_FOLD: records must be a non-empty list of outcome, used, review, correction or promotion records with ids"
         try:
-            fold = mlearn_module().fold
+            ml = mlearn_module()
+            fold = ml.fold
         except (ImportError, AttributeError) as e:
             return f"ML_FOLD: engine.mlearn is not available ({e})"
         state = self.ml_state()
         if state is None:
             return f"ML_FOLD: {ML_STATE} is not a JSON object"
         try:
-            new = fold(state, records, self.ml_cfg)
+            # mlearn.config adds memory/models.json to the constants; both are
+            # in the replayed tree, so the fold stays a pure function of it.
+            cfg = ml.config(self.root) if hasattr(ml, "config") else self.ml_cfg
+        except ValueError as e:
+            return f"ML_FOLD: {e}"
+        try:
+            new = fold(state, records, cfg)
         except (ValueError, TypeError, KeyError) as e:
             return f"ML_FOLD: mlearn.fold failed ({type(e).__name__}: {e})"
         if not isinstance(new, dict):
@@ -873,8 +883,10 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
             return None, [err]
         ops.append(op)
     pairs = _fail_pass_pairs(outcomes)
-    models = {str(r.get("session", "")): str(r["model"]) for _f, _n, r in batch
-              if r.get("kind") in ("ledger", "outcome") and r.get("model")}
+    models: dict[str, str] = {}  # session -> main model; the ledger row says it best
+    for kind in ("outcome", "ledger"):
+        models.update({str(r.get("session", "")): str(r["model"]) for _f, _n, r in batch
+                       if r.get("kind") == kind and r.get("model")})
     good_ids = {r["id"] for r in fold}
 
     for f, n, rec in batch:
@@ -900,8 +912,17 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
     for f in files:
         rel = f.relative_to(root).as_posix()
         take([{"op": "MARK_INBOX", "file": rel}], rel)
-    ops += _transitions(ws, at, min_sessions)
-    return make_delta(ops, at), rejected
+    moves = _transitions(ws, at, min_sessions)
+    promos = [{"kind": "promotion", "id": record_id("", "promotion", f"{o['id']}|{at}"), "session": "", "at": at,
+               "item": o["id"]} for o in moves if o["status"] == "active"]
+    fold_op = next((o for o in ops if o["op"] == "ML_FOLD"), None)
+    if promos and (fold_op is not None or mlearn_module(optional=True) is not None):
+        if ws.apply_op({"op": "ML_FOLD", "records": promos}, at) == "":
+            if fold_op is None:
+                ops.insert(0, {"op": "ML_FOLD", "records": promos})
+            else:
+                fold_op["records"] = fold_op["records"] + promos
+    return make_delta(ops + moves, at), rejected
 
 
 # ---------------------------------------------------------------- decay
@@ -916,7 +937,7 @@ def build_decay(brain_root: Path | None = None) -> tuple[dict | None, list[str]]
     at = c.now_iso()
     ws = Workspace(root)
     retention = getattr(mlearn_module(optional=True), "retention", None)
-    floor = (ws.ml_cfg.get("retention") or {}).get("demote_below", RETENTION_FLOOR)
+    floor = (ws.ml_cfg.get("retention") or {}).get("threshold", RETENTION_FLOOR)
     now = c.now()
     ops: list[dict] = []
     stale: list[str] = []

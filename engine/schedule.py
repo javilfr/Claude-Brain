@@ -19,6 +19,13 @@ no conflicting ticket is running. Two tickets conflict when they write the same
 path or one path is a directory containing the other. Serial generation can
 reach an optimal schedule for some order, which is why searching over orders
 is worth doing.
+
+When the learning state has calibration data, ``plan schedule`` first scales
+each ticket that names a ``class`` by that class's typical actual/estimate
+ratio (engine/mlearn.calibrate), because a timetable built on estimates that
+run 1.5x long is wrong in a predictable way. ``plan packet`` prints the brief a
+helper needs for one ticket, so every delegation carries its acceptance
+command and return format.
 """
 from __future__ import annotations
 
@@ -28,6 +35,7 @@ import random
 from pathlib import Path
 
 from . import common as c
+from . import mlearn
 from . import route
 
 EPS = 1e-9
@@ -351,6 +359,76 @@ def render(out: dict, max_lines: int = 14) -> list[str]:
     return lines
 
 
+def calibrate_plan(data: dict, state: dict, cfg: dict | None = None) -> tuple[dict, dict]:
+    """(plan with calibrated est/tokens, {tickets, outcomes}). Only tickets
+    with a ``class`` change, and only when that class or its family has enough
+    outcomes (mlearn.calibrate acting at class or family level): a ratio from
+    unrelated families would rescale on someone else's evidence. ``outcomes``
+    counts the outcomes behind the levels used, once each."""
+    if not isinstance(data, dict) or not isinstance(data.get("tickets"), list):
+        return data, {"tickets": 0, "outcomes": 0}
+    out = dict(data)
+    out["tickets"] = []
+    changed, used = 0, {}
+    for t in data["tickets"]:
+        t2 = dict(t) if isinstance(t, dict) else t
+        cls = t2.get("class") if isinstance(t2, dict) else None
+        est = t2.get("est") if isinstance(t2, dict) else None
+        if isinstance(cls, str) and isinstance(est, (int, float)) and not isinstance(est, bool) and est > 0:
+            fam = str(t2.get("family") or cls.split(".")[0])
+            tok = t2.get("tokens") if isinstance(t2.get("tokens"), (int, float)) and t2.get("tokens") else None
+            cal = mlearn.calibrate(state, cls, fam, tok, est, cfg)
+            if cal["level"] in ("class", "family") and cal["minutes_p50"]:
+                t2["est"] = cal["minutes_p50"]
+                if tok and cal["tokens_p50"]:
+                    t2["tokens"] = cal["tokens_p50"]
+                changed += 1
+                used[(cal["level"], cls if cal["level"] == "class" else fam)] = cal["n"]
+        out["tickets"].append(t2)
+    return out, {"tickets": changed, "outcomes": sum(used.values())}
+
+
+PACKET_RETURN = ("at most 250 words: what changed, the acceptance command and its result line, "
+                 "anything that differs from the brief")
+
+
+def packet(data: dict, ticket_id: str, max_lines: int = 25) -> list[str]:
+    """The delegation brief for one ticket, at most max_lines lines. Raises
+    PlanError for an unknown id or a plan without tickets."""
+    if not isinstance(data, dict) or not isinstance(data.get("tickets"), list):
+        raise PlanError('input must be a JSON object with a "tickets" list')
+    tickets = {str(t.get("id")): t for t in data["tickets"] if isinstance(t, dict) and t.get("id")}
+    t = tickets.get(str(ticket_id))
+    if t is None:
+        raise PlanError(f"no ticket {ticket_id} in the plan ({len(tickets)} tickets)")
+    files = [str(f) for f in t.get("files", []) or []]
+    deps = [str(d) for d in t.get("deps", []) or []]
+    lines = [f"Ticket {t['id']}: {c.clip(t.get('goal') or t.get('title') or '(no title)', 200)}"]
+    if t.get("reason"):
+        lines.append(f"Why: {c.clip(t['reason'], 300)}")
+    lines.append("Files you own (change nothing else):" if files else "Files you own: none listed (ask the lead)")
+    shown = files if len(files) <= 10 else files[:9]
+    lines += [f"- {f}" for f in shown]
+    if len(files) > len(shown):
+        lines.append(f"- ... and {len(files) - len(shown)} more (see the plan file)")
+    if deps:
+        status = ", ".join(f"{d} ({tickets.get(d, {}).get('status', 'unknown')})" for d in deps)
+        lines.append(f"Depends on: {c.clip(status, 300)}")
+    else:
+        lines.append("Depends on: nothing")
+    for key, label in (("interfaces", "Interfaces"), ("constraints", "Constraints")):
+        val = t.get(key)
+        if isinstance(val, list):
+            val = "; ".join(map(str, val))
+        if val:
+            lines.append(f"{label}: {c.clip(val, 400)}")
+    accept = t.get("accept")
+    lines.append(f"Acceptance command: {accept}" if accept else "Acceptance command: none recorded; add one before delegating")
+    lines.append(f"Return: {PACKET_RETURN}.")
+    lines.append("Do not commit; the lead reviews and commits.")
+    return lines[:max_lines]
+
+
 # ---------------------------------------------------------------- cli
 def _read_input(path: str) -> dict | None:
     p = Path(path)
@@ -368,13 +446,42 @@ def cmd_schedule(args) -> int:
     data = _read_input(args.file)
     if data is None:
         return 2
+    info = {"tickets": 0, "outcomes": 0}
+    state = mlearn.load()
+    if state["n"]:
+        try:
+            data, info = calibrate_plan(data, state, mlearn.config())
+        except ValueError as e:
+            print(f"plan: calibration skipped ({e})")
     try:
         out = schedule(data, agents=args.agents, seed=args.seed, anneal=not args.no_anneal,
                        helper_start_tokens=args.start_tokens)
     except PlanError as e:
         print(f"plan: {e}")
         return 2
-    print(json.dumps(out, ensure_ascii=False) if args.json else "\n".join(render(out)))
+    if info["tickets"]:
+        out["calibration"] = info
+    if args.json:
+        print(json.dumps(out, ensure_ascii=False))
+        return 0
+    lines = render(out, max_lines=13 if info["tickets"] else 14)
+    if info["tickets"]:
+        lines.append(f"calibration applied: {info['tickets']} ticket estimates scaled by their class's typical "
+                     f"actual/estimate ratio ({info['outcomes']} outcomes)")
+    print("\n".join(lines))
+    return 0
+
+
+def cmd_packet(args) -> int:
+    data = _read_input(args.file)
+    if data is None:
+        return 2
+    try:
+        lines = packet(data, args.ticket)
+    except PlanError as e:
+        print(f"plan packet: {e}")
+        return 1
+    print("\n".join(lines))
     return 0
 
 
@@ -417,4 +524,8 @@ def register(sub) -> None:
     a.add_argument("--budget", type=int)
     a.add_argument("--json", action="store_true")
     a.set_defaults(func=cmd_assign)
+    pk = s.add_parser("packet", help="delegation brief for one ticket (at most 25 lines)")
+    pk.add_argument("file", help="tickets JSON, e.g. docs/plan/tickets.json")
+    pk.add_argument("ticket", help="ticket id")
+    pk.set_defaults(func=cmd_packet)
     p.set_defaults(func=lambda args: (p.print_help(), 2)[1])

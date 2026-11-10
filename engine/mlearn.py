@@ -51,7 +51,7 @@ SKELETON = {
     "drift": {}, "alarms": [], "promotions": [],
     "credit": {}, "baseline": {}, "pending": {}, "corrections": 0,
     "gates": {}, "reviews": [],
-    "sizing": {"counts": {}, "tot": {}, "docs": {}, "vocab": {}, "strong": 0,
+    "sizing": {"counts": {}, "tot": {}, "vocab": {}, "strong": 0,
                "shadow": {"n": 0, "hint_right": 0, "rule_right": 0}},
 }
 
@@ -277,7 +277,9 @@ def suggest_arm(state: dict, cfg: dict, task_class: str, family: str, role: str,
         return {"model": arm[0], "effort": arm[1], "explored": explored, "propensity": round(prop, 4), "basis": basis}
 
     if arms == [base]:
-        return answer(base, False, 1.0, f"role default only ({_why_baseline(cfg, risk, tier, has_check)})")
+        n = state["bandit"]["raw_g"].get(f"{base[0]}/{base[1]}", [0.0, 0.0])[1]
+        return answer(base, False, 1.0, f"role default only ({_why_baseline(cfg, risk, tier, has_check)}; "
+                                         f"{n:g} outcomes recorded on it)")
     bc = cfg["bandit"]
     keys = [f"{m}/{e}" for m, e in arms]
     base_key = keys[0]
@@ -365,14 +367,13 @@ def offline_check(state: dict, cfg: dict) -> dict:
 
 # ---------------------------------------------------------------- calibration
 def _ew(cell: dict, r: float, cfg: dict) -> None:
-    """EW mean and variance of log ratios, half-life in tasks (round2/08 4)."""
+    """EW mean of log ratios, half-life in tasks (round2/08 4). The spread is
+    taken from the stored ratios (conformal quantiles), so no variance is kept."""
     alpha = 1.0 - 2.0 ** (-1.0 / cfg["calibration"]["half_life"])
     if cell["n"] == 0:
-        cell["mu"], cell["var"] = r, 0.0
+        cell["mu"] = r
     else:
-        d = r - cell["mu"]
-        cell["mu"] += alpha * d
-        cell["var"] = (1.0 - alpha) * (cell["var"] + alpha * d * d)
+        cell["mu"] += alpha * (r - cell["mu"])
     cell["n"] += 1
     cell["r"] = (cell["r"] + [r])[-cfg["state"]["ratio_cap"]:]
 
@@ -722,7 +723,6 @@ def _sizing_learn(st: dict, cfg: dict, r: dict, strong: bool) -> None:
             nb["vocab"][word] = 1
         counts[word] = counts.get(word, 0.0) + w
         nb["tot"][str(label)] = nb["tot"].get(str(label), 0.0) + w
-    nb["docs"][str(label)] = nb["docs"].get(str(label), 0.0) + w
 
 
 # ---------------------------------------------------------------- fold
@@ -777,7 +777,7 @@ def _fold_outcome(st: dict, cfg: dict, rid: str, r: dict) -> None:
         if act and est:
             lr = math.log(act / est)
             for level, key in (("c", cls), ("f", fam), ("g", "all")):
-                _ew(st["calib"][level].setdefault(key, {}).setdefault(metric, {"mu": 0.0, "var": 0.0, "n": 0, "r": []}), lr, cfg)
+                _ew(st["calib"][level].setdefault(key, {}).setdefault(metric, {"mu": 0.0, "n": 0, "r": []}), lr, cfg)
     fail = None if y is None or "first_pass" not in r else int(r.get("first_pass") is not True)
     if tokens or fail is not None:
         _drift_step(st, cfg, cls, math.log(tokens) if tokens else None, fail, at)

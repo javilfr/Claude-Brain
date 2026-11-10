@@ -1,5 +1,6 @@
 """Tests for engine/schedule.py: validity, never worse than critical path,
-determinism, and optimality against brute force on tiny plans."""
+determinism, optimality against brute force on tiny plans, calibration of
+estimates from learned ratios, and the delegation packet."""
 import io
 import itertools
 import json
@@ -8,7 +9,9 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
+from engine import mlearn
 from engine import schedule as s
 
 CASES = Path(__file__).resolve().parents[1] / "evals" / "schedule_cases"
@@ -182,6 +185,108 @@ class ScheduleCases(unittest.TestCase):
                 args = parser.parse_args(["plan", "schedule", str(p)])
                 self.assertEqual(args.func(args), 2)
             self.assertEqual(len(buf.getvalue().strip().splitlines()), 1)
+
+
+def calibrated_state(ratio=2.0, n=10):
+    """Learning state where software.feature tasks take ``ratio`` times their estimate."""
+    rows = [{"kind": "outcome", "id": f"o{i}", "at": f"2026-01-01T{i:04d}", "task_class": "software.feature",
+             "family": "software", "model": "opus", "effort": "medium", "has_check": True, "passed": True,
+             "tokens": int(1000 * ratio), "est_tokens": 1000, "minutes": 10 * ratio, "est_minutes": 10}
+            for i in range(n)]
+    return mlearn.fold(mlearn.empty_state(), rows, mlearn.config())
+
+
+def run_cli(argv, state=None):
+    parser = __import__("argparse").ArgumentParser()
+    s.register(parser.add_subparsers())
+    buf = io.StringIO()
+    with redirect_stdout(buf), mock.patch.object(mlearn, "load", return_value=state or mlearn.empty_state()):
+        args = parser.parse_args(argv)
+        code = args.func(args)
+    return code, buf.getvalue().strip().splitlines()
+
+
+class Calibration(unittest.TestCase):
+    PLAN = {"agents": 2, "tickets": [
+        {"id": "a", "est": 30, "class": "software.feature", "tokens": 5000},
+        {"id": "b", "est": 30, "deps": ["a"]},
+        {"id": "c", "est": 30, "class": "knowledge.research"}]}
+
+    def test_scales_only_tickets_with_a_calibrated_class(self):
+        data, info = s.calibrate_plan(self.PLAN, calibrated_state(2.0), mlearn.config())
+        est = {t["id"]: t["est"] for t in data["tickets"]}
+        self.assertAlmostEqual(est["a"], 60, delta=0.5)
+        self.assertEqual(est["b"], 30)
+        self.assertEqual(est["c"], 30)  # its family has no outcomes: the prior leaves it alone
+        self.assertAlmostEqual(data["tickets"][0]["tokens"], 10_000, delta=10)
+        self.assertEqual(info, {"tickets": 1, "outcomes": 10})
+        self.assertEqual(self.PLAN["tickets"][0]["est"], 30, "the input plan is not changed")
+
+    def test_below_min_n_changes_nothing(self):
+        data, info = s.calibrate_plan(self.PLAN, calibrated_state(2.0, n=4), mlearn.config())
+        self.assertEqual(data, self.PLAN)
+        self.assertEqual(info["tickets"], 0)
+
+    def test_cli_prints_one_calibration_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "plan.json"
+            p.write_text(json.dumps(self.PLAN))
+            code, lines = run_cli(["plan", "schedule", str(p)], calibrated_state(2.0))
+            self.assertEqual(code, 0)
+            self.assertLessEqual(len(lines), 15)
+            self.assertEqual(sum("calibration applied" in l for l in lines), 1)
+            self.assertIn("10 outcomes", lines[-1])
+            self.assertIn("makespan 90", "\n".join(lines))
+            code, lines = run_cli(["plan", "schedule", str(p)])
+            self.assertFalse(any("calibration" in l for l in lines))
+            self.assertIn("makespan 60", "\n".join(lines))
+
+
+class Packet(unittest.TestCase):
+    PLAN = {"tickets": [
+        {"id": "T-1", "title": "Build the parser", "files": ["src/parse.py", "tests/test_parse.py"],
+         "accept": "python3 -m unittest tests.test_parse", "status": "done"},
+        {"id": "T-2", "goal": "Wire the parser into the CLI", "reason": "the owner asked for one command",
+         "deps": ["T-1"], "files": [f"src/f{i}.py" for i in range(30)], "interfaces": ["parse(text) -> dict"],
+         "accept": "python3 -m unittest tests.test_cli"},
+        {"id": "T-3", "title": "No check yet"}]}
+
+    def write(self, d):
+        p = Path(d) / "tickets.json"
+        p.write_text(json.dumps(self.PLAN))
+        return str(p)
+
+    def test_brief_contents_and_length(self):
+        with tempfile.TemporaryDirectory() as d:
+            code, lines = run_cli(["plan", "packet", self.write(d), "T-2"])
+        self.assertEqual(code, 0)
+        self.assertLessEqual(len(lines), 25)
+        text = "\n".join(lines)
+        for part in ("Wire the parser into the CLI", "Why: the owner asked for one command", "- src/f0.py",
+                     "and 21 more", "Depends on: T-1 (done)", "Interfaces: parse(text) -> dict",
+                     "Acceptance command: python3 -m unittest tests.test_cli",
+                     "at most 250 words: what changed, the acceptance command and its result line, "
+                     "anything that differs from the brief"):
+            self.assertIn(part, text)
+
+    def test_missing_acceptance_is_flagged(self):
+        lines = s.packet(self.PLAN, "T-3")
+        self.assertIn("Acceptance command: none recorded", "\n".join(lines))
+        self.assertIn("Depends on: nothing", lines)
+
+    def test_unknown_id_one_line_exit_1(self):
+        with tempfile.TemporaryDirectory() as d:
+            code, lines = run_cli(["plan", "packet", self.write(d), "T-9"])
+        self.assertEqual(code, 1)
+        self.assertEqual(len(lines), 1)
+        self.assertIn("T-9", lines[0])
+
+    def test_real_ticket_file(self):
+        real = Path(__file__).resolve().parents[1] / "docs" / "plan" / "tickets.json"
+        data = json.loads(real.read_text())
+        lines = s.packet(data, data["tickets"][0]["id"])
+        self.assertLessEqual(len(lines), 25)
+        self.assertTrue(any(l.startswith("Acceptance command: ") for l in lines))
 
 
 if __name__ == "__main__":

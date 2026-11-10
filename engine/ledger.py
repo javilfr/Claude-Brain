@@ -11,11 +11,18 @@ repeated too, so each id is counted once (the copy with the largest
 Pricing comes from ``memory/models.json`` (US dollars per million tokens).
 ``output_tokens`` already includes thinking tokens, so thinking is reported
 as a share of output and never added on top.
+
+``close`` relies on the model remembering to run it, which it does not
+always do (round2/05). So boot marks the session open
+(``.brain/log/open-session.json``, ``mark_open``), capture clears the mark,
+and a later boot that finds another session's mark repairs the gap from
+that session's transcript or records it as unrecorded (``repair_unclosed``).
 """
 from __future__ import annotations
 
 import datetime as _dt
 import json
+import re
 from pathlib import Path
 
 from . import common as c
@@ -209,6 +216,14 @@ def format_summary(sid: str, s: dict) -> list[str]:
 
 
 # ---------------------------------------------------------------- close
+OPEN_MARKER = "open-session.json"
+RISKS = ("trivial", "standard", "high", "one-way-door")   # contract/v1.schema.json
+USED_RE = re.compile(r"^(?P<item>[a-z]{2,8}-[a-z0-9][a-z0-9-]{1,60}):(?P<followed>[01])$")
+# What close may declare about an outcome; a later capture of the same
+# session (the Stop hook, a second close) keeps these unless given again.
+DECLARED = ("risk", "est_tokens", "est_minutes", "explored", "propensity")
+
+
 def _gate_rows(project: Path, sid: str) -> list[dict]:
     """This session's gate results. The gate module owns the row shape, so a
     few field spellings are accepted for the id and exit code."""
@@ -219,7 +234,8 @@ def _gate_rows(project: Path, sid: str) -> list[dict]:
         code = next((r[k] for k in ("exit_code", "exit", "code") if isinstance(r.get(k), int)), None)
         if code is None:
             continue
-        out.append({"gate": str(r.get("gate") or r.get("id") or "gate"), "exit_code": code, "at": str(r.get("at", ""))})
+        out.append({"gate": str(r.get("gate") or r.get("id") or "gate"), "exit_code": code, "at": str(r.get("at", "")),
+                    "commit": str(r.get("commit") or "")})
     return out
 
 
@@ -227,65 +243,202 @@ def _model_rows(s: dict) -> dict:
     return {m: {k: v[k] for k in ("in", "cache_write", "cache_read", "out", "cost")} for m, v in s["models"].items()}
 
 
+def _alias(model: str, models_cfg: dict) -> str:
+    """The short name the routing tables use ('opus'), or the id itself."""
+    return str(rates_for(model, models_cfg).get("alias") or model) if model else ""
+
+
+def _command_gates(project: Path) -> set[str]:
+    """Ids of the project's gates that run a real command: only those verify."""
+    return {str(g.get("id")) for g in c.load_manifest(project).get("gates", []) or []
+            if isinstance(g, dict) and g.get("kind") == "command" and str(g.get("command") or "").strip()}
+
+
+def parse_used(values: list[str] | None) -> tuple[list[tuple[str, bool]], str]:
+    """``ID:0|1`` pairs from ``--used``; the second value is an error line."""
+    out = []
+    for v in values or []:
+        m = USED_RE.match(str(v).strip())
+        if not m:
+            return [], f"--used {v!r}: expected ITEM-ID:1 (followed) or ITEM-ID:0 (shown, not followed)"
+        out.append((m["item"], m["followed"] == "1"))
+    return out, ""
+
+
+def _outcomes(sid: str, at: str, family: str, classes: list[str], tier, s: dict, gates: list[dict],
+              command_gates: set[str], declared: dict, models_cfg: dict) -> list[dict]:
+    """One outcome per task class, judged only by this session's gate exit
+    codes (I-07): ``first_pass`` when every gate's first run was green,
+    ``passed`` when every gate's last run was, ``rework`` = red runs before
+    the last. Tokens, minutes and cost are split evenly across classes."""
+    first: dict[str, dict] = {}
+    last: dict[str, dict] = {}
+    for g in gates:
+        first.setdefault(g["gate"], g)
+        last[g["gate"]] = g
+    reds = sum(1 for g in gates if g["exit_code"] != 0 and last[g["gate"]] is not g)
+    n = len(classes)
+    has_check = declared.get("has_check")
+    if has_check is None:
+        has_check = any(g in command_gates for g in last)
+    out = []
+    for cls in classes:
+        rec = {"kind": "outcome", "session": sid, "at": at, "task_class": cls, "family": family, "tier": tier,
+               "risk": declared.get("risk") or "standard",
+               "model": declared.get("model") or _alias(s["main_model"], models_cfg),
+               "model_id": s["main_model"], "effort": declared.get("effort") or s["main_effort"],
+               "has_check": bool(has_check),
+               "passed": all(g["exit_code"] == 0 for g in last.values()),
+               "first_pass": all(g["exit_code"] == 0 for g in first.values()),
+               "rework": reds, "tokens": _tokens(s["totals"]) // n, "cost": round(s["totals"]["cost"] / n, 6),
+               "minutes": round(s["wall_minutes"] / n, 1),
+               "est_tokens": declared.get("est_tokens"), "est_minutes": declared.get("est_minutes"),
+               "explored": bool(declared.get("explored")),
+               "propensity": declared.get("propensity") if declared.get("propensity") is not None else 1.0,
+               # Commits are hashed: equality is all flakiness needs, and the
+               # brain must not hold project identifiers (I-05).
+               "gate_runs": [{"gate": g["gate"], "exit": g["exit_code"],
+                              "commit": c.sha256_text(g["commit"])[:12] if g["commit"] else None} for g in gates],
+               "evidence": [f"gate:{g['gate']} exit {g['exit_code']}" for g in first.values()]}
+        out.append(rec)
+    return out
+
+
 def capture(brain_root: Path | None = None, sid: str | None = None, main_path=None, sub_paths=None,
             project: Path | None = None, outcome: str = "", classes: list[str] | None = None,
-            tier: int | None = None, note: str = "", models_cfg: dict | None = None) -> dict:
+            tier: int | None = None, note: str = "", models_cfg: dict | None = None,
+            used: list[tuple[str, bool]] | None = None, declared: dict | None = None) -> dict:
     """Write the run record and inbox records for one session. Safe to call
-    again: both are keyed by session id and replaced, never duplicated."""
+    again: both are keyed by session id and replaced, never duplicated.
+
+    What only ``close`` knows (classes, tier, outcome, ``declared`` outcome
+    fields such as risk and estimates) is kept from this session's earlier
+    records when a later call (the Stop hook) does not repeat it; ``used``
+    records are replaced only when ``used`` is given. ``declared`` may hold
+    risk, model, effort, est_tokens, est_minutes, explored, propensity and
+    has_check; anything absent comes from the transcript and the manifest."""
     root = Path(brain_root or c.BRAIN_ROOT)
     sid = sid or c.session_id()
     if main_path is None:
         main_path, sub_paths = c.transcript_paths(sid)
     cfg = models_cfg if models_cfg is not None else c.read_json(root / "memory" / "models.json", {})
     s = summarise(main_path, sub_paths or [], cfg)
-    classes = [x for x in (classes or []) if x]
+    earlier = learn.pending_session_records(root, sid)
+    prev_ledger = next((r for r in earlier if r.get("kind") == "ledger"), {})
+    prev_out = {str(r.get("task_class")): r for r in earlier if r.get("kind") == "outcome"}
+    classes = [x for x in (classes or []) if x] or list(prev_ledger.get("classes") or [])
+    tier = tier if tier is not None else prev_ledger.get("tier")
+    outcome = outcome or str(prev_ledger.get("outcome") or "")
+    declared = {k: v for k, v in (declared or {}).items() if v is not None}
     at = c.now_iso()
     result = {"session": sid, "summary": s, "run_record": "", "inbox": "", "inbox_records": 0, "skipped": ""}
 
     family = ""
     gates: list[dict] = []
+    command_gates: set[str] = set()
     if project is not None and c.is_managed(project):
         family = str(c.load_manifest(project).get("family", ""))
         gates = _gate_rows(project, sid)
+        command_gates = _command_gates(project)
         log_dir = Path(project) / ".brain" / "log"
         safe = learn.safe_session(sid)
         existing = sorted(log_dir.glob(f"*-{safe}.json"))
         path = existing[0] if existing else log_dir / f"{c.today()}-{safe}.json"
         record = {"session": sid, "at": at, "tier": tier, "classes": classes, "outcome": outcome,
                   "note": note, "models": _model_rows(s), "totals": s["totals"], "helpers": s["helpers"],
-                  "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"], "gates": gates}
+                  "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"],
+                  "gates": [{k: g[k] for k in ("gate", "exit_code", "at")} for g in gates]}
         c.write_json(path, record)
         result["run_record"] = str(path)
 
     records = [{"kind": "ledger", "session": sid, "at": at, "family": family,
                 "task_class": classes[0] if classes else "", "classes": classes, "tier": tier,
-                "outcome": outcome, "models": _model_rows(s), "helpers": s["helpers"],
-                "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"]}]
+                "outcome": outcome, "model": _alias(s["main_model"], cfg), "models": _model_rows(s),
+                "helpers": s["helpers"], "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"]}]
     if classes and gates:
-        first_runs: dict[str, dict] = {}
-        for g in gates:
-            first_runs.setdefault(g["gate"], g)
-        passed = all(g["exit_code"] == 0 for g in first_runs.values())
-        share = _tokens(s["totals"]) // len(classes)
+        per_class = []
         for cls in classes:
-            records.append({"kind": "outcome", "session": sid, "at": at, "task_class": cls,
-                            "model": s["main_model"], "effort": s["main_effort"], "passed": passed,
-                            "tokens": share,
-                            "evidence": [f"gate:{g['gate']} exit {g['exit_code']}" for g in first_runs.values()]})
-    written = learn.replace_session_records(root, sid, records, kinds=("ledger", "outcome"))
+            keep = {k: prev_out.get(cls, {}).get(k) for k in DECLARED}
+            per_class.append({**{k: v for k, v in keep.items() if v is not None}, **declared})
+        # Classes share one session, so the declared fields of the first class stand for all.
+        records += _outcomes(sid, at, family, classes, tier, s, gates, command_gates, per_class[0], cfg)
+    kinds: tuple[str, ...] = ("ledger", "outcome")
+    if used is not None:
+        kinds += ("used",)
+        records += [{"kind": "used", "session": sid, "at": at, "item": item, "followed": followed}
+                    for item, followed in used]
+    written = learn.replace_session_records(root, sid, records, kinds=kinds)
     if written is None:
         result["skipped"] = "this session's ledger was already consolidated"
     else:
         result["inbox"] = str(written)
         result["inbox_records"] = len(records)
-
-    if project is not None:
+    if project is not None and c.is_managed(project):
+        clear_open(project, sid)
         try:
             from . import state
             state.write_status(project)
         except (ImportError, AttributeError):
             pass
     return result
+
+
+# ---------------------------------------------------------------- unclosed sessions
+def _marker(project: Path) -> Path:
+    return Path(project) / ".brain" / "log" / OPEN_MARKER
+
+
+def mark_open(project: Path, sid: str | None = None) -> dict | None:
+    """Record at boot that this session is open, so a later boot can tell
+    when it ended without ``close``. Writes ``.brain/log/open-session.json``
+    ``{session, at}`` when it is absent or belongs to another session, and
+    returns that other session's marker (the one to repair), else None."""
+    sid = sid or c.session_id()
+    path = _marker(project)
+    prev = c.read_json(path)
+    prev = prev if isinstance(prev, dict) and prev.get("session") else None
+    if prev is not None and prev["session"] == sid:
+        return None
+    c.write_json(path, {"session": sid, "at": c.now_iso()})
+    return prev
+
+
+def clear_open(project: Path, sid: str) -> None:
+    """Remove the open-session marker if it is this session's (capture ran)."""
+    path = _marker(project)
+    prev = c.read_json(path)
+    if isinstance(prev, dict) and prev.get("session") == sid:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+def repair_unclosed(project: Path, previous_marker: dict, brain_root: Path | None = None) -> str:
+    """Close the gap an earlier session left by ending without ``close``.
+
+    If its transcript is still on disk, capture it now (same records as
+    ``close`` would have written, without the classes only the model knew);
+    otherwise append an inbox ``ledger`` record marked ``unrecorded: true``
+    so the ledger shows the gap instead of hiding it. Returns one short line
+    for boot to print."""
+    root = Path(brain_root or c.BRAIN_ROOT)
+    sid = str((previous_marker or {}).get("session") or "")
+    if not sid:
+        return ""
+    main, subs = c.transcript_paths(sid)
+    if main is not None and main.is_file():
+        r = capture(root, sid, main, subs, project)
+        if r["skipped"]:
+            return f"earlier session {sid[:12]} was not closed; its ledger was already consolidated"
+        return f"earlier session {sid[:12]} was not closed; recorded it from its transcript"
+    family = str(c.load_manifest(project).get("family", "")) if c.is_managed(project) else ""
+    rec = {"kind": "ledger", "session": sid, "at": c.now_iso(), "family": family, "unrecorded": True,
+           "started": str(previous_marker.get("at", "")), "models": {}}
+    written = learn.replace_session_records(root, sid, [rec], kinds=("ledger",))
+    if written is None:
+        return f"earlier session {sid[:12]} was not closed; its ledger was already consolidated"
+    return f"earlier session {sid[:12]} was not closed and its transcript is gone; recorded the gap"
 
 
 # ---------------------------------------------------------------- cli
@@ -305,6 +458,17 @@ def cmd_ledger(args) -> int:
 
 def cmd_close(args) -> int:
     sid = args.session or c.session_id()
+    used, err = parse_used(args.used)
+    if err:
+        print(err)
+        return 2
+    for name in ("est_tokens", "est_minutes"):
+        if getattr(args, name) is not None and getattr(args, name) < 0:
+            print(f"--{name.replace('_', '-')} must not be negative")
+            return 2
+    if args.propensity is not None and not 0 < args.propensity <= 1:
+        print("--propensity must be in (0, 1]")
+        return 2
     main, subs = c.transcript_paths(sid)
     if main is None or not main.is_file():
         print(f"no transcript found for session {sid}")
@@ -312,8 +476,12 @@ def cmd_close(args) -> int:
     project = c.resolve_project(args.project)
     if project is not None and not c.is_managed(project):
         project = None
+    declared = {"risk": args.risk, "model": args.model, "effort": args.effort, "est_tokens": args.est_tokens,
+                "est_minutes": args.est_minutes, "explored": None if args.explored is None else bool(args.explored),
+                "propensity": args.propensity, "has_check": None if args.has_check is None else bool(args.has_check)}
     r = capture(sid=sid, main_path=main, sub_paths=subs, project=project, outcome=args.outcome or "",
-                classes=args.cls, tier=args.tier, note=args.note or "")
+                classes=args.cls, tier=args.tier, note=args.note or "",
+                used=used if args.used else None, declared=declared)
     if args.json:
         print(json.dumps(r, indent=2, sort_keys=True))
         return 0
@@ -334,12 +502,25 @@ def register(sub) -> None:
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_ledger)
 
-    k = sub.add_parser("close", help="end-of-session capture: run record and ledger")
+    k = sub.add_parser("close", help="end-of-session capture: run record, ledger, outcomes, items used")
     c.add_project_arg(k)
     k.add_argument("--session", help="session id (default: this session)")
     k.add_argument("--outcome", choices=("ok", "partial", "failed"))
     k.add_argument("--class", dest="cls", action="append", default=[], help="task class (repeatable)")
     k.add_argument("--tier", type=int, choices=(0, 1, 2, 3))
     k.add_argument("--note", help="short note for the project's run record")
+    # Whether an item helped is never accepted here: mlearn derives it from
+    # the gate outcomes (I-07). Only whether it was followed is declared.
+    k.add_argument("--used", action="append", metavar="ID:FOLLOWED",
+                   help="a recalled item and whether it was followed (1) or not (0); repeatable")
+    k.add_argument("--risk", choices=RISKS, help="risk of the work (default standard)")
+    k.add_argument("--model", help="model alias of the work (default: the main conversation's)")
+    k.add_argument("--effort", help="effort level (default: the transcript's)")
+    k.add_argument("--est-tokens", type=int, help="tokens estimated before the work")
+    k.add_argument("--est-minutes", type=float, help="minutes estimated before the work")
+    k.add_argument("--explored", type=int, choices=(0, 1), help="1 if a cheaper arm was being tried")
+    k.add_argument("--propensity", type=float, help="probability the routing choice had (default 1)")
+    k.add_argument("--has-check", type=int, choices=(0, 1),
+                   help="override: did a verifying command gate run (default: read from the gate log)")
     k.add_argument("--json", action="store_true")
     k.set_defaults(func=cmd_close)

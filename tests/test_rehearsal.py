@@ -3,7 +3,7 @@
 One story: a new project is bootstrapped, a requirement is recorded, a gate
 fails and then passes, the work is released on green, the session is closed
 with real-looking token usage, a lesson is noted, and the learning pipeline
-turns the session into ledger rows, routing statistics and a candidate item.
+turns the session into ledger rows, learning statistics and a candidate item.
 """
 import json
 import os
@@ -98,7 +98,13 @@ class Rehearsal(unittest.TestCase):
 
         b("learn", "note", "--text", "Check the exact expected output string before writing the first version of a command-line greeting.",
           "--class", "software", "--class", "testing", "--evidence", "gate:checks exit 1 then 0", "--signal", "gate-failed")
-        closed = b("close", "--outcome", "ok", "--class", "software.feature", "--tier", "2")
+        recalled = b("recall", "check expected output", "--json").stdout
+        self.assertLessEqual(len(json.loads(recalled)), 3, "recall shows three items at most by default")
+        self.assertTrue((self.proj / ".brain" / "log" / "recall.jsonl").is_file(), "recall writes its injection log")
+        refused = b("close", "--used", "lsn-x:maybe", ok=False)
+        self.assertEqual(refused.returncode, 2)
+        closed = b("close", "--outcome", "ok", "--class", "software.feature", "--tier", "2", "--risk", "standard",
+                   "--est-tokens", "50000")
         self.assertIn("$", closed.stdout)
         again = b("close", "--outcome", "ok", "--class", "software.feature", "--tier", "2")
         inbox = list((self.brain / "learning" / "inbox").glob("*.jsonl"))
@@ -114,8 +120,13 @@ class Rehearsal(unittest.TestCase):
         b("learn", "consolidate")
         items = (self.brain / "memory" / "items.jsonl").read_text()
         self.assertIn("exact expected output string", items)
-        routing = json.loads((self.brain / "stats" / "routing.json").read_text())
-        self.assertIn("software.feature", routing)
+        self.assertFalse((self.brain / "stats" / "routing.json").exists())
+        ml = (self.brain / "stats" / "ml.json").read_text()
+        self.assertEqual(ml, json.dumps(json.loads(ml), indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+        self.assertGreaterEqual(json.loads(ml)["n"], 1, "the session's outcome was folded into the statistics")
+        outcome = next(r for r in records if r["kind"] == "outcome")
+        self.assertEqual((outcome["passed"], outcome["first_pass"], outcome["has_check"], outcome["est_tokens"]),
+                         (True, False, True, 50000))
         self.assertTrue(list((self.brain / "stats" / "ledger").glob("*.jsonl")))
         self.assertTrue((self.brain / "learning" / "manifest.jsonl").read_text().strip())
         learned = b("learn", "status").stdout

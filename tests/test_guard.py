@@ -42,7 +42,11 @@ class ZoneTest(unittest.TestCase):
             "./learning/inbox/x.jsonl": "inbox",
             "memory/items.jsonl": "learned",
             "owner/standing.jsonl": "learned",
-            "stats/routing.json": "learned",
+            "stats/ml.json": "learned",
+            "learning/radar/state.json": "state",
+            "learning/radarx/a.json": "learned",
+            "memory/ml_config.json": "kernel",
+            "memory/radar_sources.json": "kernel",
             "playbooks/software.md": "learned",
             "learning/manifest.jsonl": "learned",
             "memory/models.json": "kernel",
@@ -77,6 +81,13 @@ class PathTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("warning", reason)
         self.assertEqual(guard.check_path(str(self.root.parent / "elsewhere.txt"), "work", self.root)[0], 0)
+        # State is rewritten by its own script during work; the learning
+        # constants and radar sources are kernel: learning never edits its rules (I-09).
+        self.assertEqual(self.check("learning/radar/state.json")[0], 0)
+        for kernel in ("memory/ml_config.json", "memory/radar_sources.json", "memory/models.json"):
+            with self.subTest(kernel):
+                self.assertEqual(self.check(kernel), (2, "kernel change: needs the owner"))
+                self.assertEqual(self.check(kernel, "learn")[0], 2)
 
     def test_unlocked_allows_with_warning(self):
         c.write_json(self.root / "VERSION.json", {"learned_zone_locked": False})
@@ -109,6 +120,12 @@ class DiffTest(unittest.TestCase):
         ok, lines = guard.check_diff(self.root, "HEAD")
         self.assertTrue(ok, lines)
         self.assertIn("1 kernel", lines[0])
+
+    def test_state_zone_changes_pass_and_are_counted(self):
+        c.write_json(self.root / "learning" / "radar" / "state.json", {"etag": "a"})
+        ok, lines = guard.check_diff(self.root, "HEAD")
+        self.assertTrue(ok, lines)
+        self.assertIn("0 kernel, 0 learned, 0 inbox, 1 state", lines[0])
 
     def test_secret_and_project_id_fail(self):
         (self.root / "method" / "a.md").write_text("base\ntoken = abcdefghijklmnopqrstuvwxyz0123\n")
