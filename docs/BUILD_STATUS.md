@@ -194,3 +194,17 @@ Left, with reasons: about 56 method lines in 48 templates state no reason (the r
 | **new held-out (heldout2), before any change** | **37** | **47** |
 
 The old held-out figure overstated real accuracy: its requests were written alongside the keywords. The honest starting point is about one request in two finding its template in the top three.
+
+Then, tuning on dev and the old held-out set only:
+
+| Candidate | dev top 1 / top 3 | old held-out top 1 / top 3 |
+|---|---|---|
+| baseline | 100 / 100 | 78 / 86 |
+| A: also index role line, method and drift | 90 / 98 | 70 / 81 |
+| B: Spanish suffixes and accent folding in the stemmer | 100 / 100 | 78 / 86 |
+| field weights when/name/keywords (six settings tried) | 99–100 / 100 | 78–81 / 86–88 |
+| C: character-trigram expansion for misspelt words | 100 / 100 | 78 / 86 |
+
+The old misses are synonyms ("steal accounts" for the security reviewer), which no word-overlap change reaches. One candidate was fixed in advance (B + C, original weights, nothing fitted to a set) and measured once on the new set: **top 1 35, top 3 44, against 37 and 47**. It is below the ticket's bar (+3 points top 3), so **no change was kept**; verdict: not proven. A floor test now guards the new set (`test_selection_on_the_independent_held_out_set_does_not_get_worse`, top 3 ≥ 0.43).
+
+What this means for use: the word matcher is a shortlist, not a decision. On requests it was not written alongside, it surfaces the right template about half the time. Until selection improves, the lead should treat "closest by wording" as a suggestion and name a template with `--template` only when it reads right; a plain brief is the safe default. A selector that lets the lead model choose from a wider shortlist is the candidate for the next round; it needs the CB-203 evidence that templates help at all before it is worth building.
