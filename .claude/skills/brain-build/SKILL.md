@@ -7,21 +7,17 @@ description: Execute plan items with the right helpers and real checks: delegati
 
 The outcome is each plan item finished with its check passing and evidence recorded, at the lowest cost that holds the quality bar.
 
-## Do it yourself or delegate
+## Do it yourself or hire
 
-Delegate an item only when it is self-contained, bulky next to what you need back, and checkable; otherwise do it yourself. Use the agents in `.claude/agents/`: scout for bulk reading, builder for implementation, writer for prose, researcher for sourced questions. Each sets its own model; the tiers and the escalation order are in `memory/models.json`.
+A helper starts cold, so hire one only for work that is self-contained, bulky next to what you need back, and checkable. HR decides and prepares it:
 
-## The brief
+`BRAIN hr hire "<the goal, as an outcome>" --why "<reason and who uses it>" --owns <path> --input <file to read first> --check "<acceptance command>" [--parallel] [--material-tokens <rough size>]`
 
-A helper does not see this conversation. Every delegated item carries an acceptance command that exits 0 only when the item is done; without one, do not delegate it. When the plan is a tickets file, `BRAIN plan packet <tickets.json> <ticket-id>` prints the brief. Otherwise write it yourself:
+It answers "do not hire" when the work is small or has no check. Otherwise it picks the best of the 100 templates in the rack for the task, the model and effort (from learned results, with safe defaults), and a token wage, and writes the full brief to a file. Delegate exactly as its last line says: the named agent, model and effort, with the one-line message pointing at the brief. Do not retype the brief; that pointer is the saving. No two running helpers own the same file, and at most four run at once.
 
-- the goal, why it matters, and who it is for;
-- the constraints, including what must not change, and which actions are approved;
-- the files it owns (no two running helpers own the same file);
-- the acceptance command;
-- what to return: the result and the command's real output, under about 2,000 tokens, detail in a named file.
+Add `--also "<constraint, with its reason>"` for anything only this task needs. If no template fits, HR says so and writes a plain brief. `BRAIN hr rack --search "<task>"` shows candidates; `--template <id>` forces one.
 
-Give facts, not instructions to be careful.
+When the helper returns, `BRAIN hr settle` runs the acceptance command itself and compares real token use with the wage (`BRAIN close` also settles whatever is still open). A failed check goes back to the same helper once with the failing output, then up one step in the escalation order in `memory/models.json`.
 
 ## Checks and escalation
 

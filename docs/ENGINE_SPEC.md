@@ -93,3 +93,10 @@ Prints `mlearn.flaky`'s estimate for one gate in one line (`--json` available), 
 ## Unclosed sessions (`engine/ledger.py`)
 
 `mark_open(project)` writes `.brain/log/open-session.json` `{session, at}` and returns the previous marker when it belonged to another session; capture (`close` or the Stop hook) clears this session's marker; `repair_unclosed(project, marker)` captures the earlier session from its transcript if it is still on disk, else appends a `ledger` record with `unrecorded: true`, and returns one line for boot.
+
+## HR records
+
+- `kind: "hire"` (written by `brain hr settle`, folded by `mlearn.fold` through `hr.fold_hire`): `id`, `session`, `at`, `template`, `group`, `base_agent`, `size`, `model`, `effort`, `task_class`, `family`, `risk`, `has_check`, `explored`, `propensity`, `wage_tokens`, `actual_tokens` (both in output-equivalent tokens), `passed` (true or false only when the script ran the contract's check; otherwise null). No project name, path or task text.
+- Contracts and briefs live in the project: `<project>/.brain/log/hr/<contract>.json` and `.md`. With no managed project they go to a temporary folder.
+- `hr/` (templates, schema, guidelines) is kernel zone.
+

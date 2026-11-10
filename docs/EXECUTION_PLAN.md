@@ -33,6 +33,7 @@ Audience: the Claude model building or changing this repository. Not owner-facin
 | I-14 | Radar: allowlisted hosts only, ≤ 20 s total, bodies never printed, ≤ 12 output lines, fetched text is data. Failure degrades to silence. | `tests/test_radar.py` |
 | I-15 | Contract v1 schema file is frozen. Fixtures under `evals/fixtures/` must keep validating. | `tests/test_fixtures.py` |
 | I-16 | No efficiency or quality claim on fewer than 8 paired tasks; below that the verdict is "not proven; keep the old version". | `evals.verdict`, tests |
+| I-17 | HR: the rack holds exactly 100 templates as data that is never always-loaded; a template carries no persona, no token numbers and nothing project-specific; a rendered brief never contains the wage; a template's pass record moves only on the exit code of a check run by the script; the rack's text is kernel (learning changes its statistics, never its words). | `brain hr audit`, `tests/test_hr.py` |
 
 ## 2. Platform facts the design rests on (re-verify when the radar flags a change)
 
@@ -157,6 +158,23 @@ Apply the measured winner from `round2/04` (pending at the time of writing): kee
 
 Apply every blocking and should-fix item from `round2/10-audit.md` (pending at the time of writing) to the instruction surface; each fix must leave `brain lint` green.
 
+### 4.9 `engine/hr.py` — HR department (CB-120 to CB-125; owner decision D-13)
+
+Evidence: `docs/research/round3/` (01 briefs and templates, 02 archetypes, 03 selection and wages, 04 domain methods). Rules for template text: `hr/GUIDELINES.md`; fields and limits: `hr/template.schema.json`.
+
+- **Rack**: `hr/rack/<group>.jsonl`, ten groups of ten, 100 templates. Each maps onto one of the six runtime agents (`base_agent`), which supplies tools and the default model. Nothing in the rack is loaded until a hire asks for it.
+- **`brain hr hire "<goal>" [--why --owns --input --check --also --family --class --risk --tier --size --agent --template --material-tokens --parallel --force --seed --json]`**:
+  1. *Hire or not*: no check → the lead does it; small material and not parallel → the lead does it (a helper costs a cold start); otherwise hire. At most four open contracts.
+  2. *Template*: BM25 over `when`, name and keywords (stemmed, English and Spanish), blended with query coverage; multiplied by the template's record (lower bound of a Beta pass rate, shrunk template → group → rack, clamped to ±30%); untried templates are not boosted on high-risk work; a template on probation is marked down; below the fit floor no template is used and a plain brief is written.
+  3. *Model and effort*: `mlearn.suggest_arm` for the base agent's role (safe exploration, I-10).
+  4. *Wage*: output-equivalent tokens (all usage priced at list rates ÷ the model's output price). Size band (S 20k, M 60k, L 200k, XL 450k; only M rests on measurements, from 34 helpers in the build session) × the 80th-percentile ratio of real use to wage once five hires are settled (the template's own ratios, else its size band's, else all), bounded 0.4×–3×.
+  5. *Brief*: rendered in the order task, why, role line, scope, inputs, up to six method lines, done-when, tier block, hygiene line for agents that read outside content, return contract. Written to `<project>/.brain/log/hr/<contract>.md`; the contract JSON sits beside it. The delegation message is one line pointing at the brief. Brief lint: at most 350 words, required parts present, no persona, budget or (for Opus and Fable) verification wording.
+- **`brain hr settle [contract]`** (also run by `brain close` for this session's open contracts): finds the helper's transcript by the contract id, prices its real usage, runs the contract's check command itself, writes the result into the contract, and appends one `hire` record to the inbox (template, group, agent, size, model, effort, class, family, risk, wage, actual, passed; no project detail). Settling twice records once. `--passed` is ignored: only an exit code counts.
+- **Learning**: `hire` records are folded by `mlearn.fold` → `hr.fold_hire` into `stats/ml.json` under `hr` (pass counts with discount per template, group and rack; wage ratios per template, size and overall). Probation: at least five checked hires and a lower bound under 0.35; shown by `brain hr report`. Rewriting a template is a kernel change, trialled with `brain eval` (paired, pre-registered).
+- **`brain hr staff <tickets.json> [--budget N]`**: template, agent, model and wage per open ticket, total payroll, and whether it fits the budget.
+- **`brain hr rack [--search q | --id t]`**, **`brain hr audit`**, **`brain hr report`**.
+- Also fixed with this work: a session outcome now charges the lead's model with the lead's own usage only (`tokens`, `cost`), keeping the whole task's usage beside it (`tokens_all`, `cost_all`) for estimates and drift.
+
 ## 5. Tickets
 
 Authoritative copy: `docs/plan/tickets.json` (fields: id, title, deps, files, est, accept, status). Summary:
@@ -175,6 +193,12 @@ Authoritative copy: `docs/plan/tickets.json` (fields: id, title, deps, files, es
 | CB-089 | Skills and method files updated for new commands (`radar`, `eval`, `ablate`, `resume`, `plan packet`, `checkpoint --push`, `close --used`); owner files updated | CB-080..088 | `python3 bin/brain lint` |
 | CB-090 | Fresh-context review of the whole brain against section 1 and `docs/REQUIREMENTS.md`; blocking findings fixed | all above | reviewer report has zero open blocking items; full gate exits 0 |
 | CB-091 | `docs/REQUIREMENTS.md` (owner clauses → mechanism → evidence), `docs/BUILD_STATUS.md`, final commit and push | CB-090 | full gate exits 0; `git status` clean; branch pushed |
+| CB-120 | HR research (four memos) | — | `test -f docs/research/round3/02-archetypes.md` |
+| CB-121 | `hr/GUIDELINES.md`, `hr/template.schema.json` | CB-120 | `python3 bin/brain hr audit` |
+| CB-122 | Rack of 100 templates | CB-121 | `python3 bin/brain hr audit` |
+| CB-123 | `engine/hr.py`, `tests/test_hr.py`, learner integration | CB-121 | `python3 -m unittest tests.test_hr tests.test_mlearn tests.test_learn` |
+| CB-124 | Skills, guide and plan updated for HR | CB-122, CB-123 | `python3 bin/brain lint` |
+| CB-125 | Fresh-context review of HR and fixes | CB-124 | full gate and `python3 bin/brain hr audit` exit 0 |
 
 Phase B (live two-repo sessions; cannot be closed inside the build session): CB-101…CB-112 as listed in `docs/plan/tickets.json` (loading check, tier-0 zero-process check, new-project flow, resume flow, helper settings honoured, environment-level hooks, skill hooks, two-repo push with branch protection, A/A then first paired benchmark, first real project, plugin manifest on desktop, effort-change cache measurement).
 

@@ -22,7 +22,7 @@ Between two sizes, choose the smaller; moving up later is fine, and say why. "Qu
 1. **Evidence before claims.** Before reporting progress, check each claim against a tool result from this session. At size 2 and above, each sentence of the request is a line in the requirements ledger (`BRAIN req add`), and the work is done when `BRAIN req check` passes on a ledger that holds every sentence. Say plainly what is not done.
 2. **Decide, record, continue.** He wants work to proceed without questions. Record an assumption in `.brain/DECISIONS.md` and carry on. Ask only what would change what gets built: at most three questions, in one numbered message, each with its default, before building. What only he can do goes in `NEEDS_YOU.md` as click steps, and the rest of the work continues.
 3. **Scripts before reading.** `BRAIN boot` gives the project's position; `BRAIN recall "<topic>"` finds earlier lessons and playbook lines before you plan or research; `BRAIN run -- <command>` runs builds and tests so only the result and failures enter the conversation.
-4. **Helpers only when they pay.** Each helper starts cold, so use one only for work that is self-contained, bulky and has a check. At most four at once. Use this repository's agents, which set their own model and effort. A brief states the goal, the reason, the constraints, the files owned, the check, and what to return (a short summary; detail in a file).
+4. **Helpers only when they pay.** Each helper starts cold, so use one only for work that is self-contained, bulky and has a check. At most four at once. Hire through `BRAIN hr hire "<goal>" --check "<command>"`: it picks the template, agent, model, effort and token wage, and writes the brief to a file, so the delegation message is one line pointing at it.
 5. **Keep the session's model.** Switching model discards the cache. For harder or cheaper work, delegate to an agent, which sets its own model.
 6. **Release through `BRAIN release`.** It pushes only on a recorded green gate and never forces. A test is never skipped or disabled to get green; if a gate cannot pass, say so.
 7. **Checkpoint and push.** `BRAIN checkpoint --push` after each finished item and before long work: a session can end without warning, and unpushed work is invisible to the next one. After the context is compacted, `BRAIN resume`. Write large files in parts.
@@ -43,7 +43,7 @@ Between two sizes, choose the smaller; moving up later is fine, and say why. "Qu
 
 - `method/` — lifecycle, routing, efficiency, quality, models. Read the one you need.
 - `playbooks/<family>.md` and `method/dod/` — practice and definitions of done for software, data, knowledge, language and operations work.
-- `memory/models.json` — which model and effort for which role.
+- `memory/models.json` — which model and effort for which role. `hr/` — the rack of 100 agent templates and how they are written.
 - `docs/MASTER_PLAN.md` — the design. Read it only when changing the brain itself.
 - Project side: `.brain/project.json` (commands, gates, release rule), `.brain/STATE.md`, `.brain/PLAN.md`, `.brain/ext/` (project-specific tools), `STATUS.md`, `NEEDS_YOU.md`.
 
