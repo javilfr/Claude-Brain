@@ -297,7 +297,7 @@
       "est": 30,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain hr audit",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-201",
@@ -313,13 +313,13 @@
       "est": 40,
       "accept": "grep -q 'CB-201' docs/BUILD_STATUS.md",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-202",
       "title": "End-to-end trial on a scratch project with real helpers",
       "reason": "Everything so far was proven by scripts; nothing has been run as a real two-repo flow.",
-      "goal": "Create a scratch project under the session scratchpad (git init with a local bare remote), then run the real flow as the lead: boot (bootstrap), init, requirements ledger for a small but real app or document, plan and `brain hr staff`, hire two or three helpers through `brain hr hire`, settle, gate, release, checkpoint, resume, handover, close. Note every place the instructions, skills or commands were unclear, slow or wrong; fix each in the brain with a test; record tokens and minutes from `brain ledger`.",
+      "goal": "Create a scratch project under the session scratchpad (git init with a local bare remote), then run the real flow as the lead: boot (bootstrap), init, requirements ledger for a small but real app or document, plan and `brain hr staff`, hire two or three helpers through `brain hr hire`, settle, gate, release, checkpoint, resume, handover, close. Note every place the instructions, skills or commands were unclear, slow or wrong; fix each in the brain with a test; record tokens and minutes from `brain ledger`. (Run by the end-to-end analyst on 2026-11-10 in a scratch copy: docs/review/2026-11-10-audit/e2e-trial.json; its twenty findings are in the packages.)",
       "deps": [
         "CB-200"
       ],
@@ -333,7 +333,7 @@
       "est": 120,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain lint",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
-      "status": "open"
+      "status": "doing"
     },
     {
       "id": "CB-203",
@@ -394,7 +394,7 @@
       "id": "CB-206",
       "title": "Open review items",
       "reason": "Small defects left from the two reviews.",
-      "goal": "Work the lists under 'Open, with reasons' and 'Open for HR' in docs/BUILD_STATUS.md: success output that mixes streams, repo map listing generated files, radar thread shutdown time (measure it), tunables still inline, lead-record field names, radar state dirtying the tree daily, `staff` parallel default, forged inbox records, a use for the scout tier. Each fix gets a test.",
+      "goal": "Work the lists under 'Open, with reasons' and 'Open for HR' in docs/BUILD_STATUS.md: success output that mixes streams, repo map listing generated files, radar thread shutdown time (measure it), tunables still inline, lead-record field names, radar state dirtying the tree daily, `staff` parallel default, forged inbox records, a use for the scout tier. Each fix gets a test. (Distributed over packages A to E and H in docs/plan/IMPROVEMENT_PLAN.md: M6 in C, M8 and M15 and M20 in H, M17 and M19 in E.)",
       "deps": [
         "CB-200"
       ],
@@ -423,7 +423,290 @@
       "est": 90,
       "accept": "test -d docs/research/round4",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
-      "status": "open"
+      "status": "doing"
+    },
+    {
+      "id": "CB-210",
+      "title": "Ledger counts helpers started by a workflow",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "common.helper_transcripts finds agent-*.jsonl at any depth under subagents/ and ignores a workflow's journal; the session-end hook uses it.",
+      "deps": [],
+      "files": [
+        "engine/common.py",
+        ".claude/hooks/session_end.py",
+        "tests/test_helper_transcripts.py"
+      ],
+      "est": 15,
+      "accept": "python3 -m unittest tests.test_helper_transcripts",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "done"
+    },
+    {
+      "id": "CB-211",
+      "title": "Stray push from a scratch copy: remove it, block it, fix the cause",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Revert the three test records without forcing; block pushes from scratch folders; the cause (push_brain_records pushes any inbox file from any copy) is fixed in CB-212.",
+      "deps": [],
+      "files": [
+        "engine/state.py"
+      ],
+      "est": 15,
+      "accept": "git log --oneline | grep -q \"revert: remove three test records\"",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "done"
+    },
+    {
+      "id": "CB-212",
+      "title": "Package A: continuity and state",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Every finding marked do or part for package A in docs/plan/IMPROVEMENT_PLAN.md section 6, test first: a new chat finds the last chat's state (D-17), a checkpoint reaches the remote or says so, bookkeeping is an allow-list, push_brain_records pushes only this session's records, one end-of-session command, brain-only status and handover, owner marks surfaced, boot by priority, status page in the owner's language.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/state.py",
+        "engine/detect.py",
+        "tests/test_r4_a.py"
+      ],
+      "est": 120,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-213",
+      "title": "Package B: contract, common and doctor",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package B rows: duplicate gate ids refused by validate, manifest shapes checked so no command tracebacks, one project resolver, a stale brain writes nothing, doctor --project, init --check, the extended secret scan.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/common.py",
+        "engine/contract.py",
+        "engine/doctor.py",
+        "bin/brain",
+        "contract",
+        "tests/test_r4_b.py",
+        "tests/test_r4_secrets.py"
+      ],
+      "est": 90,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-214",
+      "title": "Package C: run, gate and release",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package C rows: release runs its own gates at HEAD, pipefail, detectors hold a release, owner and checklist gates count, run_filtered rebuilt around a process group, gate output capped, gate --last, the release record reaches the release branch, test-count ratchet, never_touch.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/gate.py",
+        "tests/test_r4_c.py"
+      ],
+      "est": 120,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-215",
+      "title": "Package D: requirements ledger and the done report",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package D rows: typed evidence that resolves, req verify, the ledger must hold the request, dropped lines visible, several lines per call, brain done.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/req.py",
+        "tests/test_r4_d.py"
+      ],
+      "est": 90,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-216",
+      "title": "Package E: token ledger, guard, lint and hooks",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package E rows: session-end capture no longer dirties the tree, a closed session is not reported unclosed, output-equivalent tokens and active minutes, guard asks for kernel edits and denies the lock files, hook commands fail open when the script is missing, lint checks choices, required options, constants and document facts.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/ledger.py",
+        "engine/guard.py",
+        "engine/lint.py",
+        ".claude/hooks",
+        ".claude/settings.json",
+        "tests/test_r4_e.py"
+      ],
+      "est": 120,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-217",
+      "title": "Package F: learning pipeline",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package F rows: owner authority cannot be forged through the inbox, a hand-written delta cannot rewrite owner instructions, shipped knowledge never fades by disuse, the loop closes for a noted lesson, facts supersede, consolidation survives malformed records, digest sections for the owner, a soak test.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/learn.py",
+        "learning/PROMOTION_RULES.md",
+        "tests/test_rehearsal.py",
+        "tests/test_r4_f.py"
+      ],
+      "est": 150,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain learn verify",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-218",
+      "title": "Package G: routing, statistical learners and scheduler",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package G rows: a trigger followed by a task is sized by the task, the owner's phrases have one source and a test, the scheduler prices a helper's cold start, learners receive data on the real path, promotion score is neutral at zero credit.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/route.py",
+        "engine/mlearn.py",
+        "engine/schedule.py",
+        "memory/ml_config.json",
+        "evals/routing.jsonl",
+        "evals/owner_phrases.jsonl",
+        "tests/test_r4_g.py"
+      ],
+      "est": 120,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-219",
+      "title": "Package H: radar, repo map and evaluation",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package H rows from the radar, map and evaluation analyst, plus brain eval recall.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/radar.py",
+        "engine/repomap.py",
+        "engine/evals.py",
+        "evals",
+        "tests/test_r4_h.py"
+      ],
+      "est": 90,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain eval audit",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-220",
+      "title": "Package I: HR engine and selection",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package I rows, with CB-204: an agent that cannot do the work is never chosen, a brief nobody worked is not settled as a pass or a fail, selection measured on the new held-out set and kept only if top-3 rises by at least 3 points there.",
+      "deps": [
+        "CB-204"
+      ],
+      "files": [
+        "engine/hr.py",
+        "hr/GUIDELINES.md",
+        "tests/test_r4_i.py"
+      ],
+      "est": 120,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain hr audit",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-221",
+      "title": "Package J: the 100 templates",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "The confirmed defects from both template reviews (CB-205), applied to the rack; hr audit still passes.",
+      "deps": [
+        "CB-205"
+      ],
+      "files": [
+        "hr/rack"
+      ],
+      "est": 90,
+      "accept": "python3 bin/brain hr audit && python3 -m unittest tests.test_hr",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-222",
+      "title": "Package K: instruction surface",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package K rows after the engine packages are merged: the brain alone has a working path (method/brain-work.md), end-of-session order, research hires, sizes, agent return caps; every new command a skill should name; lint clean and CLAUDE.md under its cap.",
+      "deps": [
+        "CB-212",
+        "CB-213",
+        "CB-214",
+        "CB-215",
+        "CB-216"
+      ],
+      "files": [
+        "CLAUDE.md",
+        ".claude/skills",
+        ".claude/agents",
+        "method",
+        "tests/test_r4_k.py"
+      ],
+      "est": 90,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain budget",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-223",
+      "title": "Package L: owner documents",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package L rows: the guide answers a dead chat, where to see the result, how to stop; Spanish beside every phrase; NEEDS_YOU in the order to do it; numbers in documents marked and checked.",
+      "deps": [
+        "CB-222"
+      ],
+      "files": [
+        "OWNER_GUIDE.md",
+        "NEEDS_YOU.md",
+        "README.md",
+        "docs"
+      ],
+      "est": 60,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
+    },
+    {
+      "id": "CB-224",
+      "title": "Package M: recall and memory items",
+      "reason": "Found by the analysis of 2026-11-10; rows and evidence in docs/plan/IMPROVEMENT_PLAN.md section 6",
+      "goal": "Package M rows: recall in Spanish, silence over noise, the golden test measures what runs, a project cannot present its files as owner instructions, external facts are marked, one labelled slot for an unconfirmed lesson.",
+      "deps": [
+        "CB-200"
+      ],
+      "files": [
+        "engine/recall.py",
+        "engine/items.py",
+        "evals/recall_golden.jsonl",
+        "tests/test_recall.py",
+        "tests/test_r4_m.py"
+      ],
+      "est": 90,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
+      "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
+      "status": "doing"
     },
     {
       "id": "CB-208",
@@ -431,12 +714,24 @@
       "reason": "The author of a fix is the worst judge of it.",
       "goal": "One redteam pass on the whole design (what would make this brain harmful or useless over a year of use?) and one fresh-context review against docs/EXECUTION_PLAN.md section 1 and docs/REQUIREMENTS.md, both with reproductions. Fix every blocking and should-fix finding with a test.",
       "deps": [
-        "CB-202",
         "CB-203",
         "CB-204",
         "CB-205",
         "CB-206",
-        "CB-207"
+        "CB-207",
+        "CB-212",
+        "CB-213",
+        "CB-214",
+        "CB-215",
+        "CB-216",
+        "CB-217",
+        "CB-218",
+        "CB-219",
+        "CB-220",
+        "CB-221",
+        "CB-222",
+        "CB-223",
+        "CB-224"
       ],
       "files": [
         "docs/review",
