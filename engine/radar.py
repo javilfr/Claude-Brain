@@ -28,6 +28,7 @@ import html
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -492,10 +493,34 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     if not due:
         return
 
-    ex = cf.ThreadPoolExecutor(max_workers=WORKERS)
-    futs = {s["id"]: ex.submit(_check, s, state.get(s["id"], {}), fetch, allow, stamp, timeout) for s in due}
+    # Daemon threads, not a pool: the interpreter joins pool threads at exit,
+    # so one slow server held the process for twice the budget (measured
+    # 8.1 s on a 4 s budget, M15). A daemon thread is simply dropped.
+    futs = {s["id"]: cf.Future() for s in due}
+    queue = list(due)
+    lock = threading.Lock()
+
+    def worker() -> None:
+        while True:
+            with lock:
+                if not queue:
+                    return
+                s = queue.pop(0)
+            fut = futs[s["id"]]
+            if not fut.set_running_or_notify_cancel():
+                continue
+            try:
+                fut.set_result(_check(s, state.get(s["id"], {}), fetch, allow, stamp, timeout))
+            except BaseException as e:  # _check never raises; belt and braces
+                fut.set_exception(e)
+
+    for _ in range(min(WORKERS, len(due))):
+        threading.Thread(target=worker, daemon=True, name="brain-radar").start()
     cf.wait(list(futs.values()), timeout=max(0.0, max_seconds - (time.monotonic() - t0)))
-    ex.shutdown(wait=False, cancel_futures=True)
+    with lock:
+        queue.clear()
+    for f in futs.values():
+        f.cancel()  # only those not started; a running one is left to its daemon thread
 
     candidates: list[tuple[int, dict, int]] = []
     leads: list[dict] = []  # every relevant new item; max_lines caps only what is printed

@@ -305,6 +305,13 @@ class Contracts(Base):
         with self.assertRaises(ValueError):
             hr.hire("x", brain_root=self.b, template_id="nope")
 
+    def test_template_none_forces_a_plain_brief(self):
+        # The plain arm of a template-versus-plain comparison (CB-203), or a job no template fits
+        con = hr.hire("Review this branch for bugs before release", brain_root=self.b, project=self.project(), template_id="none",
+                      check="true", base_agent="reviewer")
+        self.assertIsNone(con["template"])
+        self.assertEqual(con["closest"], [])
+
     def test_no_template_fits_gives_a_plain_helper_with_a_complete_brief(self):
         con = hr.hire("Calibrate the telescope mount firmware", brain_root=self.b, project=self.project(), check="make test", family="software")
         self.assertIsNone(con["template"])

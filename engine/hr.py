@@ -556,7 +556,9 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     family, task_class = family or "software", task_class or "general"
     if risk not in RISKS:
         raise ValueError(f"unknown risk '{risk}'")
-    if template_id:
+    if template_id == "none":
+        chosen = []  # a plain brief on purpose: no template fits, or a plain arm of a comparison
+    elif template_id:
         chosen = [{"id": t["id"], "score": 1.0, "fit": 1.0, "coverage": 1.0, "multiplier": 1.0, "trials": 0, "template": t} for t in rack if t["id"] == template_id]
         if not chosen:
             raise ValueError(f"no template '{template_id}' in the rack")
@@ -592,7 +594,7 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
                 "explored": bool(arm.get("explored")), "wage_tokens": pay["tokens"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
                 "brief": "(not written)", "runners_up": [x["id"] for x in chosen[1:3]], "model_basis": arm.get("basis", ""),
                 "lint": lint_brief(brief, arm["model"], lead_text), "words": _words(brief), "needs": (t or {}).get("needs", []),
-                "closest": [] if t else [x["id"] for x in select(task, rack, state, hc, family, risk, base_agent, near=True)]}
+                "closest": [] if t or template_id == "none" else [x["id"] for x in select(task, rack, state, hc, family, risk, base_agent, near=True)]}
     # A new hire for the same task replaces this session's earlier open one
     # (for example after picking a template from the "closest" list).
     for old in open_contracts(project):
@@ -612,7 +614,7 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
         # Word matching misses some requests (measured: right template in the
         # top three for 86% of held-out requests). When nothing passed the
         # floor, the closest templates are shown so the lead can pick one.
-        "closest": [] if t else [x["id"] for x in select(task, rack, state, hc, family, risk, base_agent, near=True)],
+        "closest": [] if t or template_id == "none" else [x["id"] for x in select(task, rack, state, hc, family, risk, base_agent, near=True)],
     }
     c.write_text(brief_path, brief)
     c.write_json(d / f"{cid}.json", contract)
@@ -951,7 +953,7 @@ def register(sub) -> None:
     h.add_argument("--tier", type=int, choices=(1, 2, 3), default=2)
     h.add_argument("--size", choices=("S", "M", "L", "XL"))
     h.add_argument("--agent", choices=BASE_AGENTS, help="restrict to templates for one base agent")
-    h.add_argument("--template", help="use this template instead of choosing")
+    h.add_argument("--template", help="use this template instead of choosing; 'none' for a plain brief")
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")
     h.add_argument("--force", action="store_true", help="hire even when the rule says the lead should do it")

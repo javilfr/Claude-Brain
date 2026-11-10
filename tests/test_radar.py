@@ -434,6 +434,22 @@ class Failures(RadarCase):
         self.assertEqual(res["checked"], 0)
 
 
+class ExitTime(RadarCase):
+    def test_a_slow_server_does_not_hold_the_process_at_exit(self):
+        # M15: pool threads were joined at exit, measured 8.1 s on a 4 s budget
+        import subprocess
+        import sys
+        import time
+        engine_root = Path(__file__).resolve().parent.parent
+        code = ("import sys,time; sys.path.insert(0, %r)\n"
+                "from engine import radar\n"
+                "def slow(url, headers, timeout):\n    time.sleep(timeout * 3); raise OSError('slow')\n"
+                "radar.run(%r, force=True, max_seconds=1, fetch=slow)\n") % (str(engine_root), str(self.root))
+        t = time.monotonic()
+        subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
+        self.assertLess(time.monotonic() - t, 2.5)
+
+
 class DueLines(RadarCase):
     def test_returns_lines_for_official_sources_only_up_to_the_cap(self):
         radar_run = radar.run

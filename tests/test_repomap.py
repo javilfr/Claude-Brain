@@ -66,6 +66,21 @@ class RepoMapTest(unittest.TestCase):
         paths = [f["path"] for f in self.build()["files"]]
         self.assertEqual(paths, ["main.py"])
 
+    def test_skips_ignored_logs_and_lockfiles(self):
+        # M8: the map listed run logs and generated files
+        import subprocess
+        tree(self.root, {
+            "main.py": "print(1)\n",
+            ".gitignore": "out/\n",
+            "out/bundle.js": "export const a = 1\n",
+            "package-lock.json": "{}",
+            "app.min.js": "var a=1",
+            ".brain/log/run/x.log": "$ make\n",
+        })
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        paths = [f["path"] for f in self.build()["files"]]
+        self.assertEqual(sorted(paths), [".gitignore", "main.py"])
+
     def test_cache_hit_and_invalidation(self):
         tree(self.root, {"a.py": "def f():\n    pass\n"})
         first = self.build()

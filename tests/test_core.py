@@ -444,6 +444,9 @@ class GateTests(Base):
         self.assertGreater(len(Path(r["log"]).read_text().splitlines()), 500)
         ok = gate.run_filtered("seq 1 200", p, p)
         self.assertEqual((ok["exit"], len(ok["shown"])), (0, 3))
+        # M6: the result line written last stays last, after an earlier warning on stderr
+        mixed = gate.run_filtered("echo 'warning: x' >&2; echo a; echo b; echo 'result: ok'", p, p)
+        self.assertEqual(mixed["shown"][-1], "result: ok")
 
     def test_release_refuses_without_a_green_gate_on_this_commit(self):
         p = self.project()
