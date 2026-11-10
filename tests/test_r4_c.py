@@ -702,7 +702,8 @@ class RunCommand(Base):
         line = 'echo mine; for f in .brain/log/run/*.log; do echo theirs > "$f.x"; mv "$f.x" "$f"; done; echo still-mine'
         r = gate.run_filtered(line, p, p)
         self.assertEqual(r["exit"], 0)
-        self.assertEqual(r["shown"], ["mine", "still-mine"])
+        self.assertEqual(r["shown"][:2], ["mine", "still-mine"])
+        self.assertIn("replaced", r["shown"][-1])  # and it says the file on disk is no longer this run's
 
     def test_digest_paths_are_relative_inside_the_project(self):
         """e2e-trial-20: about 155 of each digest's 220 bytes were an absolute path."""

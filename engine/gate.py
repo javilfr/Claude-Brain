@@ -345,15 +345,20 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
             own.seek(-1, os.SEEK_END)
             f.write((b"" if own.read(1) == b"\n" else b"\n") + f"[exit {code} in {secs:.1f}s]\n".encode())
             f.flush()
-            ours = os.fstat(own.fileno()).st_ino == os.stat(log).st_ino
-        except OSError as e:  # the disk is full or the log is gone: the exit code still stands
-            r, ours = {"lines": 0, "shown": [f"[the saved output could not be read: {c.clip(str(e), 100)}]"], "tests": None, "suspect": ""}, False
-    if ours:
+        except OSError as e:  # the disk is full: the exit code still stands
+            r = {"lines": 0, "shown": [f"[the saved output could not be read: {c.clip(str(e), 100)}]"], "tests": None, "suspect": ""}
         try:
+            ours = os.fstat(own.fileno()).st_ino == os.stat(log).st_ino
+        except OSError:
+            ours = False
+    try:
+        if ours:
             _cap_log(log, int(cfg["log_cap_mb"]) << 20)
             _prune_logs(log.parent, int(cfg["keep_logs"]))
-        except OSError:
-            pass
+        else:
+            r["shown"].append("[the log file was replaced or removed meanwhile; these lines are what is left of the output]")
+    except OSError:
+        pass
     try:  # relative, so the line is short and means the same on another machine
         ref = str(log.relative_to(Path(project))) if project else str(log)
     except ValueError:
@@ -940,7 +945,9 @@ def sync_record(project: Path, branch: str) -> str:
     remote = git(project, "rev-parse", "--verify", "--quiet", f"origin/{branch}")
     if remote == head:
         return ""
-    if not remote or not same_work(project, remote, head):
+    if not remote:
+        return c.clip(msg, 140) or f"origin/{branch} is not known here"
+    if not same_work(project, remote, head):
         return "more than bookkeeping differs from " + branch  # only a release may push that
     try:
         pushed = subprocess.run(["git", "-C", str(project), "push", "origin", f"HEAD:{branch}"], capture_output=True, text=True, timeout=120)
