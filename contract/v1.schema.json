@@ -1,0 +1,36 @@
+{
+  "$comment": "Claude Brain project contract, version 1. Frozen: never edit after release; additive changes go in a new optional key with a default, renames or removals need version 2 and a migration.",
+  "type": "object",
+  "required": ["contract", "project", "family", "stage", "commands", "gates", "release"],
+  "properties": {
+    "contract": {"type": "integer", "enum": [1]},
+    "project": {
+      "type": "object",
+      "required": ["id", "title", "created"],
+      "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "created": {"type": "string"}}
+    },
+    "family": {"type": "string", "enum": ["software", "data", "knowledge", "language", "operations"]},
+    "types": {"type": "array", "items": {"type": "string"}},
+    "stage": {"type": "string", "enum": ["intake", "requirements", "research", "plan", "build", "verify", "deliver", "learn", "done"]},
+    "tier": {"type": "integer", "enum": [1, 2, 3]},
+    "commands": {"type": "object", "properties": {"setup": {"type": "string"}, "check_fast": {"type": "string"}, "check_full": {"type": "string"}, "run": {"type": "string"}}},
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind"],
+        "properties": {"id": {"type": "string"}, "kind": {"type": "string", "enum": ["command", "checklist", "owner"]}, "command": {"type": "string"}, "file": {"type": "string"}}
+      }
+    },
+    "release": {
+      "type": "object",
+      "required": ["rule"],
+      "properties": {"rule": {"type": "string", "enum": ["none", "main-on-green", "pr"]}, "branch": {"type": "string"}, "live_url": {"type": "string"}, "live_expect": {"type": "string"}}
+    },
+    "paths": {"type": "object", "properties": {"deliverables": {"type": "array", "items": {"type": "string"}}, "evidence": {"type": "string"}, "never_touch": {"type": "array", "items": {"type": "string"}}}},
+    "languages": {"type": "array", "items": {"type": "string"}},
+    "risk": {"type": "string", "enum": ["trivial", "standard", "high", "one-way-door"]},
+    "privacy": {"type": "object", "properties": {"share_lessons": {"type": "string", "enum": ["method-only", "none"]}}},
+    "brain": {"type": "object", "properties": {"last_seen": {"type": "string"}, "min_contract": {"type": "integer"}}}
+  }
+}

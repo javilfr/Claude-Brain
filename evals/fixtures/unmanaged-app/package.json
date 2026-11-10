@@ -1,0 +1,1 @@
+{"name": "unmanaged-app", "private": true, "scripts": {"lint": "echo lint", "test": "echo test", "build": "echo build", "dev": "echo dev"}}

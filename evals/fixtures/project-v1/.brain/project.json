@@ -1,0 +1,48 @@
+{
+  "_help": "Claude Brain project contract. Edit values, keep the keys. Commands are whatever can be run to check the work; leave empty when nothing can.",
+  "contract": 1,
+  "project": {
+    "id": "sample-report",
+    "title": "Sample Report",
+    "created": "2026-11-10"
+  },
+  "family": "knowledge",
+  "types": [],
+  "stage": "build",
+  "tier": 2,
+  "commands": {
+    "setup": "",
+    "check_fast": "",
+    "check_full": "",
+    "run": ""
+  },
+  "gates": [
+    {
+      "id": "checks",
+      "kind": "command",
+      "command": ""
+    }
+  ],
+  "release": {
+    "rule": "pr",
+    "branch": "main",
+    "live_url": ""
+  },
+  "paths": {
+    "deliverables": [],
+    "evidence": "docs/evidence/",
+    "never_touch": []
+  },
+  "languages": [
+    "en",
+    "es"
+  ],
+  "risk": "standard",
+  "privacy": {
+    "share_lessons": "method-only"
+  },
+  "brain": {
+    "last_seen": "",
+    "min_contract": 1
+  }
+}

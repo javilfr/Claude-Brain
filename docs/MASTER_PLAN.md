@@ -195,7 +195,7 @@ Patterns the design answers directly:
 | "Do not stop and do not ask me anything until everything is done" | Decide, record the assumption, continue; ask only the questions that would change what gets built |
 | "Propose 5, I will choose"; "start with one lesson so I can judge" | Options as a short numbered menu; a small sample before any expensive full run |
 | Timeouts on very large single edits; a 2.6 MB paste ended a session | Large files are written in parts; large content goes to files, never inline |
-| Several chats on the same repos at once | A lease file names the active session; a second chat is told |
+| Several chats on the same repos at once | The state file records which session checkpointed last; a second chat is warned |
 | "It's the worst it's ever been, go back" | Tagged known-good versions and a one-step restore |
 | API keys pasted into chat three times | Keys are requested through the secure form, never repeated, and scanned for before every commit |
 | About $3,200 at list prices across 39 sessions, single sessions up to $627 | The baseline the ledger measures against |
@@ -279,12 +279,12 @@ Claude-Brain/
   NEEDS_YOU.md             numbered items, each with what, why, click steps, and what happens meanwhile
   .brain/
     project.json           the manifest
-    STATE.md               the single checkpoint: stage, current item, next three, anything half-finished
-    REQUIREMENTS.md        the requirements ledger
+    STATE.md               the single checkpoint: stage, current item, next three, anything half-finished,
+                           and which session wrote it last (so a second chat on the same project is warned)
+    requirements.jsonl     the requirements ledger (REQUIREMENTS.md is its generated, readable view)
     PLAN.md                the current plan
     DECISIONS.md           one line per assumed decision; you write OVERTURNED to reverse one
     HANDOVER.md            written by "Hand over": everything a fresh chat needs
-    lease.json             which session is active on this project
     memory/                project facts and lessons (same format as the brain's)
     ext/                   project-specific skills, agents, tools and playbook overrides
     log/                   one small record per session; gate results with exit codes
@@ -312,7 +312,7 @@ The manifest is JSON so that reading it needs no installs:
 
 **One state file.** The Travel Journal kept status in five places that drifted apart. Here `STATE.md` is the only checkpoint, written by one command, and `STATUS.md` is generated from it.
 
-**Release rule.** `release.rule` is `none`, `main-on-green` or `pr`. With `main-on-green`, `bin/brain release` runs the full gate, pushes only if the recorded exit code is zero, never force-pushes, and then checks that the live address serves the new version. This is your most repeated instruction, turned into one script.
+**Release rule.** `release.rule` is `none`, `main-on-green` or `pr`. With `main-on-green`, `bin/brain release` runs the full gate, pushes only if the recorded exit code is zero, never force-pushes, and then checks the live address for a bounded time. If the app shows its version, the check also confirms the new version is the one being served. This is your most repeated instruction, turned into one script.
 
 **"Forever", made testable.** The contract number is an integer. Each version's schema is a frozen file. Changes are additive by default; a rename or removal needs a new number and a small migration script that is safe to run twice. A snapshot of a project at every past version is kept in `evals/fixtures/`, and CI opens, migrates and validates every snapshot on every change to the brain.
 
@@ -460,7 +460,7 @@ The evidence is consistent: checks that can be *run* beat a model reflecting on 
 
 ## 5.1 Accuracy
 
-- **The requirements ledger.** For any size-2 request, every sentence you wrote becomes a numbered line: your exact words, what will satisfy them, how it will be checked, and at the end a pointer to evidence (a test result, a screenshot, a file and line, a source). `bin/brain req check` exits non-zero while any line lacks evidence, and `handover`, `release` and `close` call it.
+- **The requirements ledger.** For any size-2 request, every sentence you wrote becomes a numbered line: your exact words, what will satisfy them, how it will be checked, and at the end a pointer to evidence (a test result, a screenshot, a file and line, a source). `bin/brain req check` exits non-zero while any line lacks evidence; a deliverable is reported as done only when it passes, and `status` and `handover` always show the count.
 - **One sentence kept from Anthropic's guidance**, because it measurably removed invented status reports: before reporting progress, check each claim against a tool result from this session.
 - **Sources.** A factual claim in a research or legal deliverable carries its source. Facts are separated from estimates. Library and service behaviour is looked up in current documentation, not recalled.
 - **Your own facts.** A project keeps one canonical facts file (dates, names, numbers you have stated). Derived files are checked against it by script. Your history shows you correct wrong dates and counts quickly; this stops them recurring.
@@ -620,7 +620,7 @@ Three phases. Phase A is everything that can be built and proven inside one sess
 | CB-010 | Engine core: shared helpers, the `bin/brain` entry point, `doctor` | `bin/brain doctor` exits 0 on a machine with only Python |
 | CB-011 | `detect` and `boot` | All seven modes detected on fixtures; output within 1.5 KB; no network; under 2 seconds |
 | CB-012 | Contract v1: schema, template, `init`, `adopt`, `validate`, `migrate` | `init` twice changes nothing; `adopt` adds only contract files and keeps an existing `CLAUDE.md` intact; a project newer than the brain is not written to |
-| CB-013 | State: `checkpoint`, `status`, `handover`, lease | One state file; `STATUS.md` generated from it; a second session sees the lease |
+| CB-013 | State: `checkpoint`, `status`, `handover` | One state file; `STATUS.md` generated from it; a second session is warned when another checkpointed recently |
 | CB-014 | Requirements ledger: `req add`, `list`, `evidence`, `check` | `check` exits non-zero when a line lacks evidence or a "passes when" |
 | CB-015 | `run`, `gate`, `release` | Full output saved to a file and only failures printed; exit codes recorded; `release` refuses on a red or missing gate and never force-pushes |
 | CB-016 | `budget` and `guard` | Caps enforced; an edit to the learned zone without a manifest entry is rejected |

@@ -1,0 +1,165 @@
+"""Find the project beside the brain and print a short orientation.
+
+``boot`` replaces the start-of-session reading list. An earlier setup spent an
+estimated 35,000-50,000 tokens reading six documents before doing anything;
+this prints about fifteen lines.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+from . import common as c
+from . import state as st_mod
+
+BOOT_LIMIT = 1500  # bytes
+
+
+def classify(path: Path) -> str:
+    if c.is_managed(path):
+        return "managed"
+    if c.is_empty_repo(path):
+        return "empty"
+    return "unmanaged"
+
+
+def detect(brain_root: Path | None = None, named: str | None = None) -> dict:
+    """Decide the working mode from the folders beside the brain."""
+    root = Path(brain_root or c.BRAIN_ROOT)
+    sibs = [(p, classify(p)) for p in c.sibling_dirs(root)]
+    # Only repositories count as candidate projects; stray folders are ignored.
+    sibs = [(p, k) for p, k in sibs if k == "managed" or (p / ".git").exists()]
+    out: dict = {"brain": str(root), "siblings": [{"path": str(p), "kind": k} for p, k in sibs], "project": None}
+    managed = [p for p, k in sibs if k == "managed"]
+    if named:
+        hit = [p for p, _ in sibs if p.name.lower() == named.lower() or named.lower() in p.name.lower()]
+        if len(hit) == 1:
+            sibs = [(hit[0], classify(hit[0]))]
+            managed = [p for p, k in sibs if k == "managed"]
+    if not sibs:
+        out["mode"] = "brain-only"
+        return out
+    if len(managed) > 1:
+        # Most recently checkpointed wins; the caller is told there was a choice.
+        managed.sort(key=lambda p: st_mod.read_state(p).get("updated", ""), reverse=True)
+        out.update(mode="choose", project=str(managed[0]), others=[p.name for p in managed[1:]])
+        return out
+    if len(managed) == 1:
+        proj = managed[0]
+        ver = c.load_manifest(proj).get("contract")
+        out["project"] = str(proj)
+        if isinstance(ver, int) and ver > c.CONTRACT_VERSION:
+            out["mode"] = "stale-brain"
+        elif isinstance(ver, int) and ver < c.CONTRACT_VERSION:
+            out["mode"] = "migrate"
+        else:
+            out["mode"] = "work"
+        return out
+    if len(sibs) == 1:
+        out["project"] = str(sibs[0][0])
+        out["mode"] = "bootstrap" if sibs[0][1] == "empty" else "adopt"
+        return out
+    out["mode"] = "choose"
+    out["others"] = [p.name for p, _ in sibs]
+    return out
+
+
+MODE_HELP = {
+    "brain-only": "no project attached: answer, maintain or learn; to build, attach a project repository",
+    "bootstrap": "empty project: on 'New project: …' run `brain init <path> --family F --title T`",
+    "adopt": "existing codebase without a contract: `brain adopt <path> --survey` first, then `brain adopt <path>`",
+    "migrate": "project is on an older contract: run `brain migrate`",
+    "stale-brain": "project uses a newer contract than this brain: write nothing to .brain/; tell the owner the brain needs updating",
+    "choose": "several projects attached: use the one the owner named",
+    "work": "",
+}
+
+
+def boot_lines(request: str | None = None, brain_root: Path | None = None, named: str | None = None) -> list[str]:
+    root = Path(brain_root or c.BRAIN_ROOT)
+    d = detect(root, named)
+    mode = d["mode"]
+    lines = [f"brain: {root.name} · mode: {mode}" + (f" · {MODE_HELP[mode]}" if MODE_HELP.get(mode) else "")]
+    proj = Path(d["project"]) if d.get("project") else None
+    family = None
+    if proj and mode in ("work", "choose", "migrate") and c.is_managed(proj):
+        m, st = c.load_manifest(proj), st_mod.read_state(proj)
+        family = m.get("family")
+        lines.append(f"project: {proj.name} · {m.get('project', {}).get('title', '')} · family {family} · contract v{m.get('contract')} · stage {st.get('stage') or m.get('stage')}")
+        lines.append(f"item: {st.get('item') or 'none'} · last done: {st.get('last_done') or 'none'}")
+        if st["next_list"]:
+            lines.append("next: " + "; ".join(st["next_list"]))
+        if st.get("blockers") and st["blockers"] != "none":
+            lines.append(f"blockers: {st['blockers']}")
+        if st.get("notes"):
+            lines.append("notes: " + c.clip(st["notes"], 220))
+        rq, needs = st_mod.req_counts(proj), st_mod.open_needs(proj)
+        rel = m.get("release", {}).get("rule", "none")
+        lines.append(f"requirements: {rq['done']}/{rq['total']} done, {rq['open']} open · needs owner: {len(needs)} · release: {rel}")
+        warn = st_mod.lease_warning(st)
+        if warn:
+            lines.append("WARNING: " + warn)
+        if d.get("others"):
+            lines.append("also attached: " + ", ".join(d["others"]) + " (using the most recently active)")
+    elif proj:
+        lines.append(f"project folder: {proj.name}")
+    elif d.get("others"):
+        lines.append("attached: " + ", ".join(d["others"]))
+    models = c.read_json(root / "memory" / "models.json", {}) or {}
+    age = c.days_since(models.get("verified_on", ""))
+    if age > int(models.get("recheck_days", 90)):
+        lines.append(f"note: model facts were verified {age} days ago; re-check memory/models.json before relying on prices or model names")
+    if request:
+        try:
+            from . import route
+            r = route.classify(request, c.load_manifest(proj) if proj and c.is_managed(proj) else None)
+            names = {0: "0 answer", 1: "1 small task", 2: "2 project", 3: "3 programme"}
+            lines.append(f"size: {names.get(r['tier'], r['tier'])} · {r.get('family') or family or '-'} · {r.get('task_class', '-')} · {c.clip(r.get('reason', ''), 90)}")
+            family = family or r.get("family")
+            tier = r["tier"]
+        except Exception:  # routing is optional at boot; never block orientation
+            tier = None
+        if tier != 0:
+            try:
+                from . import recall
+                hits = recall.recall(request, family=family, k=4, budget_tokens=260, project=proj if proj and c.is_managed(proj) else None, brain_root=root)
+                for h in hits:
+                    lines.append(f"recall [{h['id']}] {c.clip(h['text'], 170)}")
+            except Exception:
+                pass
+    # Keep within the byte budget: orientation must stay cheap.
+    out, size = [], 0
+    for l in lines:
+        size += len(l.encode()) + 1
+        if size > BOOT_LIMIT:
+            break
+        out.append(l)
+    return out
+
+
+def cmd_detect(args) -> int:
+    d = detect(named=args.name)
+    if args.json:
+        import json
+        print(json.dumps(d, indent=2))
+    else:
+        print(f"mode: {d['mode']}" + (f" · project: {Path(d['project']).name}" if d.get("project") else ""))
+        for s in d["siblings"]:
+            print(f"  {Path(s['path']).name}: {s['kind']}")
+    return 0
+
+
+def cmd_boot(args) -> int:
+    for l in boot_lines(args.request, named=args.name):
+        print(l)
+    return 0
+
+
+def register(sub) -> None:
+    p = sub.add_parser("detect", help="which project is beside the brain and in what state")
+    p.add_argument("--name", help="project named by the owner, when several are attached")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_detect)
+    p = sub.add_parser("boot", help="short orientation for the start of a session")
+    p.add_argument("request", nargs="?", help="the owner's request, to size it and recall relevant memory")
+    p.add_argument("--name")
+    p.set_defaults(func=cmd_boot)

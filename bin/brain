@@ -16,22 +16,24 @@ MODULES = ["detect", "contract", "state", "req", "gate", "budget", "items", "rec
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="brain", description="Claude Brain engine")
     sub = parser.add_subparsers(dest="command")
-    missing = []
+    broken = []
     for name in MODULES:
+        # One broken module must not take the whole command line down: `boot`
+        # has to work even if, say, the scheduler fails to import.
         try:
-            mod = importlib.import_module(f"engine.{name}")
-        except ModuleNotFoundError as e:
-            if e.name == f"engine.{name}":
-                missing.append(name)
-                continue
-            raise
-        mod.register(sub)
+            importlib.import_module(f"engine.{name}").register(sub)
+        except Exception as e:
+            broken.append(f"{name} ({type(e).__name__}: {str(e)[:60]})")
+    wanted = (argv if argv is not None else sys.argv[1:])[:1]
+    if broken and wanted and any(b.split(" ")[0] in wanted[0] or wanted[0] in ("plan", "close", "learn", "map") for b in broken) and wanted[0] not in sub.choices:
+        print(f"the '{wanted[0]}' command is unavailable: " + "; ".join(broken))
+        return 1
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
         parser.print_help()
-        if missing:
-            print("modules not installed: " + ", ".join(missing))
         return 2
+    if broken and args.command == "doctor":
+        print("modules that failed to load: " + "; ".join(broken))
     try:
         return int(args.func(args) or 0)
     except BrokenPipeError:
