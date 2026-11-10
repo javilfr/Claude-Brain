@@ -137,7 +137,11 @@ class Rehearsal(unittest.TestCase):
         self.assertTrue(list((self.brain / "stats" / "ledger").glob("*.jsonl")))
         self.assertTrue((self.brain / "learning" / "manifest.jsonl").read_text().strip())
         learned = b("learn", "status").stdout
-        self.assertIn("1 candidate", learned)
+        # One more candidate than the real store already holds (it is copied in).
+        import re
+        before = sum(1 for f in (ROOT / "memory").glob("*.jsonl") for l in f.read_text().splitlines()
+                     if l.strip() and json.loads(l).get("status") == "candidate")
+        self.assertIn(f"{before + 1} candidate", learned)
         second = b("learn", "consolidate").stdout
         self.assertEqual((self.brain / "memory" / "items.jsonl").read_text(), items, "consolidating twice must change nothing")
         b("learn", "digest")

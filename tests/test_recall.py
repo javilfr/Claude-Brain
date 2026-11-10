@@ -265,7 +265,9 @@ class GoldenRegressionTest(unittest.TestCase):
 
     def setUp(self):
         self.queries = c.read_jsonl(GOLDEN)
-        self.pool = it.load_items(ROOT)
+        # The pool recall really draws from: candidates wait for promotion and
+        # are never recalled (recall.recall, include_candidates=False).
+        self.pool = [i for i in it.load_items(ROOT) if i.get("status") != "candidate"]
         self.env = mock.patch.dict(os.environ, {"BRAIN_NOW": "2026-11-10T12:00:00Z"})
         self.env.start()
 
