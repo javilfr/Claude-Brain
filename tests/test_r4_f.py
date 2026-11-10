@@ -414,6 +414,19 @@ class ForgettingTest(BrainCase):
         self.assertIsNone(delta)
         self.assertTrue(any(l.startswith("stale fact fact-price") for l in lines), lines)
 
+    def test_decay_names_many_stale_facts_in_one_line(self):
+        """Output economy: twelve overdue facts are one line, not twelve."""
+        c.write_jsonl(self.root / "memory/facts.jsonl", [item(
+            f"fact-number-{i:02d}", f"Fact number {i} about a price", type="fact", trust="derived", provenance="docs/x.md",
+            source="docs/x.md", verified_on="2026-01-01", recheck_days=30) for i in range(12)])
+        code, out = run_cmd(learn.cmd_decay, self.root)
+        self.assertEqual(code, 0, out)
+        lines = out.strip().splitlines()
+        self.assertEqual(len(lines), 2, out)
+        self.assertIn("12 stale facts", lines[0])
+        self.assertIn("fact-number-00", lines[0])
+        self.assertIn("brain learn reverify", lines[0])
+
     def test_demotions_are_capped_per_run_least_retained_first(self):
         rows = [lesson(f"lsn-old-{i:02d}", created="2026-01-01", last_used=f"2026-02-{i + 1:02d}") for i in range(20)]
         c.write_jsonl(self.root / "memory/items.jsonl", rows)

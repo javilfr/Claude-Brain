@@ -2526,8 +2526,14 @@ def cmd_apply(args) -> int:
 def cmd_decay(args) -> int:
     root = _root(args)
     delta, lines = build_decay(root)
-    for s in lines[:8]:
-        print(s)
+    stale = [l.split(":", 1)[0][len("stale fact "):] for l in lines if l.startswith("stale fact ")]
+    if len(stale) > 1:  # one line however many are due
+        more = f" and {len(stale) - 6} more" if len(stale) > 6 else ""
+        print(f"{len(stale)} stale facts, re-check each at its source, then brain learn reverify <id> --source <url>: "
+              f"{', '.join(stale[:6])}{more}")
+        lines = [l for l in lines if not l.startswith("stale fact ")]
+    for line in lines[:4]:
+        print(line)
     if delta is None:
         print("decay: nothing to demote or retire")
         return 0
