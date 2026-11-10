@@ -91,7 +91,8 @@ OWNER_EV_RE = re.compile(r"^owner:turn@[0-9A-Za-z:.+-]{1,40}#[0-9a-f]{12}$")
 MIN_QUOTE = 12
 # Turns that look typed but were injected by the harness or another agent.
 NOT_OWNER_MARKERS = ("[SYSTEM NOTIFICATION", "Another Claude session sent a message", "Stop hook feedback",
-                     "[Subagent hand-back]", "<task-notification>", "<system-reminder")
+                     "[Subagent hand-back]", "<task-notification>", "<system-reminder",
+                     "This session is being continued from a previous conversation")
 # Row flags the client sets on text the owner did not type: injected context,
 # helper conversations, and the summary a compaction writes in his voice.
 NOT_TYPED_FLAGS = ("isMeta", "isSidechain", "isCompactSummary", "isVisibleInTranscriptOnly")
@@ -1760,7 +1761,7 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2,
         except Exception as e:  # one record must never stop the consolidation of the rest
             rejected.append(f"{label}: could not be processed ({type(e).__name__}: {c.clip(str(e), 60)})")
     if twice:
-        rejected.append(f"{twice} record(s) were delivered twice and counted once")
+        rejected.append(f"{twice} record(s) delivered twice, counted once")
     for f in files:
         # A file is handled only when every valid record in it was processed;
         # its unreadable lines are reported (inbox_unreadable), never silently dropped.
