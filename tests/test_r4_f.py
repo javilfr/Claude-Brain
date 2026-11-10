@@ -3,10 +3,14 @@ audit, each written to fail on the code as it was. Every test works on a
 temporary brain built in the test; none reads the brain's live learned state
 (redteam-09)."""
 import argparse
+import datetime as dt
 import io
 import json
 import os
+import shutil
 import subprocess
+import tempfile
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -16,6 +20,7 @@ from engine import items as I
 from engine import learn
 from engine import recall
 from tests.test_learn import NOW, OWNER_EV, BrainCase, NoteCommandCase, item, note, outcome, used
+from tests.test_rehearsal import FROZEN_MEMORY, SHIPPED_IDS, freeze_memory, frozen_brain
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -147,6 +152,26 @@ class OwnerProofTest(NoteCommandCase):
         log = (self.root / learn.CHANGELOG).read_text()
         self.assertIn("recorded as the owner's words", log)
         self.assertIn("Reply in Spanish when the owner writes in Spanish", log)
+
+    def test_his_new_words_against_his_standing_instruction_wait_for_him(self):
+        """learning-01: a note that contradicts what he already stated is not
+        settled by a script, even with a verified quote; his item is untouched."""
+        c.write_jsonl(self.root / "owner/standing.jsonl", [item(
+            "own-reply-spanish", "Always reply in Spanish when the owner writes in Spanish", type="standing",
+            trust="owner-stated", importance=3)])
+        before = (self.root / "owner/standing.jsonl").read_text()
+        code, out = self.note("Never reply in Spanish when the owner writes in Spanish",
+                              quote="always reply in Spanish when I write", trust="owner-stated")
+        self.assertEqual(code, 0, out)
+        self.consolidate()
+        (row,) = self.items().values()
+        self.assertEqual((row["status"], row.get("awaiting_owner"), row["conflicts"]), ("candidate", True, ["own-reply-spanish"]))
+        self.assertEqual((self.root / "owner/standing.jsonl").read_text(), before)
+        code, out = self.cmd(learn.cmd_confirm, id=row["id"], quote="always reply in Spanish when I write")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.items()[row["id"]]["status"], "active")
+        self.assertEqual(self.items("owner/standing.jsonl")["own-reply-spanish"]["status"], "demoted")
+        self.assertIn("own-reply-spanish", out)
 
     def test_confirm_needs_his_words_and_activates(self):
         os.environ["BRAIN_TRANSCRIPT"] = str(self.work / "gone.jsonl")
@@ -486,6 +511,19 @@ class LoopTest(NoteCommandCase):
         self.consolidate()
         row = self.items()["lsn-migrations"]
         self.assertEqual((row["helpful"], row["status"]), (1, "probation"))
+
+    def test_a_candidate_is_not_activated_in_one_consolidation(self):
+        """learning-04 (the learn.py side): one status move per consolidation,
+        so probation is never skipped."""
+        c.write_jsonl(self.root / "memory/items.jsonl", [lesson("lsn-migrations", MIGRATIONS, status="candidate",
+                                                                evidence=["gate:checks", "session:s1"], sessions=1)])
+        self.inbox(outcome("s2"), used("s2", "lsn-migrations", shown=True))
+        self.consolidate()
+        row = self.items()["lsn-migrations"]
+        self.assertEqual((row["sessions"], row["status"]), (2, "probation"))
+        self.inbox(outcome("s3"))
+        self.consolidate()
+        self.assertEqual(self.items()["lsn-migrations"]["status"], "active")
 
     def test_used_records_are_marked_with_what_the_injection_log_shows(self):
         proj = self.make_project()
@@ -897,6 +935,141 @@ class OwnerDigestTest(NoteCommandCase):
         text = learn.build_digest(self.root)[1]
         self.assertIn("What I now treat as your instruction: nothing new", text)
         self.assertIn("What I stopped using: nothing", text)
+
+
+# ---------------------------------------------------------------- the suite and the brain's own state
+class FrozenRehearsalTest(unittest.TestCase):
+    """redteam-09: the rehearsal builds its brain from a frozen memory, so the
+    suite does not go red when the real brain learns, decays or forgets."""
+
+    def test_the_rehearsal_brain_ignores_what_the_real_brain_learned(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        used_brain = tmp / "used"
+        learned_row = item("lsn-real-lesson", "Run the fast check twice before a release", status="candidate")
+        for rel, rows in {"memory/items.jsonl": [learned_row, item("rule-demoted-since", status="demoted")],
+                          "memory/archive.jsonl": [item("rule-retired-since", status="retired")],
+                          "playbooks/data.jsonl": [item("data-one-script", type="playbook", scope="family:data")],
+                          "learning/inbox/2026-11-10-s1.jsonl": [note("Pin the toolchain")],
+                          "learning/manifest.jsonl": [{"id": "d-1"}], "stats/ledger/2026-11.jsonl": [{"id": "x"}]}.items():
+            c.write_jsonl(used_brain / rel, rows)
+        (used_brain / "playbooks" / "data.md").write_text("# Data\n")
+        (used_brain / "stats" / "ml.json").write_text("{}\n")
+        (used_brain / "memory" / "models.json").write_text("{}\n")
+        brain = frozen_brain(tmp / "copy", used_brain)
+        ids = sorted(r["id"] for r in I.load_items(brain, include_inactive=True))
+        self.assertEqual(ids, SHIPPED_IDS)
+        self.assertEqual(I.check_files(I.brain_item_files(brain)), [])
+        self.assertTrue((brain / "memory" / "models.json").is_file(), "kernel files are kept")
+        for gone in ("learning/inbox", "learning/manifest.jsonl", "stats", "memory/archive.jsonl", "playbooks/data.jsonl",
+                     "playbooks/data.md"):
+            self.assertFalse((brain / gone).exists(), gone)
+        self.assertIn("sw-test-integrity", (brain / "playbooks" / "software.md").read_text())
+
+
+class SoakTest(BrainCase):
+    """redteam-16: a year of use in a few seconds. Sixty sessions over 354
+    days, each followed by a consolidation and a decay, with the real
+    statistics and forgetting curve. No shipped item is lost without an
+    owner action, no consolidation is refused, and memory stays in budget."""
+
+    SESSIONS = 60
+    EVERY_DAYS = 6
+    LESSONS = [
+        "Pin the toolchain version in the lockfile before a release",
+        "Screenshot phone layouts at 390 pixels before review",
+        "Back-translate Spanish editions with a fresh reader",
+        "Recompute headline totals a second way after every rerun",
+        "Keep build logs out of the conversation and read only failures",
+        "Write handover notes before long harvests start",
+        "Quote statute articles with their dates in legal memos",
+        "Cache dependency downloads between pipeline stages",
+        "Rotate staging credentials after each demo",
+        "Label chart axes with units in every dashboard",
+        "Split database migrations into reversible steps",
+        "Archive raw survey responses before cleaning them",
+        "Throttle crawler requests to respect rate limits",
+        "Review accessibility contrast on dark themes",
+        "Document rollback commands beside each deployment",
+        "Sample large datasets first to estimate the full runtime",
+        "Freeze the schema while two editors translate",
+        "Benchmark cold starts separately from warm requests",
+        "Tag known-good builds so reverting takes one step",
+        "Summarise interview transcripts into numbered findings",
+    ]
+
+    def test_sixty_sessions_with_weekly_consolidate_and_decay(self):
+        began = time.monotonic()
+        learn.MLEARN = None
+        for kernel in ("memory/ml_config.json", "memory/models.json"):
+            shutil.copy(ROOT / kernel, self.root / kernel)
+        freeze_memory(self.root)
+        (self.root / "learning" / "inbox").mkdir(parents=True)
+        (self.root / "stats" / "ledger").mkdir(parents=True)
+        start = dt.datetime(2026, 11, 10, 10, 0, tzinfo=dt.timezone.utc)
+        learned_ids: list[str] = []
+        refusals, stale_seen = [], False
+        for i in range(self.SESSIONS):
+            now = start + dt.timedelta(days=self.EVERY_DAYS * i)
+            stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            os.environ["BRAIN_NOW"] = stamp
+            sid = f"soak-{i:02d}"
+            passed = i % 5 != 0
+            recs = [{"kind": "ledger", "session": sid, "at": stamp, "task_class": "software.feature", "model": "opus",
+                     "models": {"claude-opus-5-5": {"in": 1000, "cache_write": 100, "cache_read": 9000, "out": 500}}},
+                    outcome(sid, cls="software.feature", passed=passed, at=stamp, model="opus", risk="standard", tier=2)]
+            # Recall shows two shipped items a session; the lead follows them.
+            for k in (i, i + 3):
+                recs.append(used(sid, SHIPPED_IDS[k % len(SHIPPED_IDS)], at=stamp, shown=True))
+            if i % 3 == 0:  # a new lesson
+                recs.append(note(self.LESSONS[i // 3], session=sid, at=stamp))
+            if i % 6 == 4 and learned_ids:  # an earlier lesson met again, in other words
+                recs.append(note(f"Do what number {i} taught again", session=sid, at=stamp, confirms=learned_ids[-1]))
+            if i % 4 == 1 and learned_ids:  # a lesson that was shown and followed
+                recs.append(used(sid, learned_ids[i % len(learned_ids)], at=stamp, shown=True))
+            if i % 10 == 9:
+                recs.append({"kind": "note", "session": sid, "at": stamp, "text": "Run the gate", "evidence": 5})
+            if i == 20:
+                recs.append(forged(session=sid))
+            self.inbox(*recs, name=f"{stamp[:10]}-{sid}.jsonl")
+            if i % 7 == 6:  # the same file delivered a second time
+                self.inbox(*[learn.with_id(r) for r in recs if isinstance(r.get("evidence", []), list)],
+                           name=f"{stamp[:10]}-{sid}-again.jsonl")
+            delta, rejected = learn.build_consolidation(self.root)
+            ok, lines = learn.apply_delta(delta, self.root)
+            if not ok:
+                refusals.append((i, lines[0]))
+            learned_ids = [r["id"] for r in c.read_jsonl(self.root / "memory/items.jsonl")
+                           if str(r.get("provenance", "")).startswith("note:") and r.get("status") != "demoted"
+                           and not r.get("awaiting_owner")]
+            delta, lines = learn.build_decay(self.root)
+            stale_seen = stale_seen or any(l.startswith("stale fact fact-cache-hour") for l in lines)
+            if delta is not None:
+                ok, lines = learn.apply_delta(delta, self.root)
+                if not ok:
+                    refusals.append((i, lines[0]))
+        self.assertEqual(refusals, [], "no consolidation or decay is refused")
+        rows = {r["id"]: r for r in I.load_items(self.root, include_inactive=True)}
+        lost = [i for i in SHIPPED_IDS if rows.get(i, {}).get("status") != "active"]
+        self.assertEqual(lost, [], "shipped knowledge is never lost without an owner action")
+        self.assertEqual(rows["own-main-green"].get("harmful", 0), 0)
+        self.assertTrue(stale_seen, "an overdue fact is reported, not demoted")
+        mine = [r for r in rows.values() if r["id"] not in SHIPPED_IDS]
+        archived = c.read_jsonl(self.root / learn.ARCHIVE)
+        self.assertTrue(any(r["status"] in ("probation", "active") for r in mine), "a confirmed lesson moves up")
+        self.assertTrue(any(r["status"] == "demoted" for r in mine) or archived, "an unused lesson fades")
+        self.assertFalse(any(r.get("trust") == "owner-stated" for r in mine), "the forged line never became his rule")
+        claims = [r for r in mine + archived if FORGED_TEXT in r["text"]]
+        self.assertEqual([(r["trust"], r["status"] in ("candidate", "demoted", "retired")) for r in claims], [("observed", True)])
+        self.assertEqual(len(mine) + len(archived), len(self.LESSONS) + 1, "every lesson noted is on file once")
+        self.assertEqual(I.check_files(I.brain_item_files(self.root)), [])
+        for path in I.brain_item_files(self.root):
+            self.assertLessEqual(len(c.read_jsonl(path)), learn.DEFAULT_BUDGET)
+            self.assertLess(max(len(l) for l in path.read_text().splitlines()), 3000, f"{path.name}: a row grew without bound")
+        self.assertLess((self.root / learn.ML_STATE).stat().st_size, 200_000)
+        self.assertEqual(len(c.read_jsonl(self.root / "stats/ledger/2026-11.jsonl")), 4, "one ledger row per session")
+        self.assertEqual(learn.pending_inbox(self.root), [])
+        self.assertLess(time.monotonic() - began, 5.0, "the soak must stay cheap enough for the normal suite")
 
 
 if __name__ == "__main__":

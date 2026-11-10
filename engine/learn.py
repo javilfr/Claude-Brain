@@ -883,16 +883,16 @@ class Workspace:
             return f"INC_HARMFUL: {hit} is the owner's; harm votes never lower what he said (I-08)" if hit else ""
         if auth:
             return ""
-        if kind in ("EDIT_TEXT", "MOVE_SCOPE", "SET_STATUS", "RESTORE"):
+        if kind == "RESTORE":
+            rel, row = self.find(str(op.get("id", "")))
+            if row is None:
+                row = self.archived(str(op.get("id", "")))
+                rel = (row or {}).get("retired_from")
+            if row is not None and (owner_level(rel, row) or row.get("corrected")):
+                return (f"RESTORE: {row.get('id')} is the owner's, or he withdrew it; bringing it back needs his words: "
+                        "add --quote \"<his words>\"")
+        if kind in ("EDIT_TEXT", "MOVE_SCOPE", "SET_STATUS"):
             hit = owned(op.get("id"))
-            if not hit and kind == "RESTORE":
-                rel, row = self.find(str(op.get("id", "")))
-                if row is None:
-                    row = self.archived(str(op.get("id", "")))
-                    rel = (row or {}).get("retired_from")
-                if row is not None and (owner_level(rel, row) or row.get("corrected")):
-                    return (f"RESTORE: {row.get('id')} was the owner's, or he withdrew it; bringing it back needs "
-                            "his words: brain learn restore <id> --reason \"<why>\" --quote \"<his words>\"")
             if hit:
                 return f"{kind}: {hit} {theirs}"
         if kind in ("LINK", "UNLINK"):
@@ -1843,8 +1843,10 @@ def _parse(at: str) -> _dt.datetime | None:
 
 
 def awaiting_owner(brain_root: Path | None = None) -> list[dict]:
-    """Items that claim the owner's words and wait for his yes or no."""
-    return [row for _rel, row in Workspace(Path(brain_root or c.BRAIN_ROOT)).all_items() if row.get("awaiting_owner")]
+    """Items that claim the owner's words and wait for his yes or no. A claim
+    nobody answered fades like any unused lesson and is then no longer asked."""
+    return [row for _rel, row in Workspace(Path(brain_root or c.BRAIN_ROOT)).all_items()
+            if row.get("awaiting_owner") and row.get("status", "active") == "candidate"]
 
 
 def build_digest(brain_root: Path | None = None, weeks: int = 1) -> tuple[str, str]:
@@ -1874,11 +1876,11 @@ def build_digest(brain_root: Path | None = None, weeks: int = 1) -> tuple[str, s
                 if it.get("trust") == "owner-stated":
                     his.append(str(it.get("id")))
                 elif not it.get("awaiting_owner"):
-                    learned_lines.append(f"{it.get('id')}: {c.clip(str(it.get('text', '')), 80)}")
+                    learned_lines.append((str(it.get("id")), f"{it.get('id')}: {c.clip(str(it.get('text', '')), 80)}"))
             elif kind == "OWNER_CONFIRM":
                 his.append(iid)
             elif kind == "SET_STATUS" and op.get("status") == "active":
-                learned_lines.append(f"{iid} is now active")
+                learned_lines.append((iid, f"{iid} is now active"))
             elif kind == "SET_STATUS" and op.get("status") in ("retired", "demoted"):
                 stopped.append(iid)
             elif kind == "SUPERSEDE":
@@ -1901,9 +1903,10 @@ def build_digest(brain_root: Path | None = None, weeks: int = 1) -> tuple[str, s
         return list(dict.fromkeys(i for i in ids if i))
 
     his = [i for i in uniq(his) if in_use(i) and (ws.find(i)[1] or {}).get("trust") == "owner-stated"]
-    stopped = [i for i in uniq(stopped) if not in_use(i)]
+    stopped = [i for i in uniq(stopped) if not in_use(i) and not (ws.find(i)[1] or ws.archived(i) or {}).get("awaiting_owner")]
     waiting = [str(r.get("id")) for r in awaiting_owner(root)]
     question = [i for i in uniq(question) if in_use(i)]
+    learned_lines = [line for iid, line in learned_lines if in_use(iid)]
 
     now_t: dict[str, list[int]] = {}
     old_t: dict[str, list[int]] = {}
@@ -2179,7 +2182,15 @@ def cmd_note(args) -> int:
               "in .brain/memory/lessons.jsonl")
         return 0
     path = _writable_session_file(root, rec["session"])
-    c.append_jsonl(path, with_id(rec))
+    rec = with_id(rec)
+    # The same text noted again in this session replaces the earlier note
+    # (same record id), so "note, see what is close, note again with
+    # --confirms" leaves one record, not a near-duplicate lesson.
+    earlier = c.read_jsonl(path)
+    if any(r.get("id") == rec["id"] for r in earlier):
+        c.write_jsonl(path, [r for r in earlier if r.get("id") != rec["id"]] + [rec])
+    else:
+        c.append_jsonl(path, rec)
     fact = rec["trust"] == "external"
     if rec.get("confirms"):
         print(f"note recorded ({path.name}): it counts for {rec['confirms']} at the next consolidation")
@@ -2190,7 +2201,13 @@ def cmd_note(args) -> int:
     if hit is not None:
         print(f"note recorded ({path.name}): it restates {hit['id']} and counts for it at the next consolidation")
         return 0
-    print(f"note recorded ({path.name}): it becomes {note_item(rec, c.today())['id']} (a candidate) at the next consolidation")
+    future = note_item(rec, c.today())["id"]
+    if rec["trust"] == "owner-stated":
+        print(f"note recorded ({path.name}): it becomes {future}, his instruction if consolidated in this session; "
+              "later it waits for his yes (brain learn confirm)")
+    else:
+        pit = f"; pit-{future.split('-', 1)[1]} if its gate went red then green" if rec.get("signal") == "gate-failed" else ""
+        print(f"note recorded ({path.name}): it becomes {future} (a candidate{pit}) at the next consolidation")
     for _sim, _rel, row in near:
         print(f"close to {row['id']} ({row.get('status', 'active')}): {c.clip(str(row.get('text', '')), 100)}")
     if near:
@@ -2457,7 +2474,7 @@ def status_lines(brain_root: Path | None = None) -> list[str]:
         counts[it["status"]] = counts.get(it["status"], 0) + 1
         conflicts += bool(_live(row, day) and ws.live_conflicts(row, day))
         live_ids.add(it["id"])
-        if it.get("awaiting_owner"):
+        if it.get("awaiting_owner") and it["status"] == "candidate":
             waiting.append(it["id"])
     archived = len({r.get("id") for r in c.read_jsonl(root / ARCHIVE)} - live_ids)
     pend = pending_inbox(root)
