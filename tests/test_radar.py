@@ -626,5 +626,24 @@ class Live(unittest.TestCase):
             self.assertLess(again["seconds"], 20)
 
 
+
+class ExitTime(unittest.TestCase):
+    def test_a_slow_source_never_holds_the_process_open(self):
+        """Review M15, measured: with a thread pool the process exited 6.1 s after a 1 s budget."""
+        import subprocess
+        import sys
+        import time
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "memory").mkdir()
+            (Path(tmp) / "memory" / "radar_sources.json").write_text((root / "memory" / "radar_sources.json").read_text())
+            code = ("import sys,time; sys.path.insert(0, %r)\nfrom engine import radar\n"
+                    "def slow(*a, **k): time.sleep(8); raise OSError('slow')\n"
+                    "radar.run(%r, force=True, max_seconds=0.5, fetch=slow)\n") % (str(root), tmp)
+            t0 = time.monotonic()
+            subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
+            self.assertLess(time.monotonic() - t0, 4.0)
+
+
 if __name__ == "__main__":
     unittest.main()

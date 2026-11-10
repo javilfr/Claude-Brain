@@ -466,6 +466,31 @@ def run(brain_root: Path | str | None = None, force: bool = False, max_lines: in
     return result
 
 
+def _start_daemon_checks(due: list[dict], state: dict, fetch: Fetch, allow: frozenset, stamp: str,
+                         timeout: float) -> dict[str, cf.Future]:
+    """Run the checks on daemon threads, at most WORKERS at a time. A thread
+    pool is joined when the interpreter exits, so one slow source held `boot`
+    open for its full request timeout after the radar had given up (review
+    M15: measured 6.1 s to exit for a 1 s budget). Daemon threads are not."""
+    import threading
+    futs = {s["id"]: cf.Future() for s in due}
+    gate = threading.Semaphore(WORKERS)
+
+    def work(s: dict) -> None:
+        fut = futs[s["id"]]
+        with gate:
+            if not fut.set_running_or_notify_cancel():
+                return
+            try:
+                fut.set_result(_check(s, state.get(s["id"], {}), fetch, allow, stamp, timeout))
+            except BaseException as e:  # reported as "failed" by the caller
+                fut.set_exception(e)
+
+    for s in due:
+        threading.Thread(target=work, args=(s,), daemon=True, name=f"radar-{s['id']}").start()
+    return futs
+
+
 def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str | None,
          fetch: Fetch, when: dt.datetime, t0: float, result: dict) -> None:
     cfg = c.read_json(root / SOURCES_FILE, None)
@@ -492,10 +517,8 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     if not due:
         return
 
-    ex = cf.ThreadPoolExecutor(max_workers=WORKERS)
-    futs = {s["id"]: ex.submit(_check, s, state.get(s["id"], {}), fetch, allow, stamp, timeout) for s in due}
+    futs = _start_daemon_checks(due, state, fetch, allow, stamp, timeout)
     cf.wait(list(futs.values()), timeout=max(0.0, max_seconds - (time.monotonic() - t0)))
-    ex.shutdown(wait=False, cancel_futures=True)
 
     candidates: list[tuple[int, dict, int]] = []
     leads: list[dict] = []  # every relevant new item; max_lines caps only what is printed

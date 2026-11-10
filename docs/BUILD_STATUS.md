@@ -182,3 +182,15 @@ Fixed (renderer changes reach every template; each has a test in `tests/test_hr.
 All 100 templates render a brief at most 403 words with no lint problem; `brain hr audit`: rack is sound.
 
 Left, with reasons: about 56 method lines in 48 templates state no reason (the reviewer's regex counts 74). Rewriting them is polish of unknown value until CB-203 shows whether a template beats a plain brief at all. The near-duplicate pairs (legal-citation-verifier / legal-research-analyst; api-integration-builder / api-live-prober) wait for selection data from CB-204. The research pass on the five thinly sourced data templates moved to CB-207. Owner pronouns in five templates are left as the owner's own files use them.
+
+### CB-204 Selection: baseline on a new held-out set (recorded before any change)
+
+`evals/hr_golden_2.jsonl`: 100 requests written by a cold writer helper (hire `h-20261110-a6278d`, settled 22,989 of 60,000, check passed) from template names and `when` lines only, without opening `engine/` or `hr/rack/`; 34 in Spanish, typos in English rows, 100 templates covered, 4 rows with two labels.
+
+| Set | Top 1 | Top 3 |
+|---|---|---|
+| dev (tuned on) | 100 | 100 |
+| old held-out | 78 | 86 |
+| **new held-out (heldout2), before any change** | **37** | **47** |
+
+The old held-out figure overstated real accuracy: its requests were written alongside the keywords. The honest starting point is about one request in two finding its template in the top three.

@@ -66,6 +66,15 @@ class RepoMapTest(unittest.TestCase):
         paths = [f["path"] for f in self.build()["files"]]
         self.assertEqual(paths, ["main.py"])
 
+    def test_run_logs_and_git_ignored_files_are_not_mapped(self):
+        """Review M8: the map listed `.brain/log/run/*.log` and generated files."""
+        import subprocess
+        tree(self.root, {"app.py": "print(1)\n", ".gitignore": "gen/\n", "gen/out.py": "x = 1\n",
+                         ".brain/log/run/1.log": "noise\n", "notes.md": "# n\n"})
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        paths = [f["path"] for f in rm.build_map(self.root, self.cache)["files"]]
+        self.assertEqual(sorted(paths), [".gitignore", "app.py", "notes.md"])
+
     def test_cache_hit_and_invalidation(self):
         tree(self.root, {"a.py": "def f():\n    pass\n"})
         first = self.build()

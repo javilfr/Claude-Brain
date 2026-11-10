@@ -442,6 +442,9 @@ class GateTests(Base):
         self.assertGreater(len(Path(r["log"]).read_text().splitlines()), 500)
         ok = gate.run_filtered("seq 1 200", p, p)
         self.assertEqual((ok["exit"], len(ok["shown"])), (0, 3))
+        # M6: the streams keep their real order, so a success never ends on an earlier stderr line
+        mixed = gate.run_filtered("echo 'FAILED (failures=1)' >&2; echo a; echo b; echo all-good", p, p)
+        self.assertEqual(mixed["shown"], ["a", "b", "all-good"])
 
     def test_release_refuses_without_a_green_gate_on_this_commit(self):
         p = self.project()
