@@ -228,3 +228,25 @@ Left, with reasons:
 - **Forged inbox records** and **M17** (`close --has-check`, `--outcome`, `--explored` are declared by the model): anyone who can push to the brain can write any record, so no file-level signature with a key in the repository would help. The defence is in the pipeline: two-key promotion, the multiplier clamp (±30%), hire outcomes that come only from a check `settle` ran itself, and git history for audit. Accepted risk, stated here.
 - **A use for the scout tier**: no template needs a read-only agent without shell that the lead would not do faster itself; four read-only templates run on the reviewer agent at the cheaper tier. Revisit when `hr report` shows reading-only hires.
 - The M6, M8 and M15 changes went into commit `d815627` (labelled CB-204) because a broad `git add` took them along; their tests passed in that commit's gate.
+
+### CB-203 A/A run, then template brief against plain brief
+
+Pre-registered before the first trial (`evals/prereg/cb203-aa.json`, `cb203-template-vs-plain.json`, commit `96ad581`): metric settled output-equivalent tokens, lower is better, pass rate as the guard; the 8 dev tasks; templates fixed in advance by the lead so selection was not under test; both arms on the same base agent and default model; a clean folder per trial; arms interleaved; helpers told not to open the brain. Held-out tasks untouched. 24 trials, all through `brain hr hire` and `brain hr settle`; graded by `brain eval grade`; recorded in `evals/runs/cb203.jsonl`.
+
+| Task | plain P1 | plain P2 | template T |
+|---|---|---|---|
+| data-csv-total (exploratory-analyst) | 2,314 | 2,405 | 4,999 |
+| know-memo-facts (canonical-facts-keeper) | 2,416 | 2,450 | 4,940 |
+| lang-es-glossary (es-en-translator) | 2,490 | 2,863 | 5,621 |
+| ops-idempotent-dirs (cli-script-builder) | 2,426 | 2,357 | 5,883 |
+| route-question (requirements-extractor) | 1,841 | 3,140 | 2,124 |
+| route-small-edit (requirements-extractor) | 1,949 | 1,979 | 2,805 |
+| sw-add-slugify (cli-script-builder) | 2,571 | 2,585 | 2,950 |
+| sw-fix-median (bug-reproducer) | 3,798 | 2,255 | 3,103 |
+| **median / passes** | **2,421 / 8 of 8** | **2,428 / 8 of 8** | **4,022 / 8 of 8** |
+
+**Verdict, template vs plain (n = 8): revert.** 7 of 8 tasks cost more with the template, median +66%; P(template worse) 0.98; the same against either plain arm. Pass rate was 8 of 8 in every arm, so on tasks this small the templates bought nothing the grader measures. What they did buy, seen in the reports and not graded: the data template flagged a mis-capitalised region the plain arms only mentioned in passing; the translator template chose es-ES consistently where the plain arms picked "tú" or "usted". What they cost besides tokens: two template helpers wrote outside their folder (a test copy, a shared tools script), and the CLI template added flags and a self-test nobody asked for.
+
+**The A/A run found a flaw in the brain's statistics.** Two identical plain arms, 1% apart in total tokens, got a decisive "revert" (2 wins, 6 losses), because any token difference counted as a win or loss. Fixed: for cost metrics a relative gap under `decision.tie_band` (default 0.10, from this run's median per-task gap of 3.5%) is a tie (`tests/test_evals.py` `TieBand`). **Re-analysed with the band (post hoc, said so): A/A becomes not proven (1 win, 2 losses, 5 ties); template vs plain stays revert (1 win, 7 losses).** New pre-registrations carry the band explicitly.
+
+What follows for use: on small, well-specified tasks a plain brief is the default; a template is worth its tokens only where its method changes the outcome, which these tasks could not show. The next comparison needs harder tasks whose grader can fail (CB-209 lists it as open). Also fixed from the trials, with a test: shell-less plain helpers were told "change nothing" against a task whose output is a file (`READ_ONLY_SCOPE`); `hr hire --template plain` gives the control arm.

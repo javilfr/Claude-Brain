@@ -16,3 +16,9 @@
 {"arm": "T", "at": "2026-11-10T20:13:19Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-question", "tokens": 2124, "trial": 1}
 {"arm": "P1", "at": "2026-11-10T20:13:20Z", "infra_error": false, "minutes": null, "passed": 1, "task": "data-csv-total", "tokens": 2314, "trial": 1}
 {"arm": "P2", "at": "2026-11-10T20:13:26Z", "infra_error": false, "minutes": null, "passed": 1, "task": "lang-es-glossary", "tokens": 2863, "trial": 1}
+{"arm": "P1", "at": "2026-11-10T20:13:55Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-small-edit", "tokens": 1949, "trial": 1}
+{"arm": "P2", "at": "2026-11-10T20:13:55Z", "infra_error": false, "minutes": null, "passed": 1, "task": "sw-add-slugify", "tokens": 2585, "trial": 1}
+{"arm": "P2", "at": "2026-11-10T20:13:56Z", "infra_error": false, "minutes": null, "passed": 1, "task": "ops-idempotent-dirs", "tokens": 2357, "trial": 1}
+{"arm": "P1", "at": "2026-11-10T20:14:06Z", "infra_error": false, "minutes": null, "passed": 1, "task": "know-memo-facts", "tokens": 2416, "trial": 1}
+{"arm": "P2", "at": "2026-11-10T20:14:24Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-small-edit", "tokens": 1979, "trial": 1}
+{"arm": "P2", "at": "2026-11-10T20:14:52Z", "infra_error": false, "minutes": null, "passed": 1, "task": "sw-fix-median", "tokens": 2255, "trial": 1}

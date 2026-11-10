@@ -80,6 +80,21 @@ def prereg(**kw):
     return base
 
 
+
+class TieBand(unittest.TestCase):
+    def test_noise_on_a_cost_metric_is_a_tie_not_a_verdict(self):
+        """CB-203's A/A run: identical arms 1% apart in total gave 'revert' with no tie band."""
+        aa = [(2314, 2405), (2416, 2450), (2490, 2863), (2426, 2357), (1841, 3140), (1949, 1979), (2571, 2585), (3798, 2255)]
+        pairs = [{"task": f"t{i}", "pass_a": 1, "pass_b": 1, "tokens_a": a, "tokens_b": b} for i, (a, b) in enumerate(aa)]
+        pre = {"metric": "tokens", "direction": "down", "min_pairs": 8}
+        v = E.verdict(pairs, pre)
+        self.assertEqual(v["decision"], "not-proven", v)
+        self.assertEqual((v["wins"], v["losses"]), (1, 2))
+        none = E.verdict(pairs, dict(pre, decision={"tie_band": 0}))
+        self.assertEqual(none["decision"], "revert")  # the old behaviour, kept reachable on purpose
+        big = [{"task": f"t{i}", "pass_a": 1, "pass_b": 1, "tokens_a": 2000, "tokens_b": 4000} for i in range(8)]
+        self.assertEqual(E.verdict(big, pre)["decision"], "revert")  # a real cost still shows
+
 class SignTest(unittest.TestCase):
     def test_matches_direct_binomial_sums(self):
         for m in range(0, 31):

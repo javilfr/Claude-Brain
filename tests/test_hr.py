@@ -474,6 +474,11 @@ class ReviewFindings(Base):
                                       "researcher", "Do it.", "", [], [], "", "opus", "high", "n")
         self.assertNotIn(hr.NO_WEB, researcher)
 
+    def test_read_only_scope_still_allows_the_requested_output(self):
+        text = hr.compose_brief(None, "researcher", "Write route.json with the tier.", "", [], [], "", "sonnet", "medium", "n")
+        self.assertIn(hr.READ_ONLY_SCOPE, text)
+        self.assertNotIn("change nothing.", text)
+
     def test_findings_are_graded_and_reviewers_get_the_outside_content_line(self):
         plain = hr.compose_brief(tpl("y"), "reviewer", "Review it.", "", [], [], "", "opus", "high", "n")
         self.assertIn(hr.FINDING_GRADES, plain)

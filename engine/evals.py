@@ -37,7 +37,11 @@ from . import common as c
 MIN_PAIRS = 8  # I-16: below this no claim is made in either direction.
 FAMILIES = ("software", "data", "knowledge", "language", "operations", "routing")
 METRICS = ("pass", "tokens", "minutes")
-DEFAULT_DECISION = {"alpha": 0.05, "ship_prob": 0.95, "revert_prob": 0.80, "cost_guard": 1.10}
+# tie_band: for tokens and minutes, a relative gap below this is a tie, not a win
+# or a loss. Measured by the first A/A run (CB-203, 2026-11-10): two identical
+# plain arms differed by a median 3.5% per task, and without a band the noise
+# alone produced a "revert" verdict (2 wins, 6 losses, totals 1% apart).
+DEFAULT_DECISION = {"alpha": 0.05, "ship_prob": 0.95, "revert_prob": 0.80, "cost_guard": 1.10, "tie_band": 0.10}
 CHECK_TYPES = ("file_exists", "min_words", "max_words", "contains_all", "contains_none",
                "regex", "json_valid", "json_equals", "links_resolve")
 GRADER_TIMEOUT = 120
@@ -153,6 +157,8 @@ def verdict(pairs: list[dict], prereg: dict | None = None) -> dict:
         if va is None or vb is None:
             continue
         d = (vb - va) * sign
+        if metric != "pass" and abs(vb - va) < float(cfg.get("tie_band", 0)) * max(abs(va), abs(vb), 1e-9):
+            continue  # inside the noise band: a tie
         wins += d > 0
         losses += d < 0
     n = len(pairs)
@@ -373,6 +379,9 @@ def validate_prereg(pre, where: str = "prereg") -> dict:
         v = dec.get(key)
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo < v <= hi:
             raise EvalError(f"{where}: decision.{key} must be a number in ({lo}, {hi}]")
+    tb = dec.get("tie_band", 0)
+    if isinstance(tb, bool) or not isinstance(tb, (int, float)) or not 0 <= tb < 0.5:
+        raise EvalError(f"{where}: decision.tie_band must be a number in [0, 0.5)")
     return pre
 
 

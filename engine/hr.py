@@ -37,6 +37,9 @@ CONTRACT_ID = re.compile(r"^h-\d{8}-[0-9a-f]{6}(-\d+)?$")
 BRIEF_WARN, BRIEF_MAX = 350, 500  # words: above the first a note, above the second an error
 WRITES = {"builder", "writer"}                 # base agents that change files
 READS_OUTSIDE = {"researcher", "reviewer", "redteam"}  # base agents whose work is reading material they did not write
+# CB-203: every shell-less plain helper read "change nothing" against a task whose
+# output is a file, and had to guess the exception.
+READ_ONLY_SCOPE = "Change nothing except the files the task asks you to write; at the edge, report instead of fixing."
 HAS_SHELL = {"builder", "writer", "reviewer"}  # base agents with Bash (.claude/agents/*.md)
 HAS_WEB = {"researcher"}                       # base agents with WebSearch and WebFetch
 FINDS = {"reviewer", "redteam"}                # base agents whose return is a list of findings
@@ -453,7 +456,7 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
         lines.append(f"Work in {workdir}; paths below are relative to it.")
     if t:
         lines += ["", t["role_line"].rstrip(".") + "."]
-    scope = (t or {}).get("scope_rule") or ("Read-only: change nothing." if base_agent not in WRITES else "Change only the files you own; at the edge, report instead of fixing.")
+    scope = (t or {}).get("scope_rule") or (READ_ONLY_SCOPE if base_agent not in WRITES else "Change only the files you own; at the edge, report instead of fixing.")
     owned = ("Owns: " + ", ".join(owns) + ". ") if owns else ""
     lines += ["", f"<scope>{owned}{scope}</scope>"]
     if inputs:
