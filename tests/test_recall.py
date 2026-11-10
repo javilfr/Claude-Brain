@@ -187,8 +187,10 @@ class RecallTest(unittest.TestCase):
         ids = [x["id"] for x in after]
         self.assertIn("rule-two", ids)  # rule-one now ranks below it, or is packed out as redundant
         self.assertTrue("rule-one" not in ids or ids.index("rule-two") < ids.index("rule-one"), ids)
-        # I-08: the owner item keeps the top multiplier whatever mlearn says.
-        self.assertEqual(score(before, "own-pref"), score(after, "own-pref"))
+        # I-08: while learning is active the owner item gets the top
+        # multiplier whatever mlearn says; learning never lowers it.
+        self.assertGreater(score(after, "own-pref"), score(before, "own-pref"))
+        self.assertEqual(r.item_multiplier(self.root.parent)({"id": "own-pref", "trust": "owner-stated"}), 1.0)
         mult = r.item_multiplier(self.root)
         self.assertEqual(mult({"id": "own-pref", "trust": "owner-stated"}), r.TOP_MULTIPLIER)
         self.assertEqual(mult({"id": "rule-one", "trust": "observed"}), 0.7)
@@ -254,7 +256,8 @@ class GoldenRegressionTest(unittest.TestCase):
     def scores(self, pool, queries):
         rec = mrr = 0.0
         for q in queries:
-            got = [x["id"] for x in r.select(q["query"], pool, k=5, budget_tokens=10 ** 6, floor=0.0)][:5]
+            got = [x["id"] for x in r.select(q["query"], pool, k=5, budget_tokens=10 ** 6, floor=0.0,
+                                             multiplier=r.item_multiplier(ROOT))][:5]
             rel = set(q["relevant"])
             rec += len(rel & set(got)) / len(rel)
             mrr += next((1 / (i + 1) for i, x in enumerate(got) if x in rel), 0.0)

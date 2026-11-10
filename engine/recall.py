@@ -336,17 +336,18 @@ def floor_from_config(brain_root: Path) -> float:
 def item_multiplier(brain_root: Path):
     """A function item -> learned ranking multiplier. Uses ``mlearn.item_score``
     when that module and ``stats/ml.json`` exist; otherwise every item gets 1.0.
-    Owner-stated items always get the top multiplier (I-08)."""
+    While learning is active, owner-stated items always get the top
+    multiplier whatever the module returns (I-08)."""
     from . import learn  # the one place tests inject a stand-in for mlearn
     state = c.read_json(Path(brain_root) / ML_STATE)
     ml = learn.mlearn_module(optional=True) if isinstance(state, dict) else None
     fn = getattr(ml, "item_score", None)
 
     def mult(item: dict) -> float:
-        if item.get("trust") == "owner-stated":
-            return TOP_MULTIPLIER
         if fn is None:
             return 1.0
+        if item.get("trust") == "owner-stated":
+            return TOP_MULTIPLIER
         try:
             v = float(fn(state, item))
         except (TypeError, ValueError, KeyError):
