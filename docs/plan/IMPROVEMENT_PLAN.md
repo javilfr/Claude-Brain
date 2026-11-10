@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 170 from 10 analyst report(s) (core, e2e-trial, instructions, lead, learning, owner-docs, quality-path, quality2, redteam, research-platform). Decisions: 144 do, 2 do in part, 0 reproduce first, 24 later.
+Findings in: 190 from 11 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, quality-path, quality2, redteam, research-platform). Decisions: 161 do, 2 do in part, 0 reproduce first, 27 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -197,6 +197,7 @@ Owns: `engine/ledger.py`, `engine/guard.py`, `engine/lint.py`, `.claude/hooks`, 
 
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
+| ml-planning-01 | blocking | M | do | On the documented path no outcome reaches the learners: a bare `brain close` writes only a ledger row, and tier and estimates are never recorded |  |
 | core-03 | should-fix | M | do | A session that ran 'checkpoint --push' then 'close' is reported as unclosed by the next boot, and its real token ledger is replaced by an 'unrecorded' stub; close never pushes what it writes |  |
 | e2e-trial-10 | should-fix | S | do | `brain close` as the skill writes it records `tier: null`, so the sizing learner gets no label from normal sessions |  |
 | lead-01 | should-fix | S | do | The token ledger did not see helpers started by a workflow (fixed: CB-210) |  |
@@ -241,6 +242,7 @@ Owns: `engine/learn.py`, `learning/`, `tests/test_rehearsal.py`. New tests go in
 | owner-docs-12 | minor | S | do | After "What did you learn?" the next "Hand over" cannot pass: the digest command writes a file in the brain that no command commits |  |
 | core-20 | idea | M | do | Idea: a two-container continuity rehearsal in the test suite, so CB-104 ('Continue in a new chat resumes the same item') is checked on every change instead of waiting for a live session |  |
 | learning-18 | idea | M | later | Idea: let proven family lessons graduate into the playbooks the lead actually reads | no learned family lesson has three supporting sessions yet; revisit after real use |
+| ml-planning-18 | idea | M | do | Idea: closed-loop simulations from an empty state as standing regression tests for every learner |  |
 | redteam-16 | idea | M | do | Idea: keep the year-in-a-minute simulation as a standing gate |  |
 | redteam-17 | idea | M | do | Idea: a weekly owner digest as the outside check on owner-level memory |  |
 | redteam-19 | idea | M | later | Idea: compact the learning history once a year | nothing to compact yet; revisit when the learning history is a year old |
@@ -267,9 +269,25 @@ Owns: `engine/mlearn.py`, `engine/route.py`, `engine/schedule.py`, `memory/ml_co
 | instructions-02 | should-fix | M | do | A trigger followed by a task is sized by a stray word, and 17 of the 52 trigger phrases in the skill descriptions route as a plain answer |  |
 | instructions-10 | should-fix | S | do | brain-plan's parallel step: the tickets file format is not given, and the scheduler prices a helper's cold start at zero, so parallel work looks free |  |
 | learning-05 | should-fix | S | do | The promotion score rates a perfectly followed item below neutral, and promotion depends on batching |  |
+| ml-planning-02 | should-fix | M | do | The model-and-effort learner can never leave the role default: cold-start deadlock, and helper results are never folded into it |  |
+| ml-planning-03 | should-fix | M | do | Invariant I-11 is broken: questions and small edits are sized 2 because the one-edit matcher turns ordinary words into rule words and question detection is blind behind a filler word |  |
+| ml-planning-04 | should-fix | M | do | This session's request was sized '1 small task, data.analysis': command phrases are judged by how many words follow them, not by what those words say, and dictated programmes have no vocabulary |  |
+| ml-planning-05 | should-fix | S | do | The memory-credit multiplier is not centred on 'no evidence': a proven item is marked down when it reaches three followed uses, and the promotion gate works backwards |  |
+| ml-planning-06 | should-fix | M | do | The routing eval is entirely in-sample: 107/107 on the shipped set, 23/30 on fresh dictated requests; family labels are never asserted |  |
+| ml-planning-08 | should-fix | M | do | The learner compares arms on dollars per session, so task size decides the choice instead of the arm |  |
+| ml-planning-09 | should-fix | M | do | Drift alarms are tuned for a noise level real sessions are unlikely to have: many false alarms on heavy-tailed sizes, little power at realistic spread |  |
 | owner-docs-09 | should-fix | M | do | Phrases the owner is told to type are not recognised by route or by any skill, and his real opening message today was sized "1 small task, data" |  |
+| ml-planning-10 | minor | S | do | Review stopping asks for another round in most small cases even when the estimate says nothing remains, and `learn review` is not in any skill |  |
+| ml-planning-11 | minor | S | do | The scheduler's file-conflict check is literal text, tickets without files run in parallel silently, --agents above the cap is accepted, and parallelism is shown as free by default |  |
+| ml-planning-12 | minor | S | do | `plan schedule` takes 16 s for 100 tickets and 74 s for 200 while changing nothing |  |
+| ml-planning-13 | minor | S | do | `plan packet` cuts the ticket goal at 200 characters and is no longer referenced by any skill |  |
+| ml-planning-14 | minor | S | do | The learners' read side copies the whole state on every call and trusts its inner shapes: slow recall at a mature state, tracebacks on a missing config or a damaged file |  |
 | instructions-17 | idea | M | do | Idea: a scripted walk-through of the owner's phrases as a regression test |  |
 | learning-15 | idea | L | later | Idea: credit items by comparing sessions where they were shown with sessions where they were not | needs many recorded sessions per task class before the comparison means anything |
+| ml-planning-16 | idea | L | later | Idea: label request size automatically from what the session really consumed, and learn sizing over rule features instead of per-project word hashes | needs recorded sessions to set the thresholds; revisit after ten closed sessions |
+| ml-planning-17 | idea | M | do | Idea: let the classifier say 'unsure' instead of printing a confident wrong size at boot |  |
+| ml-planning-19 | idea | M | later | Idea: have the scheduler choose how many helpers to use by showing time against tokens, not time alone | the cold-start price is added now (instructions-10); the time-against-tokens table waits for a plan that needs it |
+| ml-planning-20 | idea | S | do | Idea: a learner health table so a learner with no data source is visible the day it happens |  |
 | owner-docs-15 | idea | M | do | Idea: one source for owner phrases |  |
 
 ### Package H: Radar, repo map and evaluation (CB-219)
@@ -289,9 +307,11 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 | e2e-trial-05 | should-fix | M | do | HR assigns agents that cannot do the work: a researcher with no shell for a code task with a test command, a read-only reviewer for a build ticket, and Opus at ten times the wage when the task is worded in Spa… |  |
 | e2e-trial-07 | should-fix | M | do | Settling a hire nobody worked records a pass or fail for the template, and a failed settle is final but prints as if it had been run again |  |
 | instructions-09 | should-fix | S | do | A brief that is written but never delegated is settled by `close` as a failed hire against its template |  |
+| ml-planning-07 | should-fix | S | do | Running the test suite beside a managed project writes fake hire contracts into that project and fails from the second run on |  |
 | e2e-trial-12 | minor | S | do | The tickets file has two undocumented shapes: `hr staff` ignores `check` and reports "no acceptance command" |  |
 | owner-docs-13 | minor | S | do | "HR report" tells him to say "Consolidate" for hires that are already folded in |  |
 | e2e-trial-19 | idea | S | do | Idea: show what a template adds to the done condition before the lead delegates |  |
+| ml-planning-15 | idea | L | later | Idea: make the HR contract the unit of learning for model choice, calibration and drift | a redesign of what the learners learn from; the first step (sealed hires feed the model choice) is done under ml-planning-02 |
 
 ### Package J: The 100 templates (CB-221)
 

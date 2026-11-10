@@ -1,0 +1,350 @@
+{
+ "summary": "The statistical code is sound in isolation (pure, deterministic, bounded, well tested), but on the real path it is mostly switched off: after two real sessions the inbox holds 0 outcome records, and a closed-loop simulation shows the model-and-effort learner cannot leave the role default even after 500 checked results. The most important change is to make data flow without relying on the lead's memory: boot should record the classification, a bare `brain close` should produce outcomes from it, sealed helper results should feed the bandit, and a bounded seeding trial should break the cold-start deadlock (prototyped in the scratch copy; existing tests stayed green). The request classifier scores 107/107 on its own eval set but 23/30 on fresh dictated requests, and it breaks invariant I-11 (questions and small edits sized 2) because its one-edit matcher turns ordinary words into rule words; this session's own mis-sizing has four traceable causes. The memory-credit multiplier marks a proven item down at exactly the moment it has enough evidence, which inverts the promotion gate. The scheduler is good in quality (optimal on the brain's own plan, 1.9% mean gap on 50 tickets) but slow at 100 to 200 tickets and literal about file paths. All experiments ran in /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/ml-planning; the real repository was not touched.",
+ "strengths": [
+  "mlearn.fold is pure, deterministic, idempotent per record id and bounded: 5,000 mixed records folded in 0.1 s into a 134 KB state, one more record in 4 ms; every learner refuses to act below its minimum data and says so in `basis` or the report line (n is printed for every claim). An improvement pass must keep fold free of clock and file access.",
+  "Safe exploration (I-10) is enforced structurally by safe_arms: without a verifying check, with high risk or above tier 2 only the role default is returned, and more expensive arms are never explored. In my closed-loop prototype the existing window cap held (10 explored of 50 eligible) without any change to it.",
+  "Scheduler quality and input validation: exhaustive search over all 362,880 orders of the brain's 10 open tickets found nothing better than the 550 it returns; on twelve random 50-ticket plans annealing cut the mean gap to the lower bound from 5.6% to 1.9%; cycles, unknown or self dependencies, duplicate ids and bad estimates each give one clear line (for example `plan: dependency cycle: A -> B -> C -> A`); same seed gives the same schedule.",
+  "The request classifier is cheap, deterministic, bilingual and leans low by design; its rules are plain vocabulary lists, so a fix is small: a roughly 40-line prototype kept 107/107 on the shipped set and all 16 route tests while lifting fresh-request accuracy from 23/30 to 29/30.",
+  "Evidence discipline around learning signals: credit and pass records move only on exit codes or sealed checks (I-07, I-17), owner-stated items always get the top multiplier (I-08), the exact knapsack in route.assign is tested against brute force, and HR wage ratios are taken against the size band rather than the wage."
+ ],
+ "findings": [
+  {
+   "title": "On the documented path no outcome reaches the learners: a bare `brain close` writes only a ledger row, and tier and estimates are never recorded",
+   "severity": "blocking",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/ledger.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/CLAUDE.md",
+    "/home/user/Claude-Brain/.claude/skills/brain-learn/SKILL.md",
+    "/home/user/Claude-Brain/.claude/hooks/session_end.py"
+   ],
+   "evidence": "Real state (read-only): record kinds in /home/user/Claude-Brain/learning/inbox = {'hire': 2, 'ledger': 2, 'lead': 7}, so 0 outcome records after two real sessions (one of 566 minutes with 40 helpers); stats/ml.json has n = 2, bandit.raw_g = {}, calib empty, window = [], sizing.strong = 0. Cause: engine/ledger.py:375 `if classes and gates:` (an outcome needs --class from the lead AND gate rows of this session in a managed project). Scratch project (init, gate red, gate green): `brain close` exactly as CLAUDE.md rule 9 words it printed `inbox: 1 record(s)` with kinds {'ledger': 1}. With the brain-learn skill's flags (`--outcome ok --class software.feature --request ...`) the outcome carried 'tier': None, 'est_tokens': None, 'est_minutes': None; after `learn consolidate` the state showed window [[0, 0, 0.01282, 0.0]] (not eligible for exploration), calib {} and sizing tot {} (the weak sizing label is dropped because tier is missing). The real ledger row's class is 'operations.build', which route never produces: --class is free text, so class statistics fragment. A grep for est-tokens, est-minutes, --explored, --propensity and --tier over CLAUDE.md, skills, agents, method and playbooks found nothing.",
+   "repro": "In a scratch brain copy with a managed scratch project: set the gate command to `test -f ok.txt`; run `brain gate` (red), `touch ok.txt`, `brain gate` (green), `brain close`; list kinds in learning/inbox/<date>-<session>.jsonl: only 'ledger'.",
+   "proposed_fix": "1) detect.boot_lines: after route.classify, save {tier, family, task_class, rule_tier, salted word hashes} into the project's .brain/log/open-session.json through ledger.mark_open (project side, so I-05 holds). 2) ledger.capture: when flags are absent, take classes, tier, words and rule_tier from that marker, so a bare `brain close` and the Stop hook both produce outcomes; check --class against route's class list (CLASS_WORDS plus DEFAULT_CLASS) and map an unknown class to the family default with a printed note. 3) Write est_tokens and est_minutes at boot from a per-tier prior table in memory/ml_config.json, so calibration learns actual over estimate without the model declaring anything after the fact. 4) For brain-only sessions accept the brain's own full-gate run as the gate log. 5) Add one `ml report` line per learner with the number of records it has received.",
+   "acceptance": "New tests: tests/test_ledger.py::test_bare_close_after_boot_records_an_outcome_with_tier_and_class (boot with a request, one gate row, `close` with no flags gives an outcome whose tier and task_class equal route's and whose words are non-empty) and ::test_unknown_class_maps_to_family_default; tests/test_rehearsal.py additionally asserts that after consolidate stats/ml.json has window[-1][0] == 1 and a non-empty sizing.tot. `python3 -m unittest discover -s tests -t .` stays green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "ml-planning-01"
+  },
+  {
+   "title": "The model-and-effort learner can never leave the role default: cold-start deadlock, and helper results are never folded into it",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/memory/ml_config.json",
+    "/home/user/Claude-Brain/tests/test_mlearn.py"
+   ],
+   "evidence": "Closed loop from an empty state (each task routed by suggest_arm, run on the suggested arm, its checked outcome folded back; all arms pass 90%): builder role after 500 outcomes -> arms used {'sonnet/medium': 500}, basis `role default: 1 of 3 safe arms have 8+ outcomes (499 pooled); learning needs 2`; lead role identical with opus/medium. Cause: engine/mlearn.py:289-290 `ready = [k for k in keys if raw.get(k, [0.0, 0.0])[1] >= bc[\"min_outcomes\"]]` / `if len(ready) < bc[\"min_arms\"]:` returns the default, and a second arm only gets outcomes by being suggested. Folding 500 sealed, passed `hire` records gave `bandit raw_g: {}` and hr.t {'t1': [29.36, 3.98, 500]}: mlearn.py:831-833 sends hires only to hr.fold_hire, while hr.hire (hr.py:561) is the only real consumer of suggest_arm. Every bandit test starts from tests/test_mlearn.py:56-60 seeded_state (\"n outcomes on each of the two arms, as if from normal operation\"), so none starts empty. hr.settle (hr.py:674-681) records the contract's model, not the model found in the helper's transcript (find_helper_usage returns it and it is dropped), so a helper launched on another model would credit the wrong arm. Prototype in the scratch copy (71-line diff: sealed hires update the bandit cells and the exploration window; a separate seed_trial function tries the safe arm one price step below the default on at most max_rate of eligible tasks while _budget_ok holds): 400 hires from empty -> Thompson first acted at hire 33, explored 46 (12%), 10 explored of 50 eligible in the last window, next 100 suggestions 77 on the cheapest arm; with cheaper arms passing 50% -> 370 of 400 on the default and 99 of the next 100. tests.test_mlearn, test_route, test_learn and test_rehearsal: 127 tests OK with the prototype.",
+   "repro": "python3 /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/ml-planning/work/loop.py /home/user/Claude-Brain (read-only: builds state in memory only).",
+   "proposed_fix": "mlearn._fold_one, kind 'hire': after hr.fold_hire, when sealed is True and passed is a bool and model and effort are present, update the arm's pass cells, cost and the exploration window (split that part of _fold_outcome into a helper, here called _fold_arm). hr.settle: add tier, actual_cost and the helper's real model_id to the hire record and attribute the result to the arm that actually ran. New mlearn.seed_trial(state, cfg, role, risk, tier, has_check, rng), called by hr.hire and route.suggest only when suggest_arm answers `role default: ... learning needs`: flagged explored with a logged propensity, limited by the existing max_rate, window and max_waste. Keep suggest_arm itself unchanged so test_I16_fewer_than_8_outcomes_on_two_arms_returns_default still passes as written.",
+   "acceptance": "New tests in tests/test_mlearn.py: test_closed_loop_from_empty_state_reaches_thompson_within_100_eligible_hires, test_sealed_hire_updates_bandit_and_window, test_unsealed_or_unchecked_hire_does_not, test_seed_trials_respect_the_one_in_four_and_waste_caps; in tests/test_hr.py: test_hire_record_carries_the_helpers_real_model_id. All existing tests unchanged and green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "ml-planning-02"
+  },
+  {
+   "title": "Invariant I-11 is broken: questions and small edits are sized 2 because the one-edit matcher turns ordinary words into rule words and question detection is blind behind a filler word",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/route.py",
+    "/home/user/Claude-Brain/evals/routing.jsonl",
+    "/home/user/Claude-Brain/tests/test_route.py"
+   ],
+   "evidence": "route.classify on my probes: `ok so how would I build an app like that` -> 2 software.feature; `so what would it take to build the whole website` -> 2; `la app necesita internet para funcionar` -> 2; `oye una pregunta se puede usar la app sin conexión o necesita internet siempre` -> 2; `fix the header while I am at lunch` -> 2; `update the readme today` -> 2 (a change across a whole deliverable); `change whose name shows on the card` -> 2; `cambia el nombre entre hoy y mañana` -> 2. 15 of 21 probes over-sized. Causes: engine/route.py:42-57 `_close` accepts one substituted letter for words of five letters or more, so while->whole, whose->whole, today->todas, entre->entire, necesita->necesito, quiere->quiero, luego->juego (a 'game'), brain->train, white->write, lunch->launch; a hand-written list of 559 ordinary English and Spanish words gave 47 such false hits (the list leans toward near-misses, so read the examples, not the rate). engine/route.py:230 `first = tokens[0] if tokens else \"\"`: a leading filler hides the question word and dictation carries no question mark. Prototype in the scratch copy (no substituted letters; plural; Spanish verb with a pronoun attached such as 'tradúceme', 'arréglalo'; fillers skipped; opinion phrases): shipped set still 107/107 on tier, tests.test_route 16 tests OK, over-sized probes 15 -> 6 (left: `delete all the old branches`, `update all the dependencies`, `remove every console log`, `want to see the report`, `I need the link to the site`, and one resume case).",
+   "repro": "python3 /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/ml-planning/work/probe.py /home/user/Claude-Brain",
+   "proposed_fix": "route._close: accept only equal words, a plural, a Spanish clitic ending (me, lo, la, le, los, las, nos, melo, selo), a swap of two neighbouring letters, or one missing or extra letter in words of six letters or more with the same first letter; never a substituted letter. route._question_kind: skip leading fillers (ok, so, hey, oye, bueno, and, y, pero) before looking for the question word, and treat opinion phrases (do you think, I was wondering, should we, is it worth, qué opinas, crees que, se puede, una pregunta) as a question even when a task verb follows. route._content: an edit with all/every/todos plus a countable plural noun (branches, dependencies, logs) stays tier 1. The diff of my prototype is at /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/ml-planning/work/route_prototype.diff.",
+   "acceptance": "Add the eight probes above to evals/routing.jsonl with tier 0 or 1 (the existing test_never_oversize_small_requests then covers them); new tests/test_route.py::test_ordinary_words_are_not_rule_words (no WHOLE, CREATE or BIG hit for while, whose, today, white, brain, luego, entre, necesita, quiere, lunch) and ::test_question_behind_a_filler_is_tier_0; test_typo_tolerance ('contniue', 'trnaslate', 'start runing') still passes.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "ml-planning-03"
+  },
+  {
+   "title": "This session's request was sized '1 small task, data.analysis': command phrases are judged by how many words follow them, not by what those words say, and dictated programmes have no vocabulary",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/route.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/evals/routing.jsonl"
+   ],
+   "evidence": "`brain route \"Start running, quickly do comprehensive improve plan ... is executed and very implemented\" --json` -> {\"tier\": 1, \"family\": \"data\", \"task_class\": \"data.analysis\", \"reason\": \"unsure between 1 and 2; chose 1, move up if it grows\"}. Trace (37 tokens): (1) 'start running' matches the resume phrase but 35 words follow and engine/route.py:89 allows 6, so route.py:292-293 `if max_rest is not None and len(rest) > max_rest: continue` drops the trigger and the whole text is read as content; (2) CREATE hits are create, make, plan plus two false ones, 'train' from 'brain' and 'creame' from 'create'; BIG, WHOLE and PROGRAMME are all empty (no entry for plan-then-execute, comprehensive, stages), so route.py:265 answers 'unsure between 1 and 2; chose 1'; (3) family: 'analysis' is counted twice (as 'analysis' and as 'analisis') giving data 2 against software 1 ('code'); (4) boot passes no manifest in brain-only mode, so nothing breaks the tie toward software. Related, same mechanism: `Continue with the importer and when you finish that do the charts and then tell me what is left` -> 0 answer; `sigue fallando el login en el móvil` -> 2 resume (it is a bug report); `status bar overlaps the title` -> 0 status; `go back to the settings screen and change the title` -> 1 revert. In my fresh set 4 of 5 programmes were sized 2: dictation has no commas, so route.py:255-256 (`several = len(deliverables) >= 3 and joins >= 2`) fails, and 'stages', 'etapas', 'paso a paso', 'in parallel' are not in PROGRAMME. With the prototype the session's request gives `size 3 programme | software | software.feature` and the fresh set goes from 23/30 to 29/30 (the prototype was written after seeing the misses, so this shows feasibility, not held-out accuracy).",
+   "repro": "python3 /home/user/Claude-Brain/bin/brain route \"Start running, quickly do comprehensive improve plan with ultra code and make it the best ever through comprehensive analysis, stop after very detailed plan you will create now to improve the brain is executed and very implemented\"",
+   "proposed_fix": "route._trigger and classify: when a resume phrase opens the request and more words follow than max_rest, classify the rest with _content and return the larger of the recorded size and the rest's size (class 'resume' when the rest adds nothing). For every trigger kind, a rest that contains a COMPLAINT, EDIT or CREATE hit means the phrase is not a bare command, so fall through to the content rules ('sigue fallando', 'status bar overlaps', 'go back to the settings screen and change'). Add to PROGRAMME: stages, etapas, step by step, paso a paso, in parallel, en paralelo; treat 'plan' together with execute, executed, implement, implemented, ejecuta, ejecútalo, implementado as multi-phase. In `several`, count then, luego, después, first, primero as joins. route._family: count each token of the request once. detect.boot_lines: in brain-only mode pass {\"family\": \"software\"}.",
+   "acceptance": "New rows in evals/routing.jsonl: this session's request (tier 3, family software), the four trigger cases above with tiers 2, 1, 1, 1, and four dictated programmes without commas (tier 3). New tests/test_route.py::test_trigger_with_a_long_tail_keeps_or_raises_the_size and ::test_trigger_word_inside_a_bug_report_is_not_a_command. test_trigger_phrases_all_correct and test_overall_accuracy unchanged and green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "ml-planning-04"
+  },
+  {
+   "title": "The memory-credit multiplier is not centred on 'no evidence': a proven item is marked down when it reaches three followed uses, and the promotion gate works backwards",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/engine/learn.py",
+    "/home/user/Claude-Brain/memory/ml_config.json"
+   ],
+   "evidence": "Simulation with the shipped config, one item followed alone in sessions that all pass first time: item_score after 0, 2, 3, 5, 10, 20, 50, 200 sessions = 1.0, 1.0, 0.9119, 0.9445, 0.9904, 1.024, 1.0385, 1.0391. So at min_n = 3 the multiplier drops below the neutral 1.0 of a never-used item, needs about 14 perfect sessions to get back, and can never go above about 1.04 although the range is 0.7 to 1.3 (positive credit saturates at 4.0 because the class baseline rises to 1). With a 90% pass rate, 20 followed sessions give 0.9915. Cause: engine/mlearn.py:541-544 `a, b = a0 + 1.0 + cell[0], b0 + 1.0 + cell[1]` then `cr[\"base\"] + cr[\"slope\"] * lcb` (0.7 + 0.6 x lower bound), which equals 1.0 only at a lower bound of 0.5, while the prior's own lower bound is about 0.21. Effect on promotion, engine/learn.py:924-925 `st == \"probation\" and it[\"sessions\"] >= min_sessions and (score is None or score(it) >= PROMOTE_MULTIPLIER)`: calling learn._transitions on a probation item with evidence from 2 sessions gave: followed in 0 or 2 green sessions -> PROMOTED; followed in 3, 5 or 10 green sessions -> stays on probation; 14 or more -> promoted. EXECUTION_PLAN 4.2 asks for 'a positive lower bound from mlearn (tunable 0.6)' as an independent second key; the key passes with no evidence and blocks with good evidence. Prototype (piecewise linear through (0, low), (the prior's own lower bound, 1.0), (1, high)): scores 1.0, 1.0, 1.0532, 1.0739, 1.1031, 1.1245, 1.1337 for the same series; all-failing sessions give 0.8648, 0.8194, 0.7862 at 3, 6, 12; tests.test_mlearn, test_recall, test_learn, test_rehearsal: 129 tests OK.",
+   "repro": "In a copy: fold n outcome records (passed and first_pass true) each with a `used` record (followed true) for one item, then call mlearn.item_score(state, {'id': item, 'trust': 'derived'}, cfg) for n = 2 and n = 3.",
+   "proposed_fix": "mlearn.item_score: map the lower bound piecewise so that the prior's own lower bound gives exactly 1.0, 0 gives credit.low and 1 gives credit.high (the same idea hr.performance_multiplier already uses). learn._transitions: make the second key real: require at least credit.min_n followed uses and a multiplier at or above a threshold read from memory/ml_config.json (move PROMOTE_MULTIPLIER there; this also closes the known M18 for that constant), or one owner statement; below min_n the item stays on probation instead of passing by default.",
+   "acceptance": "New tests in tests/test_mlearn.py: test_item_score_is_neutral_at_min_n_without_credit_and_never_drops_on_green_sessions (the series above is non-decreasing and at least 1.0) and in tests/test_learn.py: test_promotion_needs_followed_uses_not_their_absence. Existing test_item_score_ranks_helpful_above_harmful and test_I08_owner_stated_always_top_multiplier pass unchanged (they did with the prototype).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "ml-planning-05"
+  },
+  {
+   "title": "The routing eval is entirely in-sample: 107/107 on the shipped set, 23/30 on fresh dictated requests; family labels are never asserted",
+   "severity": "should-fix",
+   "kind": "test-gap",
+   "files": [
+    "/home/user/Claude-Brain/evals/routing.jsonl",
+    "/home/user/Claude-Brain/tests/test_route.py"
+   ],
+   "evidence": "Shipped set: tier accuracy 107 of 107, with no dev and held-out split (HR selection has one); requests are short: median 8 words, longest 19, none above 25, while this session's dictated request has 37. My 30 fresh requests (written and labelled before running; English and Spanish, no punctuation): tier accuracy 23/30, over-sized 1, under-sized 6, family 17/18. Misses: `oye una pregunta se puede usar la app sin conexión o necesita internet siempre` want 0 got 2; `tradúceme este párrafo al inglés que lo tengo que mandar hoy` want 1 got 0 (verb with pronoun attached is not recognised); `go through all my bird sightings from last year and make a report with charts of which months were best` want family data got knowledge; `monta una rutina que cada mañana me mande por correo el tiempo y mis citas del día` want 2 got 1; `I want the whole thing done first the app then the website then the course do it in stages and dont stop until its all finished` want 3 got 2; `quiero la plataforma entera la app el panel de administración y la web pública hazlo por etapas hasta que esté todo terminado` want 3 got 2; `haz un plan detallado para mejorar todo el sistema y luego ejecútalo entero paso a paso sin parar hasta que esté implementado` want 3 got 2; `run several agents in parallel one for the backend one for the design and one for the tests and coordinate them until the release` want 3 got 2. Of the 53 family labels in the shipped file 2 are wrong today and no test reads them (`research which eBird API limits apply and build the importer` -> software, labelled data; `write the spanish edition of the user guide` -> knowledge, labelled language).",
+   "repro": "python3 /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/ml-planning/work/fresh30.py /home/user/Claude-Brain",
+   "proposed_fix": "Add evals/routing_heldout.jsonl with at least 60 requests written by a helper that never sees route.py (dictated style, 15 to 50 words, half Spanish, questions without question marks, commands with long tails), labelled for tier and family; never tune on it. Add a floor test like the recall and HR ones (measured value minus a small margin), a hard assertion that no held-out row with tier 0 or 1 is sized 2 or more (I-11), and a family-accuracy assertion on both files. My 30 requests with labels are in the script above and can seed the dev side.",
+   "acceptance": "tests/test_route.py::test_heldout_tier_accuracy_floor, ::test_heldout_never_oversizes_questions_or_small_edits and ::test_family_labels_floor exist and pass; the held-out file is not referenced by any tuning script.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "ml-planning-06"
+  },
+  {
+   "title": "Running the test suite beside a managed project writes fake hire contracts into that project and fails from the second run on",
+   "severity": "should-fix",
+   "kind": "test-gap",
+   "files": [
+    "/home/user/Claude-Brain/tests/test_hr.py",
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/engine/hr.py"
+   ],
+   "evidence": "Found while checking my prototypes; outside my assigned files but reproduced. With a managed scratch project as the only sibling of the scratch brain: run 1 of tests.test_hr.ReviewFindings.test_cap_counts_this_sessions_contracts_with_or_without_a_project -> OK and 16 files appear in <project>/.brain/log/hr/ (8 open contracts: 4 with session 'crashed-session', 4 with 'sess-hr'); run 2 -> FAILED (failures=1), `[1, 1, 1, 1] != [0, 0, 0, 0]`, CLI text `do not hire yet: 4 contracts of this session are open`. Whole suite: first run `Ran 410 tests ... OK`, second run `FAILED (failures=1)`. With no project beside the brain the test passes twice. Cause: the test redirects TMPDIR but c.resolve_project (engine/common.py:269-271) falls back to 'the single managed sibling', so hr.contract_dir (engine/hr.py:504-507) points into the real neighbour project. Two-repo sessions are the normal layout, and the full gate is the definition of done for brain changes.",
+   "repro": "mkdir S; cp -a Claude-Brain S/brain; python3 S/brain/bin/brain init S/proj --family software --title X; cd S/brain; python3 -m unittest tests.test_hr.ReviewFindings.test_cap_counts_this_sessions_contracts_with_or_without_a_project (OK); ls S/proj/.brain/log/hr | wc -l (16); run the test again (FAILED).",
+   "proposed_fix": "tests/test_hr.py run_cli (and any other test that calls the CLI): set BRAIN_PROJECT to a temporary managed project or pass an explicit --project, and assert in tearDown that nothing outside the temp folder changed. Add one hygiene test that runs a hire with a managed sibling present in a temp tree and asserts the sibling's .brain/log is untouched. Optionally let resolve_project ignore the sibling fallback when BRAIN_TESTING is set.",
+   "acceptance": "With a managed project beside the brain copy, `python3 -m unittest discover -s tests -t .` run twice in a row is OK both times and `git -C <project> status --short` shows no new files under .brain/log/hr.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "ml-planning-07"
+  },
+  {
+   "title": "The learner compares arms on dollars per session, so task size decides the choice instead of the arm",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/memory/ml_config.json"
+   ],
+   "evidence": "Seeded state with 20 passing outcomes on each of opus/medium and sonnet/medium (same class, 100% pass on both), then 300 seeded suggestions: same task size on both arms -> expected cost opus $0.480, sonnet $0.240, sonnet chosen in 98%; the cheaper arm happened to get tasks 4 times larger -> opus $0.480, sonnet $0.960, sonnet chosen in 2%; the default happened to get the larger tasks -> sonnet 98%. Cause: engine/mlearn.py:222-229 expected_cost returns the EW mean of raw cost per attempt at the most specific level that has data and mixes levels across arms; an unobserved arm starts from prior_tokens x price (haiku/low: $0.0144) while a real lead session costs dollars. The research memo (docs/research/round2/03-routing-ml.md section 2.1) specifies a cost 'normalised by the baseline arm's running median cost for that class'; that normalisation is not implemented. The effect is latent today only because the learner never acts (finding 2).",
+   "repro": "Fold outcomes with tokens 100000 on model opus and 400000 on model sonnet (all passed), then count suggest_arm picks over seeds 0..299 for role lead with has_check true.",
+   "proposed_fix": "Store cost per unit of work instead of cost per attempt: divide each outcome's cost by a size proxy known before the work (the HR size band for hires, est_tokens or the per-tier prior for lead sessions) and keep the EW mean of that ratio per arm; expected cost = unit price(arm) x that ratio, shrunk toward 1.0 with a few pseudo-observations and always read at the same level for all arms being compared. Put the pseudo-count in ml_config.json.",
+   "acceptance": "New tests/test_mlearn.py::test_task_size_does_not_decide_the_cheaper_arm: with equal pass rates and the cheaper arm observed only on 4x larger tasks, the cheaper arm is still chosen in at least 80% of 300 seeds. test_converges_to_cheaper_arm_when_pass_rates_equal and test_converges_to_reliable_arm_when_cheap_fails unchanged and green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "ml-planning-08"
+  },
+  {
+   "title": "Drift alarms are tuned for a noise level real sessions are unlikely to have: many false alarms on heavy-tailed sizes, little power at realistic spread",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/memory/ml_config.json",
+    "/home/user/Claude-Brain/tests/test_mlearn.py"
+   ],
+   "evidence": "tests/test_mlearn.py drift_run uses log tokens with sigma 0.25 (tokens per task within about 25%). Calling mlearn._drift_step directly with the shipped constants, share of 400 stationary runs of 200 tasks with any alarm: normal sd 0.3 -> 1.5%; normal sd 0.8 -> 1.5%; heavy tails (t with 3 df, scale 0.5) -> 23.0%; two task sizes (80% small, 20% eight times larger) -> 14.0%. Detection when tokens per task rise at task 30 and stay, share of 300 runs with an alarm within 50 tasks: sd 0.3: x1.3 21%, x1.5 64%, x2.0 98%; sd 0.8: x1.3 3%, x1.5 7%, x2.0 21%; two task sizes: x2.0 21%. The chart is fed the raw log of the whole session's tokens (mlearn.py:787), with no size normalisation; the only real numbers on file are two sessions of 167 million and 269 million tokens, so the real spread is not measured yet (hence medium confidence). An alarm, true or false, shrinks the class's bandit history and caps calibration at 5.",
+   "repro": "Call mlearn._drift_step(state, cfg, 'c', x, fail, at) for 200 values of x drawn from 11.5 + ln(8) with probability 0.2 else 11.5, plus gauss(0, 0.3); count runs with a non-empty state['alarms'].",
+   "proposed_fix": "Chart a size-normalised quantity: the log of actual over estimate (HR band for hires, est_tokens or the tier prior for sessions), which is what a model update or a bad lesson actually moves. Winsorise the normalised value at plus or minus 3 before the EWMA and Page-Hinkley updates. Add a test stream with two task sizes. Until then, say in the boot alarm line how many outcomes the reference rests on.",
+   "acceptance": "New tests/test_mlearn.py::test_quiet_on_mixed_task_sizes (at most 12% of 100 runs of 200 tasks with a 20% share of 8x tasks raise an alarm) and ::test_detects_a_50_percent_rise_at_sd_0_8_when_normalised (at least 60% within 50 tasks when estimates carry the size). test_quiet_on_stationary_noise and the two existing detection tests unchanged and green.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "ml-planning-09"
+  },
+  {
+   "title": "Review stopping asks for another round in most small cases even when the estimate says nothing remains, and `learn review` is not in any skill",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/engine/learn.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-verify/SKILL.md"
+   ],
+   "evidence": "review_stop(found_a, found_b, both, rounds=1) with the shipped config: (1,0,0) -> estimated_remaining 0.0, another_round True; (1,1,1) -> 0.0, True; (2,1,1) -> 0.0, True; (2,2,1) -> 0.5, True; only (0,0,0) and (2,2,2) say False among findings of up to 2; another round in 15 of the 20 cases with up to 3 findings. Cause: engine/mlearn.py:652-653 `elif m < rv[\"min_overlap\"]: another = True` overrides the estimate. EXECUTION_PLAN 4.1 item 8: 'second round only if estimated remaining >= 1 blocking'. The printed line then contradicts itself ('about 0 defect(s) likely remain ... another round: yes'). A review round runs on the reviewer role (opus high), so each unneeded round is real cost. `grep -rn \"learn review\" .claude method playbooks CLAUDE.md` finds nothing, so the rule is never consulted and state['reviews'] never fills.",
+   "repro": "python3 -c \"import sys; sys.path.insert(0,'/home/user/Claude-Brain'); from engine import mlearn as m; print(m.review_stop(1,1,1,rounds=1))\"",
+   "proposed_fix": "mlearn.review_stop: use the estimate whenever both > 0 or one side found nothing new beyond the overlap; keep the forced extra round only for zero overlap with findings on both sides (the unreliable case). Count only blocking findings. Add one line to brain-verify for high-risk work: after two independent reviews run `BRAIN learn review --found-a N --found-b M --both K` and follow its answer.",
+   "acceptance": "tests/test_mlearn.py::test_chapman_hand_example extended with: (1,1,1) and (2,1,1) -> another_round False; (1,1,0) and (2,2,0) -> True; never True at rounds >= max_rounds. `brain lint` still green after the skill line is added.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "ml-planning-10"
+  },
+  {
+   "title": "The scheduler's file-conflict check is literal text, tickets without files run in parallel silently, --agents above the cap is accepted, and parallelism is shown as free by default",
+   "severity": "minor",
+   "kind": "risk",
+   "files": [
+    "/home/user/Claude-Brain/engine/schedule.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-plan/SKILL.md",
+    "/home/user/Claude-Brain/memory/models.json"
+   ],
+   "evidence": "Plan with A files ['src/'], B ['./src/a.py'], C ['src\\\\a.py'], D ['SRC/a.py'], E ['src/*.py'] on 4 agents -> `t=0 A1 A (10) | A2 B (5) | A3 C (5) | A4 D (5)`: B writes inside A's folder and runs beside it. Cause: engine/schedule.py:50-52 `a == b or b.startswith(a + \"/\") or a.startswith(b + \"/\")` on unnormalised strings. Four tickets with no `files` -> all four at t=0, although the brain-plan skill promises waves 'that never put two items touching the same file together'. `plan schedule twelve.json --agents 12` -> twelve helpers A1..A12 at t=0 with no note, while memory/models.json limits.max_parallel_helpers is 4 and CLAUDE.md rule 4 says at most four at once. Default token line: `4 helpers each start cold at 0: parallel 720000 vs sequential 720000`, so the cost of parallel work, which is the stated reason the line exists, is zero unless the caller supplies --start-tokens. The brain's real tickets file uses plain relative paths, so this has not bitten yet.",
+   "repro": "Write the five-ticket plan above to a file and run `python3 bin/brain plan schedule <file>` in a copy.",
+   "proposed_fix": "schedule._conflicts: normalise both paths with posixpath.normpath after replacing backslashes, drop a leading './', cut a pattern at its first wildcard and treat the remaining prefix as a folder. load_plan: count tickets without files and have render print one line ('N tickets list no files; they are assumed independent'), or treat them as conflicting with each other when a --strict flag is given. cmd_schedule: clamp agents to limits.max_parallel_helpers with a printed note. Default helper_start_tokens from a measured constant in ml_config.json (or the median first-turn cost HR already records) instead of 0.",
+   "acceptance": "New tests/test_schedule.py::test_dot_slash_backslash_and_glob_paths_conflict, ::test_tickets_without_files_are_reported, ::test_agents_are_clamped_to_the_helper_cap, ::test_parallel_token_cost_is_not_zero_by_default. Existing schedule cases unchanged.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "ml-planning-11"
+  },
+  {
+   "title": "`plan schedule` takes 16 s for 100 tickets and 74 s for 200 while changing nothing",
+   "severity": "minor",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/engine/schedule.py"
+   ],
+   "evidence": "Random plans (4 agents, up to 3 dependencies, 1 or 2 files each), measured: n=50: one decode 1.1 ms, with annealing (3000 iterations) 2.59 s; n=100: decode 7.7 ms, 15.96 s, result 1440 = the critical-path result, lower bound 1437 (gap 0.2%); n=200: decode 53.5 ms, 74.09 s, result 3075 = critical-path, lower bound 3072 (gap 0.1%). Cause: engine/schedule.py:306 `return min(3000, max(300, 60 * n))` gives the full 3000 decodes whatever the starting gap; the early exit at 297-298 fires only on exact equality with the bound; decode is about cubic in n (lists of placed tickets are rescanned for every candidate start). At 10 to 50 tickets the time is fine and annealing pays (improved 10 of 12 fifty-ticket plans).",
+   "repro": "python3 /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/ml-planning/work/sched_big.py /home/user/Claude-Brain",
+   "proposed_fix": "schedule.schedule: skip annealing when the critical-path makespan is within a tolerance of the lower bound (for example 1%, a constant in ml_config.json). iterations_for: bound total work, not iterations (for example iterations = min(3000, 2_000_000 // n**2), at least 100), which keeps runs deterministic without a clock. decode: keep placed tickets sorted by finish time and track the running count so each placement is linear.",
+   "acceptance": "New tests/test_schedule.py::test_large_plan_work_budget: for a seeded 200-ticket plan the number of decode calls is at most 150 and the result is no worse than critical-path; existing test_same_seed_same_schedule_where_annealing_runs and the brute-force comparison unchanged. Measured: `plan schedule` on the 200-ticket plan under 5 s.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "ml-planning-12"
+  },
+  {
+   "title": "`plan packet` cuts the ticket goal at 200 characters and is no longer referenced by any skill",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/schedule.py",
+    "/home/user/Claude-Brain/docs/plan/tickets.json",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "`brain plan packet docs/plan/tickets.json CB-203` prints `Ticket CB-203: Pre-register with `brain eval prereg` before any run. ... (`brain hr hire` wit…`: the goal has 439 characters and its last sentence, 'Do not touch the 4 held-out tasks while tuning.', is lost from the brief. Cause: engine/schedule.py:413 `c.clip(t.get('goal') or t.get('title') or '(no title)', 200)`. In the real tickets file 9 of 28 goals exceed 200 characters (longest 578). A ticket with no acceptance command still exits 0 with the line 'Acceptance command: none recorded; add one before delegating' inside the brief. `grep -rn packet` over skills, method and CLAUDE.md finds nothing: delegation now goes through `brain hr hire`, so two brief generators exist and only one is used.",
+   "repro": "python3 /home/user/Claude-Brain/bin/brain plan packet /home/user/Claude-Brain/docs/plan/tickets.json CB-203",
+   "proposed_fix": "Either retire `plan packet` in favour of `brain hr hire --ticket <file> <id>` (one brief generator, reading goal, reason, files, accept and interfaces from the ticket), or fix it: wrap the full goal over several lines within the 25-line cap and exit 1 when the ticket has no acceptance command (EXECUTION_PLAN 4.5: every delegated task carries one).",
+   "acceptance": "tests/test_hygiene.py (or test_schedule.py)::test_packet_keeps_the_whole_goal (the last sentence of a 439-character goal is present, output at most 25 lines) and ::test_packet_refuses_a_ticket_without_acceptance; or, if retired, `brain lint` green with the command removed from EXECUTION_PLAN and the argparse tree.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "ml-planning-13"
+  },
+  {
+   "title": "The learners' read side copies the whole state on every call and trusts its inner shapes: slow recall at a mature state, tracebacks on a missing config or a damaged file",
+   "severity": "minor",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/engine/route.py",
+    "/home/user/Claude-Brain/engine/recall.py"
+   ],
+   "evidence": "State after 5,000 folded records: 134 KB. item_score for 141 items (one recall over the current memory): 314 ms, 2.2 ms each, because engine/mlearn.py:538 calls `_ensure(state or {})`, a JSON round trip of the whole state, per item; suggest_arm 2.3 ms each for the same reason. Recall runs at every boot. With memory/ml_config.json moved away: `brain route \"add a field\"` ends in `ValueError: mlearn: .../memory/ml_config.json is missing or invalid` (traceback, exit 1), while `brain ml report` prints one line for the same condition. With stats/ml.json set to {\"bandit\": {\"raw_g\": {\"sonnet/medium\": \"x\"}}, \"n\": \"many\"}: `brain route \"add a field\" --check` and `brain ml report` both end in `IndexError: string index out of range`; mlearn.load's docstring says a broken file is the empty state, but _ensure checks types only at skeleton level.",
+   "repro": "In a copy: mv memory/ml_config.json aside; python3 bin/brain route \"add a field\".",
+   "proposed_fix": "mlearn.item_score, flaky and calibrate: read the one sub-table they need with .get instead of _ensure (or let recall.item_multiplier ensure once and pass an already-checked state). mlearn.load: validate leaf shapes of bandit cells, window rows and credit cells and fall back to the empty state with one warning line when they are wrong. route.cmd_route: catch ValueError from mlearn.config and print the size line with 'model: role default (learning config missing)'.",
+   "acceptance": "New tests/test_mlearn.py::test_item_score_does_not_copy_the_state (141 calls on a 5,000-record state under 30 ms) and ::test_malformed_leaf_loads_as_empty_state; tests/test_route.py::test_route_prints_a_size_when_the_learning_config_is_missing (exit 0, no traceback).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "ml-planning-14"
+  },
+  {
+   "title": "Idea: make the HR contract the unit of learning for model choice, calibration and drift",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/engine/schedule.py"
+   ],
+   "evidence": "A settled hire already carries everything a learner needs and a session outcome lacks: an estimate made before the work (band_tokens), real usage (actual_tokens), a check run by the script (sealed, passed), the arm, class, family and risk (engine/hr.py:674-681). The only two learning records that exist in the real brain are hires (stats/ml.json hr.ratios `_all`: [0.2712, 0.41]). Lead sessions run on one model the brain may not switch (CLAUDE.md rule 5), so they can never compare arms. mlearn.calibrate is read only by schedule.calibrate_plan for tickets that carry a `class` field, and none of the 28 real tickets has one (keys: accept, deps, est, files, goal, id, reason, return, status, title).",
+   "repro": "",
+   "proposed_fix": "Fold each sealed hire as the primary observation for the bandit (finding 2), for calibration (log of actual over band per class and size) and for drift (the same ratio, which is already size-normalised, finding 9). Let `plan schedule` and `hr staff` classify a ticket's title with route.classify when it has no class, and scale estimates by the hire ratios. Keep lead-session outcomes for memory credit, gate flakiness and sizing labels only.",
+   "acceptance": "After a rehearsal with five settled hires in one class, `brain ml report` shows a calibration line with n=5 for that class and `brain plan schedule` on a ticket of that class prints 'calibration applied'.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "ml-planning-15"
+  },
+  {
+   "title": "Idea: label request size automatically from what the session really consumed, and learn sizing over rule features instead of per-project word hashes",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/engine/ledger.py",
+    "/home/user/Claude-Brain/engine/learn.py",
+    "/home/user/Claude-Brain/engine/route.py"
+   ],
+   "evidence": "The sizing learner needs 30 strong labels, and the only source of a strong label is an owner correction with tiers (the `escalated` field read at engine/mlearn.py:799 is written by nothing: grep finds no writer). Word hashes are salted per project (engine/learn.py:1452-1455: 'hashes are not comparable across projects'), so counts from one project never match another, and brain-only sessions have no salt at all. Meanwhile the ledger already knows the realised size: this session was sized 1 and its ledger row shows 167,066,307 tokens and 19 helpers; the build session shows 268,635,559 tokens and 40 helpers. mlearn.sizing_hint is called from tests only.",
+   "repro": "",
+   "proposed_fix": "At close, derive a realised tier from ledger facts (helpers used, total tokens, wall minutes, number of gate runs) with thresholds in ml_config.json, and fold it as a strong label when it differs from the rule tier by a clear margin. Replace word hashes with about a dozen non-identifying rule features computed by route (counts of CREATE, EDIT, BIG, WHOLE, SMALL, PROGRAMME hits, question kind, trigger kind, length bucket, language): comparable across projects, no salt, and few enough for tens of labels to mean something. Keep it in shadow; print the shadow tally in `ml report` and let boot show the hint as a note once it has beaten the rules on 30 labels (still never raising a question, I-11).",
+   "acceptance": "A rehearsal session sized 1 by the rules that uses 5 helpers produces a strong label of tier 2 or more in stats/ml.json sizing.shadow; test_I11_tier0_never_raised unchanged and green.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "ml-planning-16"
+  },
+  {
+   "title": "Idea: let the classifier say 'unsure' instead of printing a confident wrong size at boot",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/route.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/method/routing.md"
+   ],
+   "evidence": "Boot printed 'size: 1 small task · data · data.analysis' for a programme on the brain itself; the reason text did say 'unsure between 1 and 2' but the headline did not. method/routing.md:20 already says the lead makes the final call. Signals that predict a miss are cheap to compute: more than 25 tokens (no shipped eval row is that long), a trigger phrase followed by a long tail, both question and task signals present, or fuzzy-only hits. On my fresh set every one of the 7 misses had at least one of these.",
+   "repro": "",
+   "proposed_fix": "classify returns a `confidence` of high or low and, when low, a range (for example 'size: 2 to 3, unsure: long request with a resume phrase; read the request and choose, smaller if in doubt'). boot prints the range instead of a single size; `close` records the lead's final tier as a weak label so disagreements become data.",
+   "acceptance": "For this session's request boot prints a range that includes 3; for the 107 shipped rows at most 10% are marked low confidence; boot stays under 1,500 bytes (existing test).",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "ml-planning-17"
+  },
+  {
+   "title": "Idea: closed-loop simulations from an empty state as standing regression tests for every learner",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/tests/test_mlearn.py",
+    "/home/user/Claude-Brain/tests/test_rehearsal.py",
+    "/home/user/Claude-Brain/engine/mlearn.py"
+   ],
+   "evidence": "The deadlock in finding 2 and the inverted promotion gate in finding 5 both survive 78 green tests because every test seeds a state 'as if from normal operation' (tests/test_mlearn.py:56-60) and checks a function in isolation. Each was exposed by a 30-line loop: suggest, act on the suggestion, fold the result, repeat from an empty state. The earlier review's S9 ('several learning features have no data source') was the same class of problem and recurred in a new form.",
+   "repro": "",
+   "proposed_fix": "Add a small simulation harness in the tests (and optionally `brain ml simulate --seed`): a synthetic world with true pass rates and costs per arm, driving the real hire, settle-record and fold path. Assert properties rather than values: from empty the learner reaches Thompson within N eligible tasks; the explored share never exceeds the cap in any window; a followed item in passing sessions never ranks below an unused one; every learner named in EXECUTION_PLAN 4.1 has received at least one record by the end of the rehearsal.",
+   "acceptance": "tests/test_mlearn.py gains a ClosedLoop class with those four properties; removing the hire fold or the seed trial makes at least one of them fail (mutation check recorded in BUILD_STATUS).",
+   "effort": "M",
+   "confidence": "high",
+   "id": "ml-planning-18"
+  },
+  {
+   "title": "Idea: have the scheduler choose how many helpers to use by showing time against tokens, not time alone",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/schedule.py",
+    "/home/user/Claude-Brain/engine/hr.py"
+   ],
+   "evidence": "schedule.py's own header says parallel work 'buys elapsed time (never tokens: each helper starts cold)', and the build session measured helpers at 73% of cost. Yet the objective is makespan only, the agent count is whatever the caller passes, and the token line is informational with a default cold-start cost of 0 (`4 helpers each start cold at 0: parallel 720000 vs sequential 720000`). On the brain's own 10 open tickets four agents give 550 against 850 sequential (1.55x) and the timeline never uses more than three agents at once.",
+   "repro": "",
+   "proposed_fix": "`plan schedule` runs the critical-path and annealing pass for 1 to max_parallel_helpers agents (each run is milliseconds at normal sizes) and prints a four-line table: agents, makespan, helpers actually used, extra tokens from cold starts (measured median from settled hires once five exist). It recommends the smallest agent count within 10% of the best makespan. The owner works from a phone and pays in tokens, so the default should be the cheapest plan that is nearly as fast.",
+   "acceptance": "For the brain's tickets file the command prints the table and recommends 3 or fewer agents; existing schedule tests unchanged; output stays within 15 lines (I-04).",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "ml-planning-19"
+  },
+  {
+   "title": "Idea: a learner health table so a learner with no data source is visible the day it happens",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/engine/doctor.py"
+   ],
+   "evidence": "Read-back today, traced in code: bandit -> hr.hire (never leaves the default); calibration -> schedule only for tickets with a class (none have one); drift -> two boot lines (works); credit -> recall multiplier and promotion (works, with finding 5); flakiness -> not consulted (known open); review stopping -> not in any skill; sizing -> never read (sizing_hint has no engine caller); cheap_first in engine/route.py:354 has no caller at all. `brain ml report` on the real state would print only what has data, so silence looks the same as health. `brain doctor` says 'healthy' while 0 outcomes have ever been recorded.",
+   "repro": "",
+   "proposed_fix": "`brain ml report --health` (and one line in `brain doctor`): for each learner, records received, records needed before it acts, when it was last fed, and who reads it. Flag any learner with zero records after five closed sessions as 'no data source'. Remove or wire the dead entry points (route.cheap_first, mlearn.sizing_hint) so the table has no permanent red rows.",
+   "acceptance": "On the current real state the health view lists bandit, calibration, drift, sizing, flakiness and review as 0 records with the reason; after the rehearsal test every row is above 0; output at most 12 lines.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "ml-planning-20"
+  }
+ ]
+}
