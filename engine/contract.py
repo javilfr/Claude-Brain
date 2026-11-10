@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import importlib.util
 import re
-import subprocess
 from pathlib import Path
 
 from . import common as c
@@ -291,13 +290,6 @@ def migrate(project: Path, target: int = c.CONTRACT_VERSION, migrations_dir: Pat
         msgs += [f"v{ver} -> v{ver + 1}: " + (", ".join(changes) if changes else "no file changes")]
         ver += 1
     return 0, msgs
-
-
-def git_head(path: Path) -> str:
-    try:
-        return subprocess.run(["git", "-C", str(path), "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return ""
 
 
 # ---------------------------------------------------------------- cli

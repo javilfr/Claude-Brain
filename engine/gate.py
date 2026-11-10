@@ -135,7 +135,12 @@ def run_gates(project: Path, only: str | None = None) -> tuple[int, list[dict]]:
             rec["note"] = "no command set in .brain/project.json yet"
         else:
             r = run_filtered(g["command"], project, project)
-            rec.update({"command": g["command"], "exit": r["exit"], "seconds": r["seconds"], "log": r["log"]})
+            log = Path(r["log"])
+            try:  # relative, so the record means the same on another machine
+                log_ref = str(log.relative_to(Path(project)))
+            except ValueError:
+                log_ref = log.name
+            rec.update({"command": g["command"], "exit": r["exit"], "seconds": r["seconds"], "log": log_ref})
             rec["_digest"] = r
             worst = worst or r["exit"]
         results.append(rec)

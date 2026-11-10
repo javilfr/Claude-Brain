@@ -169,7 +169,7 @@ def push_bookkeeping(project: Path) -> str:
         if made.returncode != 0:
             return "not pushed: could not commit the checkpoint (" + c.clip(made.stderr or made.stdout, 100) + ")"
     if not git(project, "remote"):
-        return "checkpoint committed; not pushed: the project has no remote"
+        return ("checkpoint committed; " if books else "") + "not pushed: the project has no remote"
     branch = git(project, "rev-parse", "--abbrev-ref", "HEAD")
     blocked = release_branch_block(project, branch)
     if blocked:
@@ -210,7 +210,10 @@ def last_gate(project: Path) -> str:
     if not rows:
         return "no gate has run"
     r = rows[-1]
-    return f"gate {r.get('gate')} exit {r.get('exit')} at {str(r.get('at', ''))[:16]} on {str(r.get('commit', ''))[:7]}"
+    if r.get("exit") is None:
+        return f"gate {r.get('gate')}: {r.get('note') or 'not run'}"
+    where = f" on {str(r.get('commit'))[:7]}" if r.get("commit") else ""
+    return f"gate {r.get('gate')} exit {r.get('exit')} at {str(r.get('at', ''))[:16]}{where}"
 
 
 def resume_lines(project: Path) -> list[str]:
@@ -338,7 +341,7 @@ def repo_cleanliness(path: Path) -> list[str]:
     branch = git(path, "rev-parse", "--abbrev-ref", "HEAD")
     upstream = git(path, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
     if not upstream:
-        problems.append(f"branch {branch} has never been pushed")
+        problems.append(f"branch {branch} has never been pushed" if branch and branch != "HEAD" else "no commit has been pushed yet")
     else:
         ahead = git(path, "rev-list", "--count", f"{upstream}..HEAD")
         if ahead and ahead != "0":

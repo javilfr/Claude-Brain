@@ -508,7 +508,7 @@ Creative quality comes from generating real alternatives and choosing, not from 
 
 | Memory | Holds | Where | Loaded |
 |---|---|---|---|
-| Run records | One small record per session: task classes, outcomes, gate results, your corrections, token totals | Brain `memory/episodes/` (no project content) and project `.brain/log/` | Never; read by scripts |
+| Run records | One small record per session: task classes, outcomes, gate results, your corrections, token totals | Brain `learning/inbox/` then `stats/ledger/` (no project content) and project `.brain/log/` | Never; read by scripts |
 | Facts | Verified facts with a source and a re-check date, including model and platform facts | Brain `memory/facts.jsonl`, `memory/models.json` | On recall |
 | Playbook items | Short rules with evidence and counters | Brain `playbooks/*.jsonl`, rendered to readable files | On demand |
 | Owner model | Your standing instructions, word for word and dated; your preferences | Brain `owner/` | The top few in `CLAUDE.md`; the rest on recall |
@@ -657,7 +657,7 @@ These need a real two-repo chat and cannot be completed inside the session that 
 | CB-106 | Whether hooks installed through the cloud environment's settings load in two-repo sessions | Recorded either way; the guard and capture hooks are switched on if they do |
 | CB-107 | Whether a skill's own hooks fire after it is used | Recorded either way |
 | CB-108 | Pushing to both repos from one session, with branch protection on the brain | The learning pull request merges on green; a direct push to `main` is refused |
-| CB-109 | Benchmark: about ten fixed tasks, with and without the brain | Quality not lower; tokens and minutes recorded in `evals/results/` |
+| CB-109 | Benchmark: about ten fixed tasks, with and without the brain | Quality not lower; tokens and minutes recorded in `evals/runs/` |
 | CB-110 | First real project end to end | Released by `bin/brain release`; ledger and digest produced |
 
 ## 8.3 Phase C — Learning in operation

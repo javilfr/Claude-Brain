@@ -126,7 +126,7 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
         if tier != 0:
             try:
                 from . import recall
-                hits = recall.recall(request, family=family, k=4, budget_tokens=260, project=proj if proj and c.is_managed(proj) else None, brain_root=root)
+                hits = recall.recall(request, family=family, k=3, budget_tokens=260, project=proj if proj and c.is_managed(proj) else None, brain_root=root)
                 for h in hits:
                     lines.append(f"recall [{h['id']}] {c.clip(h['text'], 170)}")
             except Exception:

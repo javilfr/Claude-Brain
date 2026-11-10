@@ -182,7 +182,7 @@ Phase C: weekly consolidation routine; first routing statistics; tag `brain-v1.0
 
 ## 6. Definition of done for the brain itself
 
-1. Full gate exits 0 from a clean clone with only Python present.
+1. Full gate exits 0 from a clean clone with only Python and git present.
 2. Rehearsal test passes with no hooks, no MCP, no network.
 3. Every invariant in section 1 has a test that fails when the invariant is broken (mutation spot-check on at least five of them, recorded in `docs/BUILD_STATUS.md`).
 4. `brain lint` reports no missing command or flag anywhere in the instruction surface.
