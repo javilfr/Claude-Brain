@@ -6,6 +6,7 @@ import argparse
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -644,6 +645,267 @@ class SettingsTest(unittest.TestCase):
         s = json.loads((ROOT / ".claude" / "settings.json").read_text())
         matchers = {m for e in s["hooks"]["PreToolUse"] if "guard_paths.py" in e["hooks"][0]["command"] for m in e["matcher"].split("|")}
         self.assertLessEqual({"Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"}, matchers)
+
+
+def lint_brain(tmp: Path) -> Path:
+    b = tmp / "brain"
+    for d in (".claude/skills/demo", ".claude/agents", "method", "playbooks", "contract/template", "engine", "bin",
+              "evals", "memory", "owner", "docs", "hr/rack", "tests"):
+        (b / d).mkdir(parents=True)
+    (b / "CLAUDE.md").write_text("# Brain\nUse `BRAIN boot` first.\n")
+    (b / "contract/template/CLAUDE.stub.md").write_text("stub\n")
+    (b / "bin/brain").write_text("import sys\n")
+    (b / "engine/ok.py").write_text("import json\nfrom . import common\n")
+    return b
+
+
+class LintCommandTest(unittest.TestCase):
+    """quality-path-13 and instructions-18: what the command check let through."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.b = lint_brain(Path(self._tmp.name))
+        self.tree = lint.command_tree()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def skill(self, body: str, description: str = "d"):
+        (self.b / ".claude/skills/demo/SKILL.md").write_text(f"---\nname: demo\ndescription: {description}\n---\n{body}")
+
+    def errors(self) -> str:
+        return " | ".join(lint.check_commands(self.b, self.tree))
+
+    def test_invalid_choice_is_an_error(self):
+        """quality-path-13: `BRAIN checkpoint --stage shipping` passed the lint."""
+        self.skill("Run `BRAIN checkpoint --stage shipping`, then `BRAIN close --outcome great`, then `brain close --tier 9`,\n"
+                   "then `BRAIN guard path x --mode strict` and `BRAIN close --est-tokens many`.\n")
+        errs = self.errors()
+        for needle in ("'shipping'", "'great'", "'9'", "'strict'", "'many'"):
+            self.assertIn(needle, errs)
+        self.assertEqual(len(lint.check_commands(self.b, self.tree)), 5)
+        self.assertIn(".claude/skills/demo/SKILL.md: `brain checkpoint`", errs)
+
+    def test_valid_and_schematic_values_pass(self):
+        self.skill("`BRAIN checkpoint --stage build --tier 2`, `BRAIN close --outcome ok|partial|failed`,\n"
+                   "`BRAIN checkpoint --stage <stage> --tier N --done \"<what was finished>\" --push`,\n"
+                   "`brain close --tier 2 --class software.feature --used ID:FOLLOWED --est-tokens <n>`,\n"
+                   "`BRAIN close --outcome`, `BRAIN guard path <file> --mode work|learn|bootstrap`, `brain close [--tier N]`\n")
+        self.assertEqual(lint.check_commands(self.b, self.tree), [])
+
+    def test_missing_required_option_is_an_error(self):
+        """quality-path-13: `BRAIN req drop R-001` (no --reason) passed the lint."""
+        self.skill("`BRAIN req drop R-001` and `BRAIN guard path --mode work`\n")
+        errs = lint.check_commands(self.b, self.tree)
+        self.assertEqual(len(errs), 2, errs)
+        self.assertTrue(any("`brain req drop`" in e and "--reason" in e for e in errs), errs)
+        self.assertTrue(any("`brain guard path`" in e and "path" in e for e in errs), errs)
+        self.skill("`BRAIN req drop R-001 --reason \"superseded by R-004\"`, `BRAIN req drop <id> --reason \"<why>\"`,\n"
+                   "the bare names `BRAIN req drop` and `brain guard path`, and `BRAIN guard path memory/items.jsonl`\n")
+        self.assertEqual(lint.check_commands(self.b, self.tree), [])
+
+    def test_path_and_variable_call_forms_are_checked(self):
+        """quality-path-13: only `BRAIN x`, `bin/brain x` and `brain x` after a space were read."""
+        self.skill("`python3 Claude-Brain/bin/brain bogus --nope`, `\"$BRAIN\" req bogus`, `$BRAIN frobnicate`,\n"
+                   "`${BRAIN} checkpoint --finished X` and `python3 \"$CLAUDE_PROJECT_DIR\"/bin/brain nonesuch`\n")
+        errs = self.errors()
+        for needle in ("`brain bogus` does not exist", "`brain req bogus` does not exist", "`brain frobnicate` does not exist",
+                       "no flag --finished", "`brain nonesuch` does not exist"):
+            self.assertIn(needle, errs)
+        self.skill("`python3 Claude-Brain/bin/brain boot \"<request>\"`, `\"$BRAIN\" req list`, `$BRAIN doctor`,\n"
+                   "`python3 <folder of this file>/bin/brain lint`\n")
+        self.assertEqual(lint.check_commands(self.b, self.tree), [])
+
+    def test_a_chain_is_read_as_separate_commands(self):
+        self.skill("```\nBRAIN gate && BRAIN release --push\nBRAIN lint | head -5\nBRAIN ledger --json > /tmp/ledger.json  # keep it\n"
+                   "BRAIN doctor; BRAIN budget\n```\n")
+        self.assertEqual(lint.check_commands(self.b, self.tree), [])
+        self.skill("```\nBRAIN gate && BRAIN release --force\n```\n")
+        self.assertEqual(lint.check_commands(self.b, self.tree), [".claude/skills/demo/SKILL.md: `brain release` has no flag --force"])
+
+    def test_stale_command_in_a_memory_item_is_an_error(self):
+        """quality-path-13: the handover note, the HR guidelines, the rack and the item files were not scanned."""
+        row = {"id": "rule-a", "text": "Run builds through `brain frobnicate` so only failures enter the conversation."}
+        (self.b / "memory/items.jsonl").write_text(json.dumps(row) + "\n")
+        (self.b / "hr/rack/build.jsonl").write_text(json.dumps({"id": "t-1", "method": ["First `brain run -- make test`.", "Then `brain req approve R-1`."]}) + "\n")
+        (self.b / "playbooks/software.jsonl").write_text(json.dumps({"id": "pb-1", "text": "Release with `brain release --force`."}) + "\n")
+        (self.b / "owner/standing.jsonl").write_text(json.dumps({"id": "own-1", "text": "He says `brain status --loud`."}) + "\n")
+        (self.b / "docs/NEXT_SESSION.md").write_text("Pre-register with `brain eval preregister`.\n")
+        (self.b / "hr/GUIDELINES.md").write_text("`brain hr hire --chek x` renders the brief.\n")
+        errs = self.errors()
+        for needle in ("memory/items.jsonl (rule-a): `brain frobnicate` does not exist", "hr/rack/build.jsonl (t-1): `brain req approve` does not exist",
+                       "playbooks/software.jsonl (pb-1): `brain release` has no flag --force", "owner/standing.jsonl (own-1): `brain status` has no flag --loud",
+                       "docs/NEXT_SESSION.md: `brain eval preregister` does not exist", "hr/GUIDELINES.md: `brain hr` has no flag --chek"):
+            self.assertIn(needle, errs)
+        self.assertEqual(len(lint.check_commands(self.b, self.tree)), 6)
+        (self.b / "memory/items.jsonl").write_text(json.dumps({"id": "rule-a", "text": "Use `brain run` and `brain recall \"<topic>\"`."}) + "\n")
+        for rel in ("hr/rack/build.jsonl", "playbooks/software.jsonl", "owner/standing.jsonl", "docs/NEXT_SESSION.md", "hr/GUIDELINES.md"):
+            (self.b / rel).unlink()
+        self.assertEqual(lint.check_commands(self.b, self.tree), [])
+
+    def test_the_real_data_files_are_scanned(self):
+        labels = {label.split(" (")[0] for label, _ in lint.command_texts(ROOT)}
+        for rel in ("docs/NEXT_SESSION.md", "hr/GUIDELINES.md", "memory/items.jsonl", "playbooks/software.jsonl", "CLAUDE.md"):
+            self.assertIn(rel, labels)
+        self.assertTrue(any(l.startswith("hr/rack/") for l in labels))
+
+    def test_commands_nobody_names_are_listed(self):
+        """instructions-18: a subcommand no instruction file names is a dead feature or a missing line."""
+        self.skill("`BRAIN req add --quote \"x\"` then `BRAIN req list|check` and `brain hr`\n")
+        unnamed = lint.unnamed_commands(self.b, self.tree)
+        for name in ("lint", "guard diff", "req drop", "hr hire"):
+            self.assertIn(name, unnamed)
+        for name in ("boot", "req add", "req list", "req check"):
+            self.assertNotIn(name, unnamed)
+
+
+class LintRuleTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.b = lint_brain(Path(self._tmp.name))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def skill(self, body: str, description: str = "d"):
+        (self.b / ".claude/skills/demo/SKILL.md").write_text(f"---\nname: demo\ndescription: {description}\n---\n{body}")
+
+    def test_repeated_sentence_fails_the_lint(self):
+        """quality-path-13: EXECUTION_PLAN 4.6 lists repeated sentences among what lint exits non-zero on."""
+        sentence = "Run builds and tests through the output filter so that only failures enter the conversation.\n"
+        for name in ("a", "b"):
+            (self.b / f"method/{name}.md").write_text(f"# {name}\n\n{sentence}")
+        self.assertFalse(any("repeated in" in e for e in lint.run(self.b)[0]))
+        (self.b / "method/c.md").write_text(f"# c\n\n{sentence}")
+        errs, notes = lint.run(self.b)
+        self.assertEqual(len([e for e in errs if "repeated in 3 files" in e]), 1, errs)
+        self.assertFalse(any("repeated in" in n for n in notes))
+
+    def test_constant_that_disagrees_with_the_code_is_reported(self):
+        """quality-path-13: models.json said recall budget 600, the code uses 300, and nothing compared them."""
+        self.assertEqual(lint.check_constants(self.b), [])                       # no file, nothing to compare
+        c.write_json(self.b / "memory/models.json", {"limits": {"max_parallel_helpers": 4, "recall_budget_tokens": 600}})
+        (hit,) = lint.check_constants(self.b)
+        for needle in ("memory/models.json", "limits.recall_budget_tokens", "600", "300", "engine/recall.py"):
+            self.assertIn(needle, hit)
+        c.write_json(self.b / "memory/models.json", {"limits": {"max_parallel_helpers": 4, "recall_budget_tokens": 300}})
+        self.assertEqual(lint.check_constants(self.b), [])
+        c.write_json(self.b / "memory/models.json", {"models": {}})
+        self.assertEqual(lint.check_constants(self.b), [])
+
+    def test_trigger_phrase_without_a_routing_case_is_reported(self):
+        """instructions-18: 26 quoted trigger phrases had no case in evals/routing.jsonl."""
+        self.skill("body\n", 'Resume or ship. Use for "Start running", "Ship it", or "Nuevo proyecto: …".')
+        (self.b / "evals/routing.jsonl").write_text(json.dumps({"text": "ok start running now", "tier": 2}) + "\n"
+                                                    + json.dumps({"text": "Nuevo proyecto: una web", "tier": 2}) + "\n")
+        self.assertEqual(lint.check_triggers(self.b), ['demo: trigger phrase "ship it" has no case in evals/routing.jsonl'])
+        with open(self.b / "evals/routing.jsonl", "a") as f:
+            f.write(json.dumps({"text": "Ship it!", "tier": 2}) + "\n")
+        self.assertEqual(lint.check_triggers(self.b), [])
+
+    def test_real_tree_trigger_hits_match_the_audit(self):
+        self.assertEqual(len(lint.skill_triggers(ROOT)), 10)
+
+    def test_marked_fact_that_drifted_is_an_error(self):
+        """quality-path-20: numbers restated by hand drift; a marked number is compared with the code."""
+        doc = self.b / "docs/BUILD_STATUS.md"
+        (self.b / "tests/test_x.py").write_text("class T:\n    def test_a(self): pass\n    def test_b(self): pass\n\ndef helper(): pass\n")
+        (self.b / "hr/rack/a.jsonl").write_text('{"id": "t-1"}\n{"id": "t-2"}\n{"id": "t-3"}\n')
+        size = len((self.b / "CLAUDE.md").read_bytes())
+        self.assertEqual({k: f(self.b) for k, f in lint.FACTS.items()},
+                         {"engine-modules": 1, "claude-md-bytes": size, "templates": 3, "tests": 2})
+        doc.write_text(f"Core: <!-- fact: engine-modules -->1<!-- /fact --> modules, `CLAUDE.md` <!-- fact: claude-md-bytes -->{size}<!-- /fact --> bytes,\n"
+                       "<!-- fact: templates -->3<!-- /fact --> templates, <!-- fact: tests -->2<!-- /fact --> tests.\n")
+        self.assertEqual(lint.check_facts(self.b), [])
+        doc.write_text("Core: <!-- fact: engine-modules -->21<!-- /fact --> modules, `CLAUDE.md` <!-- fact: claude-md-bytes -->5,356<!-- /fact --> bytes; "
+                       "<!-- fact: tests -->2<!-- /fact --> tests; <!-- fact: lines -->9500<!-- /fact --> lines.\n")
+        errs = lint.check_facts(self.b)
+        self.assertEqual(len(errs), 3, errs)
+        self.assertIn("docs/BUILD_STATUS.md: engine-modules is marked 21 but the code says 1", errs[0] + errs[1] + errs[2])
+        self.assertTrue(any("claude-md-bytes is marked 5,356" in e and str(size) in e for e in errs))
+        self.assertTrue(any("unknown fact 'lines'" in e for e in errs))
+        self.assertTrue(all("lint --fix-facts" in e for e in errs if "unknown" not in e))
+        self.assertTrue(any("fact" in e for e in lint.run(self.b)[0]))
+        self.assertEqual(lint.fix_facts(self.b), 2)
+        text = doc.read_text()
+        self.assertIn("<!-- fact: engine-modules -->1<!-- /fact -->", text)
+        self.assertIn(f"<!-- fact: claude-md-bytes -->{size:,}<!-- /fact -->", text)
+        self.assertEqual([e for e in lint.check_facts(self.b) if "unknown" not in e], [])
+        self.assertEqual(lint.fix_facts(self.b), 0)
+
+    def test_fact_values_of_the_real_brain(self):
+        self.assertEqual(lint.FACTS["templates"](ROOT), 100)
+        self.assertEqual(lint.FACTS["engine-modules"](ROOT), len([p for p in (ROOT / "engine").glob("*.py") if p.name != "__init__.py"]))
+        self.assertEqual(lint.FACTS["claude-md-bytes"](ROOT), (ROOT / "CLAUDE.md").stat().st_size)
+        self.assertGreater(lint.FACTS["tests"](ROOT), 400)
+
+    def test_absolute_rule_without_a_reason_in_a_skill_or_agent_is_noted(self):
+        """instructions-18: the reason check read only CLAUDE.md."""
+        self.skill("1. Never push to main.\n2. Always run the gate, because a red build must not ship.\n")
+        (self.b / ".claude/agents/builder.md").write_text("---\nname: builder\ndescription: never mind\n---\nAlways return the path.\n")
+        notes = lint.unscoped_absolutes(self.b)
+        self.assertEqual(len(notes), 2, notes)
+        self.assertTrue(notes[0].startswith(".claude/agents/builder.md:5:") or notes[1].startswith(".claude/agents/builder.md:5:"), notes)
+        self.assertTrue(any(n.startswith(".claude/skills/demo/SKILL.md:5:") for n in notes), notes)
+
+    def test_token_number_in_an_agent_body_is_noted(self):
+        """instructions-18: hr/GUIDELINES.md forbids token numbers in agent text; all six agents had one."""
+        (self.b / ".claude/agents/builder.md").write_text("---\nname: builder\ndescription: builds; 2,000 tokens here is front matter\n---\n"
+                                                         "Return, in under about 2,000 tokens: files changed.\nKeep the reply short.\nUse 40k tokens at most.\n")
+        notes = lint.agent_token_numbers(self.b)
+        self.assertEqual(len(notes), 2, notes)
+        self.assertTrue(notes[0].startswith(".claude/agents/builder.md:5:"), notes)
+        self.assertEqual(len(lint.agent_token_numbers(ROOT)), len(list((ROOT / ".claude" / "agents").glob("*.md"))))
+
+    def test_a_rule_listed_as_note_only_does_not_fail_the_lint(self):
+        """The lead's switch: a new rule that fires on files another package owns reports until they are fixed."""
+        self.skill("body\n", 'Use for "Ship it".')
+        (self.b / "evals/routing.jsonl").write_text(json.dumps({"text": "hello"}) + "\n")
+        with mock.patch.object(lint, "NOTE_ONLY", frozenset({"triggers"})):
+            errs, notes = lint.run(self.b)
+            self.assertFalse(any("ship it" in e for e in errs))
+            self.assertTrue(any("ship it" in n for n in notes))
+        with mock.patch.object(lint, "NOTE_ONLY", frozenset()):
+            errs, notes = lint.run(self.b)
+            self.assertTrue(any("ship it" in e for e in errs))
+
+    def test_helper_reply_over_cap_is_reported(self):
+        """quality-path-13: the spec's 'sub-agent replies over cap' rule was missing from lint --transcript."""
+        big, small = "x" * 9000, "y" * 400
+        rows = [
+            {"type": "assistant", "message": {"model": "m1", "content": [{"type": "tool_use", "id": "a1", "name": "Agent", "input": {}},
+                                                                       {"type": "tool_use", "id": "a2", "name": "Task", "input": {}},
+                                                                       {"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": "a.py"}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a1", "content": big},
+                                                     {"type": "tool_result", "tool_use_id": "a2", "content": [{"type": "text", "text": small}]},
+                                                     {"type": "tool_result", "tool_use_id": "r1", "content": big}]}},
+        ]
+        t = Path(self._tmp.name) / "t.jsonl"
+        t.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        lines = lint.transcript_report(t, [])
+        self.assertIn("helper replies over ~2,000 tokens: 1 of 2", "\n".join(lines))
+        self.assertLessEqual(len(lines), 8)
+
+
+class LintOutputTest(unittest.TestCase):
+    def lint(self, *args):
+        return sh(ROOT, sys.executable, str(ROOT / "bin" / "brain"), "lint", *args)
+
+    def test_lint_output_stays_short_and_notes_are_grouped(self):
+        """I-04: one line per rule with a count, however many hits a rule has."""
+        r = self.lint()
+        self.assertEqual(r.returncode, 0, r.stdout)
+        lines = r.stdout.strip().splitlines()
+        self.assertLessEqual(len(lines), 15, r.stdout)
+        self.assertRegex(lines[-1], r"^lint: 0 error\(s\), \d+ note\(s\)")
+        notes = [l for l in lines if l.startswith("note:")]
+        self.assertTrue(all(len(l) <= 260 for l in notes), notes)
+
+    def test_notes_flag_lists_every_hit(self):
+        self.assertEqual(self.lint("--notes").returncode, 0)
+        short, full = self.lint().stdout, self.lint("--notes").stdout
+        total = int(re.search(r"(\d+) note\(s\)", short).group(1))
+        self.assertEqual(len([l for l in full.splitlines() if l.startswith("note:")]), total)
 
 
 if __name__ == "__main__":
