@@ -57,7 +57,7 @@ Ten analysts read your message independently and all ten flagged the same items.
 
 **4. "The most efficient ever", "perfectly", "forever".** Nobody can prove a superlative. The plan replaces each with something testable: tokens and minutes per finished task against the Travel Journal baseline; a requirements ledger with evidence; a versioned contract with old versions tested on every change.
 
-One more point, because it goes against how the earlier builds were run. Your past instructions include "always at least 10 teams running". The evidence in your own history says that pattern is the main cost and reliability problem: 20 parallel agents hit the rate limit and produced nothing in one project, ten parallel agents exhausted the usage window three times in two days on the Travel Journal, and multi-agent runs use roughly 15 times the tokens of a single conversation. The brain defaults to at most four helpers at once, each one justified, and scales up only when the work is truly independent and you ask for it.
+One more point, because it goes against how the earlier builds were run. Your past instructions include "always at least 10 teams running". The evidence in your own history says that pattern is the main cost and reliability problem: 20 parallel agents hit the rate limit and produced nothing in one project, ten parallel agents exhausted the usage window at least twice in two days on the Travel Journal, and multi-agent runs use roughly 15 times the tokens of a single conversation. The brain defaults to at most four helpers at once, each one justified, and scales up only when the work is truly independent and you ask for it.
 
 ---
 
@@ -182,7 +182,7 @@ Every candidate was specified, and two were prototyped and measured:
 
 ## 2.6 What your past chats show (report 07)
 
-Seventeen projects appear in the history: the Japan trip app, a Spanish legal counsel system with a "Cerebro" brain agent, learning apps built from books, a Costa Rica knowledge base and brochure, birding and plant tools, games and Minecraft tools, course assignments, a car project, and the Travel Journal. Four of them were earlier attempts at this same brain idea.
+Seventeen projects appear in the history: trip apps, a legal research system, learning apps built from books, knowledge bases, data tools, games, course assignments and the journal that the sample repo built. Four of them were earlier attempts at this same brain idea.
 
 Eighteen kinds of request recur. The brain must handle all of them: web apps for iPhone deployed on Vercel; design and visual polish; handover between chats; release to `main`; agent team design; deep research and searchable knowledge bases; long-form writing; learning apps from books; rubric-driven assignments and audits; Spanish and English output; data pipelines and outside services; games; help running things on your own computer; questions about Claude itself; repository housekeeping; legal research; efficiency work; downloadable documents.
 
@@ -365,7 +365,7 @@ One entry point, `bin/brain`, Python standard library only, no installs, every c
 | `release` | Gate, then push only on green, then check the live address | The red pushes and invisible deployments in your history |
 | `checkpoint`, `status`, `handover` | Write the single state file, generate `STATUS.md`, prepare a clean handover | Status in five places; handover patches |
 | `ledger` | Reads real token use from the session's records, by model and sub-agent, and prices it | Estimates |
-| `close` | End of session: ledger, run record, lesson candidates, status refresh | The lessons rule nobody followed |
+| `close` | End of session: token ledger, run record and outcomes from the gate log, status refresh. Lessons are added with `learn note` when there is a real signal | The lessons rule nobody followed |
 | `plan schedule`, `plan assign` | Schedule tickets across agents; choose model and effort under a budget | First-come scheduling; one model for everything |
 | `learn …` | The learning pipeline (Part 6) | Hand-edited handbooks |
 | `budget`, `guard`, `doctor` | Enforce the always-loaded size caps, the zone rules, and self-tests | Bloat and drift |

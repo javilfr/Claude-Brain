@@ -17,7 +17,7 @@ Audience: the Claude model building or changing this repository. Not owner-facin
 
 | ID | Invariant | Enforced by |
 |---|---|---|
-| I-01 | Python standard library only in `engine/` and `bin/`. No install, no network at boot except the bounded radar (I-14). | `tests/test_lint.py::test_stdlib_only` |
+| I-01 | Python standard library only in `engine/` and `bin/`. No install, no network at boot except the bounded radar (I-14). | `brain lint` (`lint.check_imports`), `tests/test_lint.py::test_non_stdlib_import_is_an_error` and `::test_the_real_brain_is_clean` |
 | I-02 | The required core works with hooks, MCP and plugins absent (two-repo cloud session). | rehearsal test runs with no hooks |
 | I-03 | Always-loaded text: `CLAUDE.md` ≤ 6,000 B; project stub ≤ 2,000 B; each agent/skill description ≤ 300 chars; ≤ 6 agents; ≤ 12 skills; total ≤ 3,200 est. tokens; nothing volatile. | `brain budget`, `brain lint` |
 | I-04 | Every command prints ≤ ~15 lines by default; `boot` ≤ 1,500 B. | unit tests |
@@ -130,16 +130,16 @@ Port of the tested prototype (`round2/09`; prototype measured 0.6–0.8 s for 11
 
 - Formats: `evals/tasks/<id>.json` (prompt, setup, scripted grader command, reference and null solutions, class, tier, split dev|heldout); `evals/runs/<run>.jsonl` (one row per trial); `evals/prereg/<change>.json` committed before any tier-2 run (metric, direction, tasks, n, decision rule).
 - `brain eval contract` runs tier 0. `brain eval audit` checks every task's grader passes its reference solution and fails its null solution.
-- `brain eval compare <runA> <runB> [--prereg f]`: paired exact sign test on discordant tasks; Beta–Binomial posterior P(B > A); SPRT with bounds from `round2/07` §4.3; verdict ∈ {ship, revert, not-proven}; I-16; two-line owner wording with n.
+- `brain eval compare <run-file> --a ARM --b ARM [--prereg f]`: paired exact sign test on discordant tasks; Beta–Binomial posterior P(B > A); SPRT with bounds from `round2/07` §4.3; verdict ∈ {ship, revert, not-proven}; I-16; two-line owner wording with n.
 - `brain ablate <rule-id|file>`: writes a prereg for removing one always-loaded rule or playbook line, lists the tasks to run in both arms, and after results calls `compare`. It never edits instruction files itself.
 - Seed set: ≥ 12 tasks across the five families and the routing decision, each with a scripted grader (code: run tests; writing: word-count/required-facts/forbidden-claims checks; research: required sources present and resolvable; routing: label match). Split 8 dev / 4 held-out.
 - Reviewer honesty test: `evals/seeded_defects/` with ≥ 6 small artefacts each containing one planted defect and the expected finding; scoring script reports the catch rate.
 
 ### 4.5 Session hygiene (CB-084)
 
-- `checkpoint --push`: after writing state, commit bookkeeping files (`.brain/`, `STATUS.md`, `NEEDS_YOU.md`) if they are the only changes and push the current branch; if other changes exist, print one line naming them and push nothing. Skills call it with `--push`.
+- `checkpoint --push`: after writing state, commit the bookkeeping files (`.brain/` except the manifest and `ext/`, `STATUS.md`, `NEEDS_YOU.md`) and push the current branch, so committed work and state are visible to the next session; other uncommitted changes are left for their author and counted in the output. On the project's release branch it pushes only when everything not yet released is bookkeeping; otherwise it refuses and points to `brain release` (I-12).
 - Unclosed sessions: `close` writes `.brain/log/open-session.json` at first `boot` of a session (session id, start) and clears it at `close`. `boot` in a later session that finds one: if that session's transcript is still on disk, run capture for it; otherwise append an inbox `ledger` record marked `unrecorded: true`. One boot line reports it.
-- Task packet: `brain plan packet <ticket-id>` prints a ≤ 25-line brief from the ticket JSON (goal, reason, files owned, interfaces, acceptance command, return format). Every delegated task carries an acceptance command.
+- Task packet: `brain plan packet <tickets.json> <ticket-id>` prints a ≤ 25-line brief from the ticket JSON (title, and where present goal, reason and interfaces; files owned; acceptance command; return format). Every delegated task carries an acceptance command.
 - Unattended runs: `.brain/CHECKLIST.md` generated from open tickets/requirements; skills `brain-start` and `brain-build` tell the lead to continue while it has open items and no blocker, with a cap of 3 automatic continuations (`round2/05` finding 4).
 - `brain resume`: compaction-proof restatement (≤ 12 lines): state, open checklist items, files in flight, last gate result.
 

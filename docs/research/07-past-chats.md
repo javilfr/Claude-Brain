@@ -21,7 +21,6 @@ The events tool returns the newest 100 raw events per call, and most events are 
 - **Newest page read for 52 of the 55 owner sessions.** This count includes the current session, whose two messages come from `OWNER_PROMPT.md`.
 - **Second-newest page read for 32 of them.**
 - **Reached the first message** in 13 sessions (short sessions, or sessions where the second page hit the start).
-- **One full list of user messages** recovered from a context-compaction summary (the Costa Rica brochure session).
 - **Not read at all:** `01GagRJ…` "Expand wiki pages to 800-1000 words" and `01D9s9…` "Enable experimental agent teams feature". Both returned pages over 16 MB. Only their titles are used.
 - **Second page not read:** the eight "Start running / Keep running / Plan continuation" Travel Journal sessions. Owner directions for those come from the sample repo's `DECISIONS.md` rows 13 to 17 instead.
 - **The 65 child sessions were skipped on purpose.** Their prompts were written by Claude, not the owner. Their titles are used as evidence of how work was split.
@@ -113,41 +112,9 @@ Numbered. Each item quotes the words it comes from. Type: R requirement, C const
 
 Omitted from the repository copy: the table listed 120 session ids and titles, which are private history. Counts and findings drawn from it are kept below.
 
-### B.2 Projects seen, oldest to newest
+### B.2 and B.3 Projects and stored instructions
 
-| Project (repo) | Sessions | What it is | Evidence |
-|---|---|---|---|
-| Japan 2026 travel app (`japan-2026`) | 9 | Vite + React PWA for a 15-day Japan trip: itinerary, history essays, places, wiki, tools, palettes, icon. Five-agent team (CEO, front end, back end, content, journalist). | Titles; agent files read inside transcript; owner messages |
-| Spanish legal counsel system (`New-CC`) | 3 | Corpus of 12,249 legal texts, 35 knowledge files, 13 agents, five-phase case pipeline, PDF reports, bilingual. Started with "set up". | Transcript content |
-| DevTool (`DevTool`) | 2 | A developer or deployment tool that shows Vercel build results. | Owner messages |
-| Audiobooks (`Audiobooks`) | 1 | Not identified beyond the name. | Title only |
-| Org (`Org`) | 2 | A personal app ("command center" appears in a related prompt). Icon redesign. | Owner message |
-| Minecraft world editing (`mncrft`, `Server`) | 3 | Python tools that write Bedrock structure files; later a local server run on a Mac with Docker. | Owner messages |
-| Plant identification (`plant`) | 1 | PlantNet recognition plus GBIF taxonomy lookup module. | First message |
-| Delivery game (`game`, and one attempt inside `japan-2026`) | 2 | Browser game built in waves, auto-shipped to `main`. | Last assistant message |
-| Course projects (`Projectx`, `projectnew`, `project-3`, `project-4`, `project-5`, `project-8`) | 8 | Rubric-driven assignments: an outfit-recommendation agent, a fine-tuned classifier with a demo video script, a bug-fix exercise, an issue from a public repo. | Owner messages |
-| Aperture / camera learning app (`camerapp`) | 5 | A learning app with lessons, flash cards, generated audio. | Owner messages |
-| Communication skills app (`betteryou`) | 1 | Learning app built from a book: 17 stages, 163 lessons. | Last assistant message |
-| Photography course app (`PhotoEd`) | 1 | Book-centred learning dashboard. | Owner messages |
-| Birding trip app (`birding-SAL-GUA`) | 2 | Trip research and web app with eBird data harvest. | Owner messages |
-| Dream car (`car-build`) | 1 | Research plus a web app, run as a non-stop improvement loop with hourly check-ins. | Routine prompts |
-| Costa Rica trip (`costa-Rica-3`) | 2 | A 2,052-file knowledge base with BM25 search, 10 agents, 10 skills, a 189-page brochure, then an iPhone web app. | Compaction summary |
-| Travel Journal (`Travel-Journal` + company repo) | 13 owner sessions + 65 child sessions | The sample repo and its product. | Sample repo; transcripts |
-| Claude Brain (`Claude-Brain`) | 1 (this one) | The current request. | Owner prompt |
-
-### B.3 Standing instructions found in memory-like stores
-
-From the sample repo (already binding there, and strong signals for the brain):
-
-- `owner-brief.md`: prefers visual interfaces to the command line; "Everything he must do is a file to read or a button to click." Max subscription. Bird photography with a long telephoto, astrophotography with a star tracker.
-- `DECISIONS.md` rows 13 to 17, marked as owner direction and not assumed: the journal covers the whole experience and is not food-first; build all software and prove it on a sample before any real trip; the app is read-only and trips are added only in the Claude chat; a light theme "that does not hurt the eyes and looks stunning".
-- `CLAUDE.md` section 11 (owner instruction of 2026-11-05): the product's `main` is always the latest deployable app, pushed only on a green gate, never force-pushed.
-- `NEEDS_YOU.md`: twelve numbered items, each written as click-only steps.
-
-From routines (all created by Claude on the owner's behalf, all finished):
-
-- Car project: 20 or more one-shot "continue improvement loop" check-ins, about one per hour for two days. Prompt text: "user asked for non-stop work until they say stop".
-- Travel Journal: an hourly "teams check-in (keep ≥10 running)" routine. Prompt text: "owner: always at least 10 teams running". Several one-shot release and CI checks.
+Omitted from the repository copy. They named private projects and quoted stored notes. The findings that shape the brain are kept below without names or quotes.
 
 ### B.4 Synthesis
 
@@ -155,65 +122,30 @@ From routines (all created by Claude on the owner's behalf, all finished):
 
 Counts are owner sessions in which the class clearly appears. A session can count in more than one class. Counts are a floor, because of sampling.
 
-| # | Task class | Sessions | Example quotes (read directly) |
-|---|---|---|---|
-| 1 | Web or PWA app build, iPhone first, deployed on Vercel | 30+ | "turn it into a Vite web app to be deployed in vercel and that I will be able to use perfectly in my iPhone 17 pro" · "The app should be totally changed to give the books a much more central part" |
-| 2 | Design and visual polish | 12+ | "I want a brand new design for the app icon, propose 5 ones in 2026 IOS style so it looks great, I will choose from the 5 you provide" · "Make the Tori gate in the icon larger and exactly in the center of the icon" · "add some text with the top image like travel journal with perfect typography and a color that looks great with the background images" |
-| 3 | Session handover, repo memory and "set up" protocols | 12+ | "research online how to create a true memory in the repo for Claude code for when I create a new chat soon you know exactly everything we have done in detail and everything I've told you" · "When I just put setup at the start of the chat, set up these two words will be the key to start initializing the chat" · "Get everything ready to continue in a new chat with renewed context" |
-| 4 | Deployment and release to `main` | 10+ | "Please push to main and fix the deployment so the new version is actually visible when using the vercel link and make sure you always do this for any update after this" · "Does it know to always merge into main so vercel deploys with extreme detail?" |
-| 5 | Agent team and orchestration design | 8+ | "Recommend a team of 7 different agents … extremely detailed with at least 600 words each … I want this team to also have a brain agent as a keystone that will take all the needed decisions that otherwise it would ask me" · "I need you to deploy plenty of agents and help me craft at 60000 word document" |
-| 6 | Deep research and knowledge bases with retrieval | 7+ | "creating extremely detailed files about everything we will do on our trip … all organized with a rag system and with agent teams" · "go research for a long time hundreds of websites and prepare the whole new report" |
-| 7 | Long-form writing and content production | 6+ | "every daily article of the history section being rewritten to 800-1000 words through very comprehensive research … in total will amount close to 60000 words" |
-| 8 | Learning apps generated from books or topics, and reusable blueprints | 5 | "create an extremely long and detailed json document for Claude code to build from scratch (with a very long multi-session plan) something similar but for the topic of my choice" · "Remember you should not add any of the quick check and questions and answers just the actual lesson part" |
-| 9 | Rubric-driven course deliverables and documentation audits | 8 | "Make sure we have all of this and if we don't then explain what we don't have" · "Analyze step by step and make sure everything is done fully correctly" · "Prepare a script for a video in the shorter most simple end" |
-| 10 | Bilingual output, Spanish and English | 4+ | "Hey team I'm with my grandparents who only speak Spanish, one by one tell them a little about what you do in this team" · a "set up" request written in Spanish · a Spanish-language update report on a legal case · the final report of one app session delivered in Spanish |
-| 11 | Data pipelines and external APIs | 5+ | Plant identification via PlantNet and GBIF; eBird harvest for birding; routes, climate and species pipelines for Costa Rica; text-to-speech for lessons ("Can we start with just one lesson for me to try and see if I like the voice") |
-| 12 | Games and creative builds | 4 | "Continue improving" (game built in waves) · Minecraft: "help me edit a Minecraft world creating buildings and other structures that I tell you" |
-| 13 | Help running things on his own computer | 4 | "How can i run this locally on my macbook pro give me all code boxes to copy and paste in my terminal" · "So how do I run it? Can't I launch in my browser?" · "im done playing, close everything" |
-| 14 | Questions about Claude itself and repair of the working setup | 5+ | "check your memory and create a report of my main ideas for everything and what you should do when editing the web app" · "I have a bunch of chats running on the same repos probably causing problems, how can we fix it, stop everything into one and organize everything without losing any of the work" · title "Enable experimental agent teams feature" |
-| 15 | Repo operations | 5+ | "Clone it into this repo" · "Relocate the book pdf to a perfect location within the repo" · "revert all you did if you made any changes" |
-| 16 | Legal research and case analysis (Spanish law) | 3 | A corpus-backed counsel system with a five-phase pipeline and PDF reports; a request for a refreshed Spanish report after new facts emerged |
-| 17 | Efficiency requests | 2 | "Prepare a quick low token very effectively built base for the whole build as well" · the current message 2 |
-| 18 | Downloadable files and documents | 3+ | "I want to download these two, make the downloadable from here" · brochure delivered as PDF |
+| # | Task class | Sessions |
+| --- | --- | --- |
+| 1 | Web or PWA app build, iPhone first, deployed on Vercel | 30+ |
+| 2 | Design and visual polish | 12+ |
+| 3 | Session handover, repo memory and "set up" protocols | 12+ |
+| 4 | Deployment and release to `main` | 10+ |
+| 5 | Agent team and orchestration design | 8+ |
+| 6 | Deep research and knowledge bases with retrieval | 7+ |
+| 7 | Long-form writing and content production | 6+ |
+| 8 | Learning apps generated from books or topics, and reusable blueprints | 5 |
+| 9 | Rubric-driven course deliverables and documentation audits | 8 |
+| 10 | Bilingual output, Spanish and English | 4+ |
+| 11 | Data pipelines and external APIs | 5+ |
+| 12 | Games and creative builds | 4 |
+| 13 | Help running things on his own computer | 4 |
+| 14 | Questions about Claude itself and repair of the working setup | 5+ |
+| 15 | Repo operations | 5+ |
+| 16 | Legal research and case analysis (Spanish law) | 3 |
+| 17 | Efficiency requests | 2 |
+| 18 | Downloadable files and documents | 3+ |
 
-#### (b) Recurring instruction patterns and standing preferences
+#### (b) and (c) Patterns and failures
 
-1. **Run without stopping and decide for him.** "Do not stop and do not ask me anything else until everything is fully done, take the best possible choices based on research for any questions you might have". Repeated in the car project, the Costa Rica project, the Minecraft agent brief ("a brain agent as a keystone that will take all the needed decisions that otherwise it would ask me") and message 2.
-2. **Short trigger words that start a whole protocol.** "set up" (legal system, birding, Costa Rica), "Start running" (Travel Journal), "Continue" as a complete message (seen eight or more times). The brain needs one-word entry points that are safe to send from a phone.
-3. **A fresh chat when context is high, with a perfect handover.** "we are using too much context" · "start it in a new chat with renewed context" · "prepare everything and give me the prompt I should give to start it". Seen in at least seven sessions. Handover is a first-class deliverable.
-4. **`main` must always be the deployable app and Vercel must show it.** Asked in DevTool (May), the communication app (June), Aperture (June), birding (July), Travel Journal (November, three times in one hour). This is the single most repeated standing instruction.
-5. **Research first, heavily.** "comprehensive research", "research heavily", "hundreds of websites", "research all AI and anthropic info online that might be useful".
-6. **Emphasis vocabulary.** "extremely detailed", "super long", "perfect/perfectly", "fully", "everything", "absolutely", capital letters for priorities. He equates length with thoroughness for plans and agent briefs ("at least 600 words each", "at least 1000 words").
-7. **Agent teams as the default shape of work.** Asked for by name in the Japan app, Minecraft, legal system, Costa Rica, Travel Journal ("always at least 10 teams running").
-8. **Options, then he picks.** "propose 5 ones … I will choose from the 5 you provide" · "I really like option number one but…". Design decisions go well when offered as a short numbered menu with images.
-9. **Try a small sample before the full run.** "Can we start with just one lesson for me to try and see if I like the voice" · "prove it on a SAMPLE before any real trip".
-10. **Phone-first, no terminal.** 53 of 55 sessions from iOS. When a terminal is unavoidable he asks for "all code boxes to copy and paste". He pastes raw terminal output back and expects diagnosis.
-11. **Accuracy about his own facts.** "It is very important you're fully accurate in mapping my trip chronologically" · "today (20th) should be day one, not day 2 … we have 15 days not 16" · "don't focus at all in the number of species … the number is misrepresenting". He corrects wrong facts quickly and expects no invented numbers.
-12. **Build for growth.** "it must made with the knowledge that it is to display dozens of trips, so make sure you figure out how to implement this dynamic heavily".
-13. **Reuse what worked.** "I love it and I want to create something similar in a different repo for a different topic". The blueprint request in June is an early version of the Claude Brain idea.
-14. **Spanish when the audience is Spanish-speaking.** He writes in either language and expects the reply to match.
-15. **Dictated, fast, typo-tolerant messages.** "memore", "A new chart", "ai" for "I". The brain must read intent, not spelling.
-
-#### (c) Recurring failure and complaint patterns
-
-| # | Pattern | Evidence | What the brain must do about it |
-|---|---|---|---|
-| 1 | **Context exhaustion forces chat changes.** | "we are using too much context"; seven or more handover requests; car session at 610,677 of 1,000,000 tokens; one session continued from a compaction summary | Budget context per session, checkpoint to files, hand over before the limit, keep the start-up read small |
-| 2 | **Timeouts on large single edits.** | "Continue always dividing in many steps, do not time out" · "this is a simple task why are you timing out"; 27 timeout strings in that one page | Never write or rewrite a very large file in one step; chunk by rule |
-| 3 | **Huge pastes kill sessions.** | A 2.58 MB source file with inlined images pasted as a message; that session ended as failed. Two other sessions return pages over 16 MB | Never inline large binaries; detect and move big content to files; tell the owner to attach instead of paste |
-| 4 | **Vercel shows nothing because work sat on a branch.** | "My Vercel deploy reads from main, which might be why I don't see any changes at all"; car project ended with "site still 404; awaiting Vercel promote" after a day and a half of idle check-ins | A release rule in the brain from day one, plus a check that production actually serves the new commit |
-| 5 | **Rate limits from too many parallel agents.** | Costa Rica summary: "20 parallel agents hit the session rate limit (429) and produced nothing"; 429 strings in five sessions | Cap parallel agents, write incrementally, prefer scripts for bulk data work |
-| 6 | **Many chats on the same repos at once.** | "I have a bunch of chats running on the same repos probably causing problems"; background agents still running when he wanted to leave: "Seems like there are still two tasks running are you sure I can start a new chat" | One lead per repo pair, a visible list of what is running, a clean stop procedure |
-| 7 | **Quality regressions after long iteration.** | "It's the worst and most incomplete it's ever been" followed by a request to go back and restart from scratch | Tagged known-good versions, easy rollback, regression checks before replacing a working feature |
-| 8 | **Requests cancelled after work started.** | "Just cancel doing anything about this in the Japan app, revert all you did" | Work on a branch, keep reverts cheap, confirm the target repo before a large build |
-| 9 | **Repo assumed to hold work that was not there.** | Three sessions opened on empty repos; Claude reported "There is no code or tests to analyze" | Check the repo state first and say what is missing in the first reply |
-| 10 | **Secrets pasted into chat.** | Three occurrences (a storage token, two API keys) | Never echo or commit them; use the credential form; write a warning into the owner guide |
-| 11 | **Infrastructure and model availability failures.** | One session never started ("executable file not found"); one ended with "Claude Fable 5 is currently unavailable"; "Overloaded" strings in four sessions | A fallback model plan and a start-up self-check |
-| 12 | **Quota or account limits on third-party services.** | Text-to-speech calls returned "exceeded quota"; a free weather quota ran out | Stand-ins and a clear "needs you" note instead of silent failure |
-| 13 | **Tight performance budgets blocking releases on a busy machine.** | "The one failure was the iPhone day-page load time: 2,652 ms against the 2,600 ms budget. That run shared the CPU with other agents." | Run gates on a quiet machine or in a dedicated session; separate noisy measurements from hard failures |
-| 14 | **High cost of the orchestration style.** | Reported session cost at list price, last value seen per session: Costa Rica app 626.51 USD; one Travel Journal session 495.77; another 377.90; car 285.23. About 3,200 USD across the 39 owner sessions with a readable figure, of which about 1,780 in 12 Travel Journal parent sessions. Child sessions are not included. The car session shows 525,899,094 cache-read tokens | This is the baseline that "most efficient" must beat. Record cost per ticket and publish it |
-
-Caveat on row 14: the figure is the `total_cost_usd` of the last result event on the newest page. One cross-check against the session record matched (285.23 against 282.75 for the car session), so it is treated as cumulative. The owner is on a Max subscription, so this is list-price equivalent, not money paid.
+Omitted from the repository copy because they quoted the owner's messages. Their content, without quotes, is in `docs/MASTER_PLAN.md` Part 2.6 and in the seeded items under `owner/` and `memory/`.
 
 #### (d) Capability coverage checklist (acceptance tests for the brain)
 
@@ -289,19 +221,3 @@ Each line is a test the finished brain should pass on a sample project.
 39. Given "build a small game and keep improving it", the brain ships in waves with tests and a short note per wave. Proof: wave log and test counts.
 40. Given "design Minecraft structures for my Xbox world", the brain researches the transfer path first and says which steps need a PC or a paid service. Proof: a feasibility note before any build.
 
----
-
-## Decision-relevant findings, short list
-
-1. No memory store exists, and consumer chats are unreachable. Cloud history is reachable: 120 sessions, 55 started by the owner, sampled as described in section 0.
-2. The "brain repo" idea is not new for him. He built versions of it four times: the Japan app team (April), the legal counsel system with a "Cerebro" brain agent and a "set up" trigger (May), the learning-app blueprint (June), the Costa Rica knowledge base (October), then the Travel Journal company repo.
-3. The most repeated standing instruction is "`main` is always the deployable app and Vercel shows it". It appears in five projects.
-4. The most repeated complaint is context exhaustion and the forced change of chat. Handover must be a built-in, one-message capability.
-5. He works from an iPhone, with dictated messages, one-word triggers and no terminal.
-6. He wants autonomy: decide, record, continue. Questions are a failure unless only he can answer.
-7. The cost baseline is high: about 3,200 USD list-price equivalent across 39 owner sessions with a readable figure, with single sessions at 496 and 627 USD, before the 65 child sessions.
-8. Too many parallel agents has already failed outright (20 agents, 429, nothing produced) and blocked releases through CPU noise.
-9. Large single writes and large pastes have timed out or killed sessions. Chunking rules and size guards belong in hooks.
-10. "Quantum logic", "machine learning systems" and "most efficient ever" need honest reframing as measurable, file-based mechanisms.
-11. His scope is wide: apps, design, research, long writing, bilingual output, data pipelines, games, legal analysis, course rubrics, and help running software on his own machines. The 40 acceptance tests in B.4.d cover each.
-12. He likes numbered options with images and a small sample before a full run. Both cut wasted work and should be default behaviours.

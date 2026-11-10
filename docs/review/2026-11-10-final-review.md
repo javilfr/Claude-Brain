@@ -186,13 +186,7 @@ Invariants with no effective enforcement: **I-04** (boot and run caps), **I-09**
 - Fix: exclude `project.json` and `ext/` from bookkeeping.
 
 **S17. docs/research holds private owner details beyond working style.**
-- The repository is private (`gh api … → private`), but D-11 and REQUIREMENTS R-09 promise otherwise.
-- `07-past-chats.md:120-136` lists all 17 private project names and repository slugs, although R-09 says "session table omitted for privacy".
-- Line 175 describes a personal legal matter ("a refreshed Spanish report after new facts emerged").
-- Line 169 mentions family ("with my grandparents who only speak Spanish").
-- Lines 160 and 172 give devices (iPhone 17 Pro, MacBook Pro); lines 142, 120 and 134 give trips and hobbies; lines 214 and 302 give spending (about 3,200 USD).
-- `04-algorithms.md:715-720`, `05…:3` and `06…:3` contain absolute paths to the Travel Journal repo.
-- Fix: redact to working-style findings, or move the memos out of the repository.
+- Details omitted from the repository copy. Finding: the past-chats memo named private projects and quoted personal messages; fixed by redacting that memo.
 
 **S18. `brain radar` ignores `BRAIN_NO_NETWORK`.**
 - Only `due_lines` honours it. `brain radar --json` with the variable set reported `"checked": 10`.
@@ -255,7 +249,7 @@ Invariants with no effective enforcement: **I-04** (boot and run caps), **I-09**
 - **M18** Tunables are inline, not in `memory/ml_config.json`: `PROMOTE_MULTIPLIER = 1.0` (spec says 0.6) and the recall floor (no `recall` key) (EXECUTION_PLAN §0.8).
 - **M19** Lead records use `matched`, not the spec's `keywords`; the lead id is the radar's own id rather than the ENGINE_SPEC formula.
 - **M20** `learning/radar/state.json` is tracked and rewritten by every networked boot, so every session dirties the brain tree and adds a commit.
-- **M21** Commit author metadata contains the owner's email (`javier@lopez-franco.com`). This is normal git metadata; no tracked file contains an email except `example.*` test fixtures, and no secret patterns were found (`git grep` with the SECRET_PATTERNS).
+- **M21** Commit author metadata contains the owner's email address. This is normal git metadata on a private repository.
 - **M22** Owner-style eval prompts mention his trips (evals/routing.jsonl:34, 74, 88). This is harmless but personal.
 
 ## D. End-to-end walk

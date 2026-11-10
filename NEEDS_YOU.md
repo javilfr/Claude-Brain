@@ -9,11 +9,11 @@ Things only you can do for the brain itself. All are optional and all are clicks
 - **Or:** tell me "merge the brain to main" in this chat and I will do it.
 - **Meanwhile:** everything is committed and pushed on the working branch.
 
-## 2. Protect the brain's `main` (5 minutes, after item 1)
+## 2. Protect the brain's `main` (5 minutes, after items 1 and 7)
 
 - **Why:** this is what makes "only changed by its own learning systems" a rule that GitHub enforces, not just a convention. With it, a change reaches `main` only through a pull request whose checks pass.
-- **How:** github.com → **javilfr/Claude-Brain** → **Settings** → **Branches** → **Add branch ruleset** (or **Add rule**) → branch name `main` → tick **Require a pull request before merging** and **Require status checks to pass**, then choose the check named **brain** → **Create**. (The check runs on every push and pull request; it shows up in that list once it has run at least once on a pull request.)
-- **Meanwhile:** the same check runs on every push and reports problems, but nothing stops a direct change.
+- **How:** github.com → **javilfr/Claude-Brain** → **Settings** → **Branches** → **Add branch ruleset** (or **Add rule**) → branch name `main` → tick **Require a pull request before merging** and **Require status checks to pass**, then choose the check named **brain** → **Create**. Do this only after the check has gone green once (item 7): requiring a check that cannot run would block every merge.
+- **Meanwhile:** nothing on GitHub stops a direct change. The same checks pass when run inside a session (310+ tests, self-test, lint).
 
 ## 3. Choose your default model for new chats (no clicks now; a habit)
 
@@ -23,18 +23,25 @@ Things only you can do for the brain itself. All are optional and all are clicks
 
 ## 4. Decide how learning changes get merged (reply with A or B)
 
-- **A (recommended):** a learning change merges by itself when its checks pass. You see it in the weekly digest and can undo any one with the **Revert** button on its pull request.
-- **B:** every learning change waits for your click on **Merge**.
-- **Meanwhile:** A is assumed, and nothing merges to `main` until item 2 is set up.
+- **A:** a learning change merges by itself when its checks pass. This needs items 2 and 7 done, plus one more click: **Settings** → **General** → tick **Allow auto-merge**. Then say "merge learning changes automatically" and I will switch it on for each learning pull request. You can undo any one with the **Revert** button on its pull request.
+- **B (how it works today):** every learning change is a pull request that waits for your click on **Merge**.
+- **Meanwhile:** B.
 
 ## 5. Optional guards in two-repo chats (later; I will give exact clicks when it is confirmed)
 
 - **Why:** in a chat with two repositories, Claude Code does not load a repository's own guard hooks. The brain does not depend on them, but they add a second layer (blocking a wrong edit before it happens, recording the session automatically at the end).
-- **What is needed:** one setting in your cloud environment. Whether that route works has to be tested in a live two-repo chat first (ticket CB-106 in `docs/BUILD_STATUS.md`).
+- **What is needed:** one setting in your cloud environment. Whether that route works has to be tested in a live two-repo chat first (ticket CB-106 in `docs/BUILD_STATUS.md`, under "Needs a live session").
 - **Meanwhile:** the rules are enforced by the scripts themselves and by the check in item 2.
 
 ## 6. Switch on the weekly learning run (reply "schedule the weekly learning run")
 
 - **Why:** once a week the brain should fold what it recorded into its memory, check official sources for news about the models and Claude Code, and write you a short digest. That run works best as a scheduled task on the brain alone.
-- **How:** after item 1 is done, reply "schedule the weekly learning run" in any chat with the brain attached, and I will create the schedule and show it to you.
+- **How:** after item 1 is done, reply "schedule the weekly learning run" in any chat with the brain attached. I will create a Claude Code routine (a scheduled task you can see and switch off under Routines) that opens a chat on the brain once a week, and show it to you before it first runs.
 - **Meanwhile:** nothing is lost. Every session still records itself, and the fold-in happens whenever you say "Consolidate".
+
+## 7. GitHub's automatic checks are not starting on this account (2 minutes)
+
+- **What I saw:** every run of the **brain** check on this repository ends as failed within about four seconds, before any step starts. GitHub's note on those runs says the job was not started because of a billing or spending-limit problem on the account. It is not a problem in the code: the same checks pass when run inside a session.
+- **Why it matters:** until the check can run, GitHub cannot enforce anything (item 2), and a red cross will show on every push even though nothing is wrong.
+- **How:** github.com → your profile picture → **Settings** → **Billing and licensing** → look for a failed payment or a spending limit of $0 for **Actions**, and fix or raise it. Private repositories use included free minutes first.
+- **Meanwhile:** checks are run inside each session before anything is pushed, and the results are in `docs/BUILD_STATUS.md`.
