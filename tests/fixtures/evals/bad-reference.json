@@ -1,0 +1,35 @@
+{
+  "id": "bad-reference",
+  "title": "Reference that fails its own grader",
+  "family": "knowledge",
+  "task_class": "memo",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "Write memo.md naming the capital of France.",
+  "setup": [
+    {
+      "path": "notes.md",
+      "content": "Paris is the capital of France.\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "contains_all",
+        "path": "memo.md",
+        "items": [
+          "Lyon"
+        ]
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "memo.md",
+      "content": "The capital is Paris.\n"
+    }
+  ],
+  "null": [],
+  "notes": "Deliberately broken: the reference does not satisfy the grader."
+}

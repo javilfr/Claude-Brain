@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Cheap read-only reader. Use to find files, read many files in bulk, extract facts or classify content when the raw material would crowd the lead's context. Returns findings with file and line. Not for judgment calls or edits.
+description: Cheapest helper, but still a cold start: use only when reading many files would crowd the lead's context. Finds files, reads in bulk, extracts facts or classifies content; returns findings with file and line. Read-only; not for judgment calls.
 tools: Read, Grep, Glob
 model: haiku
 effort: low

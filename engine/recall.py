@@ -208,13 +208,15 @@ def tokens(text: str) -> list[str]:
     return [porter(t) for t in _raw_tokens(text)]
 
 
+def query_words(query: str) -> list[str]:
+    """Distinct query words, lower-cased, stop-words removed, in query order.
+    FTS5 stems these itself; the Python path stems them with ``porter``."""
+    return list(dict.fromkeys(w for w in re.findall(r"[a-z0-9]+", _fold(query or "")) if w not in STOP))
+
+
 def query_terms(query: str) -> list[str]:
-    """Distinct stemmed query terms with stop-words removed, in query order."""
-    out: dict[str, None] = {}
-    for w in re.findall(r"[a-z0-9]+", _fold(query or "")):
-        if w not in STOP:
-            out.setdefault(porter(w), None)
-    return list(out)
+    """Distinct stemmed query terms: the units for coverage and packing."""
+    return list(dict.fromkeys(porter(w) for w in query_words(query)))
 
 
 # ---------------------------------------------------------------- relevance
@@ -222,7 +224,7 @@ def _fields(item: dict) -> tuple[str, str, str]:
     return item.get("text", ""), " ".join(item.get("class") or []), str(item.get("id", "")).replace("-", " ")
 
 
-def _fts5_relevance(docs: list[tuple[str, str, str]], terms: list[str]) -> list[float]:
+def _fts5_relevance(docs: list[tuple[str, str, str]], words: list[str]) -> list[float]:
     """BM25 per document from an in-memory FTS5 table (higher is better)."""
     con = sqlite3.connect(":memory:")
     try:
@@ -230,7 +232,7 @@ def _fts5_relevance(docs: list[tuple[str, str, str]], terms: list[str]) -> list[
         con.executemany("INSERT INTO m(rowid, body, tags, idt) VALUES (?, ?, ?, ?)",
                         [(i + 1, *d) for i, d in enumerate(docs)])
         # Each term is quoted, so punctuation in a question is never FTS syntax.
-        match = " OR ".join(f'"{t}"' for t in terms)
+        match = " OR ".join(f'"{w}"' for w in words)
         w = ", ".join(str(x) for x in FIELD_WEIGHTS)
         rows = con.execute(f"SELECT rowid, bm25(m, {w}) FROM m WHERE m MATCH ?", (match,)).fetchall()
     finally:
@@ -241,36 +243,40 @@ def _fts5_relevance(docs: list[tuple[str, str, str]], terms: list[str]) -> list[
     return rel
 
 
-def _python_relevance(docs: list[tuple[str, str, str]], terms: list[str]) -> list[float]:
-    """FTS5's BM25 in pure Python: k1 1.2, b 0.75, per-column weights and
-    average lengths, one IDF per term over whole rows, and FTS5's rule that a
-    term in more than half the rows gets IDF 1e-6."""
+def _python_relevance(docs: list[tuple[str, str, str]], words: list[str]) -> list[float]:
+    """FTS5's ``bm25()`` in pure Python (ext/fts5/fts5_aux.c): per phrase, the
+    column-weighted term frequency f = sum_c w_c * tf_c goes into
+    idf * f * (k1 + 1) / (f + k1 * (1 - b + b * D / avgD)) with k1 1.2, b 0.75,
+    D the whole row's token count and avgD its mean; a phrase in more than
+    half the rows gets IDF 1e-6. Like FTS5, two query words with the same stem
+    count as two phrases."""
     k1, b = 1.2, 0.75
-    cols = [[tokens(d[j]) for d in docs] for j in range(3)]
+    rows = [[tokens(field) for field in d] for d in docs]
     n = len(docs)
-    avg = [sum(len(t) for t in col) / n or 1.0 for col in cols]
+    size = [sum(len(f) for f in row) for row in rows]
+    avg = sum(size) / n or 1.0
     rel = [0.0] * n
-    for t in terms:
-        df = sum(1 for i in range(n) if any(t in col[i] for col in cols))
+    for t in (porter(w) for w in words):
+        df = sum(1 for row in rows if any(t in f for f in row))
         if df == 0:
             continue
         idf = math.log((n - df + 0.5) / (df + 0.5))
         idf = idf if idf > 0 else 1e-6
-        for col, w, a in zip(cols, FIELD_WEIGHTS, avg):
-            for i, toks in enumerate(col):
-                tf = toks.count(t)
-                if tf:
-                    rel[i] += idf * w * tf * (k1 + 1) / (tf + k1 * (1 - b + b * len(toks) / a))
+        for i, row in enumerate(rows):
+            f = sum(w * field.count(t) for w, field in zip(FIELD_WEIGHTS, row))
+            if f:
+                rel[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * size[i] / avg))
     return rel
 
 
-def relevance(docs: list[tuple[str, str, str]], terms: list[str]) -> list[float]:
-    if not docs or not terms:
+def relevance(docs: list[tuple[str, str, str]], words: list[str]) -> list[float]:
+    """BM25 of each (text, tags, id words) document for the query words."""
+    if not docs or not words:
         return [0.0] * len(docs)
     try:
-        return _fts5_relevance(docs, terms)
+        return _fts5_relevance(docs, words)
     except sqlite3.Error:
-        return _python_relevance(docs, terms)
+        return _python_relevance(docs, words)
 
 
 def coverage(doc_terms: list[set[str]], terms: list[str]) -> list[float]:
@@ -426,11 +432,12 @@ def select(query: str, pool: list[dict], k: int = DEFAULT_K, budget_tokens: int 
     """Rank ``pool`` (items from ``items.load_items``) for ``query`` and pack
     the best ``k`` within the budget. Items covering less than ``floor`` of
     the query are dropped, so a weak best match yields an empty list."""
+    words = query_words(query)
     terms = query_terms(query)
     pool = [i for i in pool if current(i)]
-    if not pool or not terms:
+    if not pool or not words:
         return []
-    rel = relevance([_fields(i) for i in pool], terms)
+    rel = relevance([_fields(i) for i in pool], words)
     doc_terms = [set(tokens(" ".join(_fields(i)))) for i in pool]
     cov = coverage(doc_terms, terms)
     top = max(rel, default=0.0)

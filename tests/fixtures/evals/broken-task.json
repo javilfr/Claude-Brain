@@ -1,0 +1,35 @@
+{
+  "id": "broken-task",
+  "title": "Grader that accepts doing nothing",
+  "family": "knowledge",
+  "task_class": "memo",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "Write memo.md naming the capital of France.",
+  "setup": [
+    {
+      "path": "notes.md",
+      "content": "Paris is the capital of France.\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "contains_all",
+        "path": "notes.md",
+        "items": [
+          "Paris"
+        ]
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "memo.md",
+      "content": "The capital is Paris.\n"
+    }
+  ],
+  "null": [],
+  "notes": "Deliberately broken: the check reads the setup file, so the null solution passes."
+}

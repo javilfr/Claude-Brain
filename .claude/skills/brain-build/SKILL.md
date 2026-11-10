@@ -9,13 +9,13 @@ The outcome is each plan item finished with its check passing and evidence recor
 
 ## Do it yourself or delegate
 
-Delegate an item only when it is self-contained, its raw material is large next to what you need back, and it has a check; otherwise do it yourself. Use the agents in `.claude/agents/`: scout for bulk reading, builder for implementation, writer for prose, researcher for sourced questions. Each sets its own model; the tiers and the escalation order are in `memory/models.json`.
+Delegate an item only when it is self-contained, bulky next to what you need back, and checkable; otherwise do it yourself. Use the agents in `.claude/agents/`: scout for bulk reading, builder for implementation, writer for prose, researcher for sourced questions. Each sets its own model; the tiers and the escalation order are in `memory/models.json`.
 
 ## The brief
 
 A helper does not see this conversation. Every delegated item carries an acceptance command that exits 0 only when the item is done; without one, do not delegate it. When the plan is a tickets file, `BRAIN plan packet <tickets.json> <ticket-id>` prints the brief. Otherwise write it yourself:
 
-- the goal, why it matters, and who the output is for;
+- the goal, why it matters, and who it is for;
 - the constraints, including what must not change, and which actions are approved;
 - the files it owns (no two running helpers own the same file);
 - the acceptance command;
@@ -27,11 +27,11 @@ Give facts, not instructions to be careful.
 
 Run the acceptance command yourself when the helper returns. Record evidence with `BRAIN req evidence <id> "<log path or path:line>" --done` (without `--done` the line stays open).
 
-If a check fails, read why. Fix it, or re-run that item one step up the escalation order. Escalate on a failed check, not on a hunch. Run timing checks when no helpers are working, because their load produces false failures.
+If a check fails, read why, then fix it or re-run the item one step up the escalation order; escalate on a failed check, not a hunch.
 
 ## Checkpoint
 
-After each item: `BRAIN checkpoint --done <id> --item <next id> --next <id> --next <id> --push` (one `--next` per item, up to three). It commits only the bookkeeping files and pushes the branch, so a new session sees the state; commit the work itself first. Keep going while `.brain/CHECKLIST.md` has open lines and nothing blocks them.
+After each item: `BRAIN checkpoint --done <id> --item <next id> --next <id> --next <id> --push` (one `--next` per item, up to three). It commits only bookkeeping files and pushes, so a new session sees the state; commit the work itself first. Keep going while `.brain/CHECKLIST.md` has open lines and nothing blocks them.
 
 ## Tell the owner
 

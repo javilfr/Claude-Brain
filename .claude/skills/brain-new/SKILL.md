@@ -5,12 +5,12 @@ description: Start a new project in an attached empty repo, or adopt an existing
 
 # New project or adoption
 
-The owner describes a project in one sentence and expects it to start. His largest past rework came from building on unanswered assumptions about the biggest fork in the design, while a questionnaire file sat unread. He answers chat; he does not fill in files.
+The owner describes a project in one sentence and expects it to start. His largest past rework came from building on unanswered assumptions about the biggest design fork while a questionnaire file sat unread. He answers chat, not files.
 
 ## Set up
 
 - Empty repo: `BRAIN init <path> --family F --title "T" --release R --language L`, with F one of software, data, knowledge, language, operations (the nearest fit; record a poor fit as a decision) and R `main-on-green` when the project deploys from `main`, `pr` or `none`. Running it twice changes nothing.
-- Repo with content and no `.brain/`: `BRAIN adopt <path> --survey` first (it writes nothing), plus `BRAIN map <path>` or a scout if the code is large; then `BRAIN adopt <path> --family F --title "T"`. Adopt adds the contract files and a pointer block above an existing `CLAUDE.md`, with a line saying the brain's way wins where they disagree. When the old `CLAUDE.md` is large it also adds a "Slim the old handbook" item to `NEEDS_YOU.md`, because every byte of it is paid on every request; it never moves the file. Leave the file in place and include that choice among your questions.
+- Repo with content and no `.brain/`: `BRAIN adopt <path> --survey` first (it writes nothing), plus `BRAIN map <path>` or a scout for large code; then `BRAIN adopt <path> --family F --title "T"`. Adopt puts a pointer block above an existing `CLAUDE.md`, saying the brain wins where they disagree. When that file is large (every byte is paid on every request) it adds a "Slim the old handbook" item to `NEEDS_YOU.md` and never moves the file; make that choice one of your questions.
 - `BRAIN validate` afterwards. Fill the rest of `.brain/project.json`: commands, gates, live address if known.
 
 ## The questions
