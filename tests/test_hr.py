@@ -348,6 +348,12 @@ class Contracts(Base):
                       check="true", template_id="code-reviewer")
         self.assertEqual(con["template"], "code-reviewer")
 
+    def test_model_override_for_a_model_at_its_limit(self):
+        # CB-208: a Fable red team failed on a usage limit; the lead re-hires on another model
+        con = hr.hire("Red-team the design", brain_root=self.b, project=self.project(), check="true",
+                      base_agent="redteam", model="opus")
+        self.assertEqual(con["model"], "opus")
+
     def test_template_none_forces_a_plain_brief(self):
         # The plain arm of a template-versus-plain comparison (CB-203), or a job no template fits
         con = hr.hire("Review this branch for bugs before release", brain_root=self.b, project=self.project(), template_id="none",

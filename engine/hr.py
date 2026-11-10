@@ -554,7 +554,8 @@ def seal_of(contract: dict) -> str:
 def hire(task: str, brain_root: Path | None = None, project: Path | None = None, why: str = "", owns: list[str] | None = None,
          inputs: list[str] | None = None, check: str = "", family: str | None = None, task_class: str | None = None,
          risk: str = "standard", tier: int = 2, size: str | None = None, base_agent: str | None = None, template_id: str | None = None,
-         extra: list[str] | None = None, seed: int | None = None, workdir_hint: str | None = None, dry_run: bool = False) -> dict:
+         extra: list[str] | None = None, seed: int | None = None, workdir_hint: str | None = None, dry_run: bool = False,
+         model: str | None = None) -> dict:
     """Decide the helper for a task and write its contract and brief."""
     root = Path(brain_root or c.BRAIN_ROOT)
     hc = cfg_of(root)
@@ -598,6 +599,10 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
             arm = mlearn.suggest_arm(state, ml_cfg, task_class, family, role, risk, tier, bool(check), random.Random(seed))
         except Exception:
             pass
+    if model:
+        # The lead's override, e.g. when a model's usage limit is reached (a
+        # Fable red team failed with HTTP 429 in CB-208). Not an exploration.
+        arm = dict(arm, model=model, explored=False, propensity=1.0, basis=f"set by the lead (--model {model})")
     size = size or (t or {}).get("size") or "M"
     pay = wage(size, arm["model"], (t or {}).get("id"), state, hc, models_cfg)
     d = contract_dir(project)
@@ -799,7 +804,7 @@ def cmd_hire(args) -> int:
         con = hire(args.task, project=project, why=args.why or "", owns=args.owns, inputs=args.input, check=args.check or "",
                    family=args.family, task_class=args.task_class, risk=args.risk, tier=args.tier, size=args.size,
                    base_agent=args.agent, template_id=args.template, extra=args.also, seed=args.seed, workdir_hint=args.workdir,
-                   dry_run=args.dry_run)
+                   dry_run=args.dry_run, model=args.model)
     except ValueError as e:
         print(str(e))
         return 1
@@ -995,6 +1000,8 @@ def register(sub) -> None:
     h.add_argument("--tier", type=int, choices=(1, 2, 3), default=2)
     h.add_argument("--size", choices=("S", "M", "L", "XL"))
     h.add_argument("--agent", choices=BASE_AGENTS, help="restrict to templates for one base agent")
+    h.add_argument("--model", choices=("haiku", "sonnet", "opus", "fable"),
+                   help="override the model (for example when one has hit its usage limit)")
     h.add_argument("--template", help="use this template instead of choosing; 'none' for a plain brief")
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")
