@@ -1,5 +1,6 @@
 """Tests for engine/recall.py on a temporary brain (never the real memory),
-plus a read-only regression on the labelled set evals/recall_golden.jsonl."""
+plus a regression on the labelled set evals/recall_golden.jsonl over the
+frozen items in evals/recall_snapshot/ (never the live learned state)."""
 import json
 import os
 import sqlite3
@@ -15,6 +16,7 @@ from engine import recall as r
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLDEN = ROOT / "evals" / "recall_golden.jsonl"
+SNAPSHOT = ROOT / "evals" / "recall_snapshot"   # the 141 seed items as of 2026-11-10; learning never changes it
 
 
 def item(iid, text, **kw):
@@ -236,14 +238,21 @@ class RecallTest(unittest.TestCase):
 
 
 class GoldenRegressionTest(unittest.TestCase):
-    """Recall quality on the 60 labelled queries (40 dev, 20 held-out) over the
-    real brain's items, read only, through the full ranking and packing path
-    with k=5, a large budget and no floor.
+    """Ranking quality on the 60 English labelled queries (40 dev, 20
+    held-out) through the full ranking and packing path with k=5, a large
+    budget, no floor and no learned multiplier, over a frozen copy of the
+    seed items. It used to read the live items and stats/ml.json, so
+    learning could turn it red with no code change (findings learning-12 and
+    redteam-09). This pins the ranker; what production runs (k=3, 300
+    tokens, the configured floor, one family) is pinned in tests/test_r4_m.py,
+    with the Spanish, dictated and unanswerable queries of the same file.
 
     Measured when this test was written (2026-11-10, 141 items):
       dev      recall@5 0.758, MRR 0.854
       heldout  recall@5 0.825, MRR 0.850
       pooled   recall@5 0.781, MRR 0.853
+    and 0.781 / 0.852 since an owner standing instruction is seated first
+    only when it covers the query (one relevant item moved from rank 4 to 5).
     BM25 alone on the same queries gives 0.803 / 0.878 pooled (the memo in
     docs/research/round2/04 measured 0.803 / 0.876 with the same design and
     no Spanish stop-words); the coverage packing costs 0.02 recall@5 because
@@ -257,15 +266,15 @@ class GoldenRegressionTest(unittest.TestCase):
         rec = mrr = 0.0
         for q in queries:
             got = [x["id"] for x in r.select(q["query"], pool, k=5, budget_tokens=10 ** 6, floor=0.0,
-                                             multiplier=r.item_multiplier(ROOT))][:5]
+                                             multiplier=None)][:5]
             rel = set(q["relevant"])
             rec += len(rel & set(got)) / len(rel)
             mrr += next((1 / (i + 1) for i, x in enumerate(got) if x in rel), 0.0)
         return rec / len(queries), mrr / len(queries)
 
     def setUp(self):
-        self.queries = c.read_jsonl(GOLDEN)
-        self.pool = it.load_items(ROOT)
+        self.queries = [q for q in c.read_jsonl(GOLDEN) if q["relevant"] and "lang" not in q]  # the English baseline
+        self.pool = it.load_items(SNAPSHOT)
         self.env = mock.patch.dict(os.environ, {"BRAIN_NOW": "2026-11-10T12:00:00Z"})
         self.env.start()
 
