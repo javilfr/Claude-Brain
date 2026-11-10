@@ -554,6 +554,14 @@ class ReviewFindings(Base):
             hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "M", "band_tokens": 1000, "actual_tokens": 1000})
         self.assertEqual(len(hr.hr_state(state)["ratios"]["_all"]), hr.DEFAULT_CFG["ratio_cap"])
 
+    def test_template_plain_forces_a_plain_brief(self):
+        """CB-203 needs a control arm: without --template, hire picks one whenever any fits."""
+        task = "Translate the home page into Spanish from Spain"
+        self.assertTrue(hr.select(task, hr.load_rack(ROOT)))
+        con = hr.hire(task, check="true", template_id="plain", base_agent="builder", dry_run=True)
+        self.assertIsNone(con["template"])
+        self.assertEqual(con["base_agent"], "builder")
+
     def test_staff_derives_parallel_from_deps_and_files(self):
         ts = [{"id": "A", "files": ["src/a.py"]}, {"id": "B", "deps": ["A"], "files": ["src/b.py"]},
               {"id": "C", "files": ["src"]}, {"id": "D", "files": ["docs/d.md"], "deps": ["B"]},

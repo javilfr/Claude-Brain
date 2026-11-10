@@ -558,7 +558,9 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     family, task_class = family or "software", task_class or "general"
     if risk not in RISKS:
         raise ValueError(f"unknown risk '{risk}'")
-    if template_id:
+    if template_id == "plain":
+        chosen = []  # a plain brief on purpose: the control arm of an evaluation, or a lead who read the rack
+    elif template_id:
         chosen = [{"id": t["id"], "score": 1.0, "fit": 1.0, "coverage": 1.0, "multiplier": 1.0, "trials": 0, "template": t} for t in rack if t["id"] == template_id]
         if not chosen:
             raise ValueError(f"no template '{template_id}' in the rack")
@@ -780,10 +782,11 @@ def cmd_hire(args) -> int:
     if args.json:
         print(json.dumps(con, indent=2))
         return 0
-    tpl = con["template"] or "none fits: plain helper"
+    forced_plain = getattr(args, "template", None) == "plain"
+    tpl = con["template"] or ("plain (as asked)" if forced_plain else "none fits: plain helper")
     also = f" (also considered: {', '.join(con['runners_up'])})" if con["runners_up"] else ""
     print(f"hire {con['id']}: template {tpl}{also}")
-    if con.get("closest"):
+    if con.get("closest") and not forced_plain:
         print(f"closest by wording: {', '.join(con['closest'])} — if one is right, hire again with --template <id> (brain hr rack --id <id> shows it)")
     print(f"agent: {con['base_agent']} · model {con['model']} · effort {con['effort']}" + (" · a trial of a cheaper setting" if con["explored"] else "") + f" · {c.clip(con['model_basis'], 80)}")
     print(f"wage: {con['wage_tokens']:,} output-equivalent tokens (about ${con['wage_cost']:.2f} at list price) · {con['wage_basis']}")
@@ -979,7 +982,7 @@ def register(sub) -> None:
     h.add_argument("--tier", type=int, choices=(1, 2, 3), default=2)
     h.add_argument("--size", choices=("S", "M", "L", "XL"))
     h.add_argument("--agent", choices=BASE_AGENTS, help="restrict to templates for one base agent")
-    h.add_argument("--template", help="use this template instead of choosing")
+    h.add_argument("--template", help="use this template instead of choosing ('plain' for none)")
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")
     h.add_argument("--force", action="store_true", help="hire even when the rule says the lead should do it")

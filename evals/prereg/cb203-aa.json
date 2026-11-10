@@ -1,0 +1,25 @@
+{
+  "change": "cb203-aa",
+  "hypothesis": "A/A: two plain-brief arms on the same agent differ only by noise; tokens per task (settled output-equivalent) measured to size the noise. Must not ship.",
+  "metric": "tokens",
+  "direction": "down",
+  "tasks": [
+    "data-csv-total",
+    "know-memo-facts",
+    "lang-es-glossary",
+    "ops-idempotent-dirs",
+    "route-question",
+    "route-small-edit",
+    "sw-add-slugify",
+    "sw-fix-median"
+  ],
+  "min_pairs": 8,
+  "decision": {
+    "alpha": 0.05,
+    "ship_prob": 0.95,
+    "revert_prob": 0.8,
+    "cost_guard": 1.1
+  },
+  "decision_text": "revert if P(B worse) >= revert_prob; ship if exact sign test p <= alpha and P(B better) >= ship_prob and the guard holds; otherwise keep A; fewer than 8 paired tasks is always not proven",
+  "created": "2026-11-10T20:10:19Z"
+}
