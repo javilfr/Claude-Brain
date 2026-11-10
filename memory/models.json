@@ -1,0 +1,25 @@
+{
+  "verified_on": "2026-11-10",
+  "recheck_days": 90,
+  "sources": ["docs/research/01-models.md"],
+  "_help": "Prices are US dollars per million tokens at list price. Roles map work to a model and effort; playbooks name roles, never model ids.",
+  "models": {
+    "claude-fable-5-2": {"alias": "fable", "in": 8.0, "out": 40.0, "cache_read": 0.2, "cache_write_5m": 10.0, "cache_write_1h": 16.0},
+    "claude-opus-5-5": {"alias": "opus", "in": 4.0, "out": 20.0, "cache_read": 0.2, "cache_write_5m": 5.0, "cache_write_1h": 8.0},
+    "claude-sonnet-5-5": {"alias": "sonnet", "in": 2.0, "out": 10.0, "cache_read": 0.1, "cache_write_5m": 2.5, "cache_write_1h": 4.0},
+    "claude-haiku-5-5": {"alias": "haiku", "in": 0.1, "out": 0.5, "cache_read": 0.01, "cache_write_5m": 0.125, "cache_write_1h": 0.2}
+  },
+  "fallback_price": {"in": 4.0, "out": 20.0, "cache_read": 0.2, "cache_write_5m": 5.0, "cache_write_1h": 8.0},
+  "roles": {
+    "lead": {"model": "opus", "effort": "medium"},
+    "deep-lead": {"model": "fable", "effort": "high"},
+    "reviewer": {"model": "opus", "effort": "high"},
+    "redteam": {"model": "fable", "effort": "high"},
+    "builder": {"model": "sonnet", "effort": "medium"},
+    "writer": {"model": "opus", "effort": "medium"},
+    "researcher": {"model": "sonnet", "effort": "medium"},
+    "scout": {"model": "haiku", "effort": "low"}
+  },
+  "escalation": [["sonnet", "medium"], ["opus", "medium"], ["opus", "high"], ["fable", "high"]],
+  "limits": {"max_parallel_helpers": 4, "helper_reply_tokens": 2000, "recall_budget_tokens": 600}
+}
