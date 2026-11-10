@@ -4,3 +4,4 @@ __pycache__/
 .tmp-*
 *.sqlite
 .DS_Store
+learning/radar/checks.json

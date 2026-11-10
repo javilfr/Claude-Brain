@@ -437,6 +437,11 @@ class GateTests(Base):
         self.assertGreater(len(Path(r["log"]).read_text().splitlines()), 500)
         ok = gate.run_filtered("seq 1 200", p, p)
         self.assertEqual((ok["exit"], len(ok["shown"])), (0, 3))
+        # M6: a success shows one stream, not stdout's tail glued to stderr's
+        mixed = gate.run_filtered("echo all good; echo 'FAILED (failures=1)' >&2; exit 0", p, p)
+        self.assertEqual(mixed["shown"], ["all good"])
+        quiet = gate.run_filtered("echo 'Ran 3 tests' >&2; echo OK >&2", p, p)
+        self.assertEqual(quiet["shown"], ["Ran 3 tests", "OK"])
 
     def test_release_refuses_without_a_green_gate_on_this_commit(self):
         p = self.project()

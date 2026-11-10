@@ -47,17 +47,35 @@ _FILE_MENTION = re.compile(r"[\w./-]+\.[A-Za-z0-9]{1,5}")
 
 # ---------------------------------------------------------------- walking
 def _skip_dir(rel_dir: str, name: str) -> bool:
-    return name in SKIP_DIRS or (name == "cache" and rel_dir.replace(os.sep, "/").endswith(".brain"))
+    return name in SKIP_DIRS or (name in ("cache", "log") and rel_dir.replace(os.sep, "/").endswith(".brain"))
+
+
+def _git_listed(root: Path) -> set[str] | None:
+    """Tracked and untracked-but-not-ignored files, when root is a git work
+    tree; None otherwise. Generated files the project ignores stay out of the
+    map (review item M8)."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "-co", "--exclude-standard"],
+                           capture_output=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    return {p.decode("utf-8", "replace") for p in r.stdout.split(b"\0") if p}
 
 
 def walk(root: Path) -> list[tuple[str, bytes]]:
     """(relative posix path, bytes) for every readable text file worth mapping."""
     out = []
+    listed = _git_listed(root) if (Path(root) / ".git").exists() else None
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = os.path.relpath(dirpath, root)
         dirnames[:] = sorted(d for d in dirnames if not _skip_dir(rel_dir, d))
         for name in sorted(filenames):
             path = Path(dirpath) / name
+            if listed is not None and path.relative_to(root).as_posix() not in listed:
+                continue
             try:
                 if path.is_symlink() or path.stat().st_size > MAX_BYTES:
                     continue

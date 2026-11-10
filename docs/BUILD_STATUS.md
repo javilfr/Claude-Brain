@@ -169,3 +169,21 @@ Observations from this session, not confirmed by an official page, so none was r
 | Do helpers honour model and effort? | Yes for the values passed on the call | Each helper transcript's messages carry the requested model (reviewer `claude-opus-5-5`; both builders `claude-sonnet-5-5`); each `.meta.json` records the requested effort. The model was also passed on each call, so this does not prove the agent file's own `model:` line alone |
 | Do helpers skip `CLAUDE.md` (`omitClaudeMd: true`)? | Consistent with yes | None of the three helper transcripts contains the `CLAUDE.md` text ("Evidence before claims", "Contents of …"), which the main transcript carries |
 | Does changing effort mid-session keep the prompt cache? | Not tested | Effort is changed by the person (`/effort`), not by the lead; it needs a session where the owner does so, then `brain ledger` before and after |
+
+## Progress on CB-204, CB-205 and CB-206 (2026-11-10, in progress)
+
+**CB-204, selection.** A new held-out set, `evals/hr_golden_2.jsonl` (100 requests: 60 English, 40 Spanish, 10 per group, written by a helper who saw only each template's id, group, name and role line), was committed alone in `1ad621a` before any change. The selector as it stands:
+
+| Set | Top-1 | Top-3 |
+|---|---|---|
+| dev (tuned on) | 1.00 | 1.00 |
+| old held-out | 0.78 | 0.86 |
+| new held-out | **0.32** | **0.35** |
+
+The old held-out figure overstated real accuracy: its requests share the selector's own wording. Improving selection on dev and the old set, then measuring once on the new set, is the next step. Caveat for that measurement: the new set was written from the role lines, so a change that weights role lines more would be partly informed by knowing that.
+
+**CB-205, templates.** The fresh-context review is `docs/review/2026-11-10-template-review.md`: 46 rubric rows, 30 met, 16 wrong. The headline findings are 61 method lines with no reason; 18 templates on agents without Bash that require `{check}`; 16 third pitfalls never rendered; 30 briefs rendering above 350 words; the hygiene line keyed only on the base agent; and three near-duplicate pairs. The trial adds two more: `cli-script-builder` asks side-effect-free tools for a dry run, and no template writes unit tests for an existing module. None is fixed yet. The reviewer used 220,287 tokens of a 200,000 wage.
+
+**CB-206, open review items.** Fixed, each with a test: M6 (a success digest shows one stream), M8 (the repo map skips `.brain/log/` and files git ignores), M15 (measured 6.08 s for a 1 s radar budget when a request hangs; daemon threads bring it to 1.08 s), M18 (promotion bar read from `ml_config.json` `learning.promote_multiplier`, default unchanged at 1.0), M20 (radar check times, status and validators moved to the untracked `learning/radar/checks.json`; the tracked state changes only when new items are seen). Still open: M19 lead field names, the `staff` parallel default, forged inbox records, a use for the scout tier.
+
+**Full gate at this point:** 417 tests OK; `doctor`, `lint`, `hr audit` exit 0.

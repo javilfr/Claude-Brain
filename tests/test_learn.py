@@ -201,6 +201,18 @@ class ConsolidateTest(BrainCase):
         self.assertTrue(all("path, file or project" in r for r in rejected[1:]))
         self.assertEqual(len(self.items()), 1)
 
+    def test_promotion_bar_reads_the_config_and_falls_back(self):
+        # Review item M18: the bar was only an inline constant.
+        import tempfile
+        from engine import learn as L
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            self.assertEqual(L.promote_multiplier(root), L.PROMOTE_MULTIPLIER)
+            c.write_json(root / L.ML_CONFIG, {"learning": {"promote_multiplier": 0.6}})
+            self.assertEqual(L.promote_multiplier(root), 0.6)
+            c.write_json(root / L.ML_CONFIG, {"learning": {"promote_multiplier": "high"}})
+            self.assertEqual(L.promote_multiplier(root), L.PROMOTE_MULTIPLIER)
+
     def test_two_key_promotion(self):
         text = "Check the phone layout at 390 pixels before calling a screen done"
         self.inbox(note(text, session="s1"), outcome("s9"))  # mlearn now holds data

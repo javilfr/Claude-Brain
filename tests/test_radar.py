@@ -97,7 +97,7 @@ class RadarCase(unittest.TestCase):
         return f
 
     def state(self):
-        return c.read_json(self.root / "learning" / "radar" / "state.json")
+        return radar.load_state(self.root)
 
     def inbox(self):
         rows = []
@@ -516,8 +516,18 @@ class Records(RadarCase):
         self.baseline()
         self.go(Fake("v2"))
         written = sorted(str(p.relative_to(self.root)) for p in self.root.rglob("*") if p.is_file())
-        self.assertEqual(written, ["learning/inbox/2026-11-10-radar.jsonl", "learning/radar/state.json",
-                                   "memory/radar_sources.json"])
+        self.assertEqual(written, ["learning/inbox/2026-11-10-radar.jsonl", "learning/radar/checks.json",
+                                   "learning/radar/state.json", "memory/radar_sources.json"])
+
+    def test_a_routine_check_leaves_the_tracked_state_unchanged(self):
+        # Review item M20: every networked boot rewrote the tracked file.
+        self.baseline()
+        tracked = self.root / "learning" / "radar" / "state.json"
+        before = tracked.read_bytes()
+        self.go(Fake("v1"), now=NOW + dt.timedelta(days=1))
+        self.assertEqual(tracked.read_bytes(), before)
+        stable = c.read_json(tracked)
+        self.assertFalse(any(f in s for s in stable.values() for f in radar.VOLATILE))
 
     def test_determinism_with_fixed_now(self):
         outs, states = [], []
@@ -624,6 +634,33 @@ class Live(unittest.TestCase):
             print(f"live radar rerun: {again['seconds']}s, new={len(again['new'])}, errors={again['errors']}")
             self.assertLessEqual(len(again["lines"]), 12)
             self.assertLess(again["seconds"], 20)
+
+
+class ExitTimeTest(unittest.TestCase):
+    def test_a_hung_request_does_not_hold_the_process_past_the_budget(self):
+        # Review item M15, measured: 6.1 s for a 1 s budget with pool threads.
+        import subprocess
+        import sys
+        import time
+        root_dir = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "m.py"
+            script.write_text(
+                "import sys, time, json, pathlib\n"
+                f"sys.path.insert(0, {str(root_dir)!r})\n"
+                "from engine import radar\n"
+                f"root = pathlib.Path({tmp!r})\n"
+                "(root / 'memory').mkdir(exist_ok=True)\n"
+                "(root / 'memory' / 'radar_sources.json').write_text(json.dumps({'allowlist': ['example.invalid'], 'sources': ["
+                "{'id': 's%d' % i, 'url': 'https://example.invalid/x', 'kind': 'feed', 'trust': 'official', 'interval_hours': 1, 'keywords': []} for i in range(3)]}))\n"
+                "def slow(url, headers, timeout):\n    time.sleep(8)\n    return 200, {}, b''\n"
+                "r = radar.run(root, force=True, max_seconds=1, fetch=slow)\n"
+                "assert all('timeout' in e for e in r['errors']), r\n")
+            t = time.monotonic()
+            done = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30)
+            took = time.monotonic() - t
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertLess(took, 4.0)
 
 
 if __name__ == "__main__":

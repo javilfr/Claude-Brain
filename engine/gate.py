@@ -40,8 +40,10 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
     try:
         proc = subprocess.run(command, shell=True, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, errors="replace")
         code, out = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+        streams = (proc.stdout or "", proc.stderr or "")
     except subprocess.TimeoutExpired as e:
         code = 124
+        streams = None
         out = ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + f"\n[timed out after {timeout}s]"
     secs = time.time() - start
     d = log_dir(project)
@@ -50,7 +52,10 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
     c.write_text(log, f"$ {command}\n[exit {code} in {secs:.1f}s]\n{out}")
     lines = out.splitlines()
     if code == 0:
-        shown = lines[-3:]
+        # One stream only: the tail of stdout and stderr glued together can
+        # put a stray "FAILED" from stderr under an "ok" (review item M6).
+        main = streams[0] if streams and streams[0].strip() else (streams[1] if streams else out)
+        shown = main.splitlines()[-3:]
     else:
         hits = [i for i, l in enumerate(lines) if ERROR_RE.search(l)]
         keep = set()

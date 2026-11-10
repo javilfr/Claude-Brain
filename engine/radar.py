@@ -20,7 +20,6 @@ file ``learning/inbox/<date>-radar.jsonl`` (append-only ``lead`` records).
 """
 from __future__ import annotations
 
-import concurrent.futures as cf
 import datetime as dt
 import email.utils
 import hashlib
@@ -28,6 +27,7 @@ import html
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -41,6 +41,32 @@ from . import common as c
 
 SOURCES_FILE = "memory/radar_sources.json"
 STATE_FILE = "learning/radar/state.json"
+# Per-run fields live in an untracked file, so a routine check no longer
+# rewrites a tracked file and dirties the brain every session (review item
+# M20). The tracked file keeps only what changes when something new is seen.
+CHECKS_FILE = "learning/radar/checks.json"
+VOLATILE = ("last_checked", "last_status", "etag", "last_modified")
+
+
+def load_state(root: Path) -> dict:
+    stable = c.read_json(root / STATE_FILE, {})
+    checks = c.read_json(root / CHECKS_FILE, {})
+    stable = stable if isinstance(stable, dict) else {}
+    checks = checks if isinstance(checks, dict) else {}
+    out = {}
+    for k in set(stable) | set(checks):
+        a = stable.get(k) if isinstance(stable.get(k), dict) else {}
+        b = checks.get(k) if isinstance(checks.get(k), dict) else {}
+        out[k] = {**a, **b}
+    return out
+
+
+def save_state(root: Path, state: dict) -> None:
+    stable = {k: {f: v for f, v in s.items() if f not in VOLATILE} for k, s in state.items()}
+    checks = {k: {f: v for f, v in s.items() if f in VOLATILE} for k, s in state.items()}
+    if c.read_json(root / STATE_FILE, None) != stable:
+        c.write_json(root / STATE_FILE, stable)
+    c.write_json(root / CHECKS_FILE, checks)
 USER_AGENT = "brain-radar/1.0"
 MAX_BYTES = 2_000_000          # response size cap: read no more than this
 REQUEST_TIMEOUT = 6.0          # seconds per request
@@ -466,6 +492,58 @@ def run(brain_root: Path | str | None = None, force: bool = False, max_lines: in
     return result
 
 
+class _Done:
+    """The slice of a future the caller reads: done(), cancelled(), result()."""
+    def __init__(self):
+        self._ev, self._val, self._err = threading.Event(), None, None
+
+    def done(self) -> bool:
+        return self._ev.is_set()
+
+    def cancelled(self) -> bool:
+        return False
+
+    def result(self):
+        if self._err is not None:
+            raise self._err
+        return self._val
+
+
+def _run_daemon(items: list[dict], work, budget: float) -> dict:
+    """Run work(item) on at most WORKERS daemon threads and wait at most
+    budget seconds. Daemon threads matter: a pool's threads are joined at
+    interpreter exit, so one hung request kept the process alive up to
+    REQUEST_TIMEOUT past the radar's own budget (review item M15, measured
+    6.1 s for a 1 s budget)."""
+    import queue
+    futs = {it["id"]: _Done() for it in items}
+    q: "queue.Queue[dict]" = queue.Queue()
+    for it in items:
+        q.put(it)
+
+    def worker():
+        while True:
+            try:
+                it = q.get_nowait()
+            except queue.Empty:
+                return
+            f = futs[it["id"]]
+            try:
+                f._val = work(it)
+            except Exception as e:  # reported by the caller as failed
+                f._err = e
+            f._ev.set()
+
+    for _ in range(min(WORKERS, len(items))):
+        threading.Thread(target=worker, daemon=True).start()
+    deadline = time.monotonic() + budget
+    for f in futs.values():
+        left = deadline - time.monotonic()
+        if left <= 0 or not f._ev.wait(left):
+            break
+    return futs
+
+
 def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str | None,
          fetch: Fetch, when: dt.datetime, t0: float, result: dict) -> None:
     cfg = c.read_json(root / SOURCES_FILE, None)
@@ -477,8 +555,7 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     ids = {s["id"] for s in sources}
     if trust:
         sources = [s for s in sources if s.get("trust") == trust]
-    state_path = root / STATE_FILE
-    state = c.read_json(state_path, {})
+    state = load_state(root)
     state = {k: v for k, v in state.items() if k in ids and isinstance(v, dict)} if isinstance(state, dict) else {}
     stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
     timeout = min(REQUEST_TIMEOUT, max(1.0, float(max_seconds)))
@@ -492,10 +569,8 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     if not due:
         return
 
-    ex = cf.ThreadPoolExecutor(max_workers=WORKERS)
-    futs = {s["id"]: ex.submit(_check, s, state.get(s["id"], {}), fetch, allow, stamp, timeout) for s in due}
-    cf.wait(list(futs.values()), timeout=max(0.0, max_seconds - (time.monotonic() - t0)))
-    ex.shutdown(wait=False, cancel_futures=True)
+    futs = _run_daemon(due, lambda s: _check(s, state.get(s["id"], {}), fetch, allow, stamp, timeout),
+                       max(0.0, max_seconds - (time.monotonic() - t0)))
 
     candidates: list[tuple[int, dict, int]] = []
     leads: list[dict] = []  # every relevant new item; max_lines caps only what is printed
@@ -538,7 +613,7 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     result["lines"] = [_line(p) for p in chosen]
 
     try:
-        c.write_json(state_path, state)
+        save_state(root, state)
         _write_leads(root, leads, when)
     except OSError as e:
         result["errors"].append(f"write failed: {type(e).__name__}")
