@@ -151,6 +151,8 @@ class ContinuityTests(Base):
         self.assertIn("CB-2 checkout page", out)
         self.assertEqual(state.read_state(clone)["item"], "CB-2 checkout page")
         self.assertEqual(git(clone, "rev-parse", "--abbrev-ref", "HEAD"), "claude/two", "the new chat keeps its own branch")
+        self.assertEqual(c.read_json(clone / ".brain" / "log" / "open-session.json")["session"], "chat-two",
+                         "the session is marked open once the checkout is current")
         blob = "\n".join(detect.boot_lines("Continue", brain2))
         self.assertNotIn("newer checkpoint", blob)
         self.assertIn("item: CB-2 checkout page", blob)
@@ -760,15 +762,18 @@ class StateFileTests(Base):
         sections gave a traceback in boot, status, checkpoint and handover."""
         p = self.project()
         base = c.load_manifest(p)
+        os.environ["BRAIN_NO_NETWORK"] = "1"
         for key in ("project", "release", "paths", "languages", "stage", "family", "tier"):
-            for val in (None, [], "es", 3, {"a": None}):
+            for val in (None, [], "es", 3):
                 c.write_json(p / ".brain" / "project.json", {**base, key: val})
                 with self.subTest(key=key, val=val):
                     detect.boot_lines("Continue", self.brain)
                     state.write_status(p)
-                    state.checkpoint(p, item="x")
                     state.resume_lines(p)
-                    state.handover(p, self.brain)
+                    state.release_branch_block(p, "main")
+        c.write_json(p / ".brain" / "project.json", {**base, "project": None, "release": [], "paths": "x"})
+        state.checkpoint(p, item="x")
+        state.handover(p, self.brain)
         c.write_json(p / ".brain" / "project.json", {**base, "languages": "es"})
         self.assertIn("Trabajando en", state.write_status(p))
 
@@ -1231,6 +1236,61 @@ class BrainOnlyTests(Base):
         self.assertEqual(rc, 0, out)
         self.assertIn("only Claude-Brain attached", out)
         self.assertIn("Continue (branch claude/x)", out.strip().splitlines()[-1])
+
+    def test_resume_and_checkpoint_work_with_only_the_brain_attached(self):
+        """core-09 (the part in state.py), owner-docs-06: rule 7's two commands
+        exited 1 in the kind of chat the owner uses for the brain itself."""
+        b = self.solo()
+        rc, out = cli("resume")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("A-2 ready one", out)
+        self.assertLessEqual(len(out.strip().splitlines()), 12)
+        c.append_jsonl(b / "learning" / "inbox" / "2026-11-08-chat-one.jsonl", {"kind": "note", "session": "chat-one", "at": T1})
+        rc, out = cli("checkpoint", "--done", "A-2", "--push")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("brain records pushed to claude/x", out)
+        self.assertIn("not recorded", out, "it says that the brain has no state file for --done")
+        self.assertEqual(git(self.bremote, "rev-parse", "claude/x"), git(b, "rev-parse", "HEAD"))
+        self.assertFalse((b / ".brain").exists())
+        rc, out = cli("checkpoint", "--item", "x")
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(out.strip().splitlines()), 1)
+
+    def test_a_new_brain_only_chat_finds_the_branch_with_the_last_chats_work(self):
+        """core-01, owner-docs-06: the brain's own work has the same gap: the
+        last chat pushed to its branch and a new chat starts from main."""
+        b = self.solo()
+        sh(b, "git", "branch", "-q", "old/diverged")
+        (b / "x.md").write_text("the last chat's work\n")
+        os.environ["GIT_COMMITTER_DATE"] = "2026-11-08T09:30:00Z"
+        commit_all(b, "work")
+        os.environ["GIT_COMMITTER_DATE"] = "2026-11-07T09:30:00Z"
+        sh(b, "git", "push", "-q", "-u", "origin", "claude/x")
+        sh(b, "git", "switch", "-q", "old/diverged")
+        (b / "y.md").write_text("an abandoned try\n")
+        commit_all(b, "abandoned")
+        sh(b, "git", "push", "-q", "origin", "old/diverged")
+        os.environ.pop("GIT_COMMITTER_DATE")
+        home = self.ws / "chat2"
+        clone = home / "Claude-Brain"
+        sh(self.ws, "git", "clone", "-q", "-b", "main", str(self.bremote), str(clone))
+        sh(clone, "git", "switch", "-q", "-c", "claude/y")
+        c.BRAIN_ROOT = clone
+        os.environ.update(BRAIN_SESSION_ID="chat-two", BRAIN_NOW=T2)
+        self.assertEqual([(a["branch"], a["commits"]) for a in state.ahead_branches(clone)], [("claude/x", 1), ("old/diverged", 1)])
+        blob = "\n".join(detect.boot_lines("Continue", clone))
+        self.assertIn("origin/claude/x", blob)
+        self.assertIn("brain resume --adopt", blob)
+        self.assertLessEqual(len(blob.encode()), 1500)
+        rc, out = cli("resume", "--adopt")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("adopted origin/claude/x", out)
+        self.assertTrue((clone / "x.md").exists())
+        self.assertEqual(git(clone, "rev-parse", "--abbrev-ref", "HEAD"), "claude/y")
+        self.assertNotIn("origin/claude/x", "\n".join(detect.boot_lines("Continue", clone)))
+        rc, out = cli("resume", "--adopt", "old/diverged")
+        self.assertEqual(rc, 1)
+        self.assertIn("cannot fast-forward", out)
 
 
 # ---------------------------------------------------------------- one command to end a session

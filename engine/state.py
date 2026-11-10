@@ -638,6 +638,21 @@ def push_brain_records(brain_root: Path | None = None) -> str:
 
 
 # ---------------------------------------------------------------- continuity between chats
+def _fetch_heads(repo: Path) -> None:
+    """The one bounded fetch of the remote's branch heads. Skipped when
+    ``BRAIN_NO_NETWORK`` is set; any failure is silence. No --depth: adopting
+    by fast-forward needs the ancestry."""
+    if not os.environ.get("BRAIN_NO_NETWORK"):
+        _run(repo, "fetch", "-q", "--no-tags", "origin", "+refs/heads/*:refs/remotes/origin/*", timeout=FETCH_SECONDS)
+
+
+def _remote_branches(repo: Path, limit: int) -> list[str]:
+    """Names of the remote's branches as this checkout knows them, newest commit first."""
+    refs = git(repo, "for-each-ref", "--sort=-committerdate", f"--count={limit + 1}", "--format=%(refname)",
+               "refs/remotes/origin").splitlines()
+    return [n for n in (r.removeprefix("refs/remotes/origin/") for r in refs) if n and n != "HEAD"]
+
+
 def newer_checkpoints(project: Path, limit: int = 12) -> list[dict]:
     """Remote branches whose ``.brain/STATE.md`` is newer than this checkout's,
     newest first: ``{ref, branch, updated, item, last_done, stage}``.
@@ -650,18 +665,11 @@ def newer_checkpoints(project: Path, limit: int = 12) -> list[dict]:
     project = Path(project)
     if not is_repo(project) or not git(project, "remote"):
         return []
-    if not os.environ.get("BRAIN_NO_NETWORK"):
-        # No --depth: adopting by fast-forward needs the ancestry.
-        _run(project, "fetch", "-q", "--no-tags", "origin", "+refs/heads/*:refs/remotes/origin/*", timeout=FETCH_SECONDS)
+    _fetch_heads(project)
     mine = read_state(project).get("updated", "")
-    refs = git(project, "for-each-ref", "--sort=-committerdate", f"--count={limit + 1}", "--format=%(refname)",
-               "refs/remotes/origin").splitlines()
     out = []
-    for full in refs:
-        name = full.removeprefix("refs/remotes/origin/")
-        if name == "HEAD" or not name:
-            continue
-        code, text, _ = _run(project, "show", f"{full}:.brain/STATE.md")
+    for name in _remote_branches(project, limit):
+        code, text, _ = _run(project, "show", f"refs/remotes/origin/{name}:.brain/STATE.md")
         if code != 0 or not text:
             continue
         st = parse_state(text)
@@ -672,34 +680,67 @@ def newer_checkpoints(project: Path, limit: int = 12) -> list[dict]:
     return out
 
 
+def ahead_branches(repo: Path, limit: int = 12) -> list[dict]:
+    """Remote branches that hold everything in this checkout plus more commits
+    (so taking one is a fast-forward), newest first: ``{ref, branch, commits}``.
+    This is how a chat with only the brain attached finds the last chat's
+    work: the brain has no state file, its commits are its position. Same one
+    bounded fetch as ``newer_checkpoints``."""
+    repo = Path(repo)
+    if not is_repo(repo) or not git(repo, "remote"):
+        return []
+    _fetch_heads(repo)
+    out = []
+    for name in _remote_branches(repo, limit):
+        ref = f"refs/remotes/origin/{name}"
+        n = git(repo, "rev-list", "--count", f"HEAD..{ref}")
+        if n.isdigit() and int(n) > 0 and _run(repo, "merge-base", "--is-ancestor", "HEAD", ref)[0] == 0:
+            out.append({"ref": f"origin/{name}", "branch": name, "commits": int(n)})
+    return out
+
+
+def _adopt(repo: Path, branch: str | None, found: list[str], nothing: str, conflict_hint: str = "") -> tuple[bool, str]:
+    """Fast-forward ``repo`` to ``branch`` on the remote, or to the first of
+    ``found``. Never merges, never forces; a refusal says the next step."""
+    if branch:
+        name = branch.removeprefix("origin/")
+        if not git(repo, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{name}"):
+            have = [r.removeprefix("origin/") for r in found][:4]
+            return False, (f"no branch '{name}' on the remote" + (f" (newer work is on: {', '.join(have)})" if have else "")
+                           + "; run `brain resume --adopt` with no name to take the newest")
+        ref = f"origin/{name}"
+    elif not found:
+        return True, nothing
+    else:
+        ref = found[0]
+    has_head = bool(git(repo, "rev-parse", "--verify", "--quiet", "HEAD"))
+    if has_head and _run(repo, "merge-base", "--is-ancestor", "HEAD", ref)[0] != 0:
+        mine = git(repo, "rev-list", "--count", f"{ref}..HEAD") or "some"
+        return False, (f"cannot fast-forward to {ref}: this branch has {mine} commit(s) that branch lacks. "
+                       f"Next: git merge {ref}{conflict_hint}, then `brain resume`")
+    code, out, err = _run(repo, "merge", "--ff-only", "-q", ref, timeout=60)
+    if code != 0:
+        why = next((l.strip() for l in (err or out).splitlines() if l.strip()), "git refused")
+        return False, (f"cannot fast-forward to {ref}: {c.clip(why, 110)}. "
+                       "Next: commit or discard the local changes in the way (git status), then `brain resume --adopt` again")
+    return True, f"adopted {ref}: fast-forwarded to {git(repo, 'rev-parse', '--short', 'HEAD')}"
+
+
 def adopt_checkpoint(project: Path, branch: str | None = None) -> tuple[bool, str]:
     """Bring this checkout up to the newest checkpoint on the remote (or to
     ``branch``) by fast-forward only, so nothing here can be lost. Returns
     (ok, one line); a refusal says the next step."""
     project = Path(project)
-    found = newer_checkpoints(project)
-    if branch:
-        name = branch.removeprefix("origin/")
-        if not git(project, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{name}"):
-            have = [f["branch"] for f in found][:4]
-            return False, (f"no branch '{name}' on the remote" + (f" (newer checkpoints are on: {', '.join(have)})" if have else "")
-                           + "; run `brain resume --adopt` with no name to take the newest")
-        ref = f"origin/{name}"
-    elif not found:
-        return True, "nothing newer on the remote: this checkout holds the latest checkpoint"
-    else:
-        ref = found[0]["ref"]
-    has_head = bool(git(project, "rev-parse", "--verify", "--quiet", "HEAD"))
-    if has_head and _run(project, "merge-base", "--is-ancestor", "HEAD", ref)[0] != 0:
-        mine = git(project, "rev-list", "--count", f"{ref}..HEAD") or "some"
-        return False, (f"cannot fast-forward to {ref}: this branch has {mine} commit(s) that branch lacks. "
-                       f"Next: git merge {ref} (in a conflict on .brain/STATE.md keep theirs), then `brain resume`")
-    code, out, err = _run(project, "merge", "--ff-only", "-q", ref, timeout=60)
-    if code != 0:
-        why = next((l.strip() for l in (err or out).splitlines() if l.strip()), "git refused")
-        return False, (f"cannot fast-forward to {ref}: {c.clip(why, 110)}. "
-                       "Next: commit or discard the local changes in the way (git status), then `brain resume --adopt` again")
-    return True, f"adopted {ref}: fast-forwarded to {git(project, 'rev-parse', '--short', 'HEAD')}"
+    return _adopt(project, branch, [f["ref"] for f in newer_checkpoints(project)],
+                  "nothing newer on the remote: this checkout holds the latest checkpoint",
+                  " (in a conflict on .brain/STATE.md keep theirs)")
+
+
+def adopt_brain(brain_root: Path | None = None, branch: str | None = None) -> tuple[bool, str]:
+    """The same for the brain itself, in a chat with no project attached."""
+    root = Path(brain_root or c.BRAIN_ROOT)
+    return _adopt(root, branch, [a["ref"] for a in ahead_branches(root)],
+                  "nothing ahead on the remote: this checkout holds the brain's latest work")
 
 
 # ---------------------------------------------------------------- resume
@@ -1184,7 +1225,28 @@ def _checkpoint_line(st: dict) -> str:
     return c.clip(f"checkpoint: stage {st['stage']} · item: {st['item'] or 'none'} · next: {st['next'] or '-'}", 240)
 
 
+def _checkpoint_brain(args) -> int:
+    """`checkpoint` with only the brain attached: there is no state file to
+    write, but --push still puts this session's records on the remote."""
+    root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+    said = "no project attached: the position was not recorded (the brain's own is docs/plan/tickets.json)"
+    if not args.push:
+        print(said + "; `checkpoint --push` pushes this session's records")
+        return 1
+    lines = [said] if any(x is not None and x is not False for x in
+                          (args.item, args.done, args.next, args.note, args.blockers, args.stage, args.tier)) else []
+    msg = push_brain_records(root)
+    lines.append(msg or "brain records: nothing new to push")
+    left = repo_cleanliness(root)
+    if left:
+        lines.append("brain: " + "; ".join(left))
+    print("\n".join(lines))
+    return 1 if "FAILED" in msg or "not committed" in msg else 0
+
+
 def cmd_checkpoint(args) -> int:
+    if _brain_only(args):
+        return _checkpoint_brain(args)
     project = c.need_project(args)
     if not project:
         return 1
@@ -1222,6 +1284,15 @@ def _brain_only(args) -> bool:
 
 def cmd_resume(args) -> int:
     adopt = getattr(args, "adopt", None)
+    if _brain_only(args):
+        root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+        if adopt is not None:
+            ok, line = adopt_brain(root, adopt or None)
+            print(line)
+            if not ok:
+                return 1
+        print("\n".join(brain_status_lines(root)[:11]))
+        return 0
     if adopt is not None:
         target = c.resolve_project(getattr(args, "project", None))
         if target is None:
@@ -1235,6 +1306,10 @@ def cmd_resume(args) -> int:
         print(line)
         if not ok:
             return 1
+        if line.startswith("adopted") and c.is_managed(target) and not c.manifest_problem(target):
+            from . import detect   # boot left the stale checkout alone: open the session now
+            for l in detect.open_session(Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT), target):
+                print(l)
     project = c.need_project(args)
     if not project:
         return 1

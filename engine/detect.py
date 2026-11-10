@@ -186,13 +186,22 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
         add(1, "attached: " + c.clip(", ".join(d["others"]), 160))
     if newer:
         n = newer[0]
-        add(0, f"newer checkpoint on {n['ref']} ({n['updated'][:16].replace('T', ' ')}, item: {c.clip(n['item'] or 'none', 70)}): "
-               "run `brain resume --adopt` before anything else" + (f" (+{len(newer) - 1} more branch(es))" if len(newer) > 1 else ""), 260)
+        add(0, f"newer checkpoint on {n['ref']}: run `brain resume --adopt` before anything else "
+               f"(saved {n['updated'][:16].replace('T', ' ')}, item: {c.clip(n['item'] or 'none', 70)}"
+               + (f"; {len(newer) - 1} more branch(es) are newer too" if len(newer) > 1 else "") + ")", 280)
     models = c.read_json(root / "memory" / "models.json", {}) or {}
     age = c.days_since(models.get("verified_on", ""))
     if age > int(models.get("recheck_days", 90)):
         add(3, f"note: model facts were verified {age} days ago; re-check memory/models.json before relying on prices or model names")
     if mode == "brain-only":
+        try:  # the last brain-only chat pushed to its own branch; same one bounded fetch
+            ahead = st_mod.ahead_branches(root)
+        except Exception:
+            ahead = []
+        if ahead:
+            add(0, f"brain work is ahead on {ahead[0]['ref']} ({ahead[0]['commits']} commit(s) this checkout lacks): "
+                   "run `brain resume --adopt` before anything else"
+                   + (f" (+{len(ahead) - 1} more branch(es))" if len(ahead) > 1 else ""), 260)
         for l in brain_work_lines(root):
             add(1, l)
     for l in session_start_lines(root, proj if working and mode in ("work", "choose") and not newer else None):
@@ -302,20 +311,25 @@ def learning_line(root: Path) -> str:
     return "learning: " + "; ".join(parts) if parts else ""
 
 
+def open_session(root: Path, project: Path) -> list[str]:
+    """Mark this session open in the project and, when an earlier session never
+    ran `close`, record it now. At most one line; never raises."""
+    try:
+        from . import ledger
+        previous = ledger.mark_open(project)
+        if previous:
+            # This chat writes that session's record, so it may commit it (push_brain_records).
+            st_mod.remember_repaired(str(previous.get("session") or ""), root)
+            return ["earlier session was not closed: " + c.clip(ledger.repair_unclosed(project, previous, root), 150)]
+    except Exception:
+        pass
+    return []
+
+
 def session_start_lines(root: Path, project: Path | None) -> list[str]:
     """Extra orientation that depends on optional modules. Every part is
     guarded: a failure here must never cost the session its start."""
-    out: list[str] = []
-    if project is not None:
-        try:  # an earlier session that never ran `close`: record it now
-            from . import ledger
-            previous = ledger.mark_open(project)
-            if previous:
-                # This chat writes that session's record: it may commit it (push_brain_records).
-                st_mod.remember_repaired(str(previous.get("session") or ""), root)
-                out.append("earlier session was not closed: " + c.clip(ledger.repair_unclosed(project, previous, root), 150))
-        except Exception:
-            pass
+    out: list[str] = open_session(root, project) if project is not None else []
     try:  # a model update or a bad lesson shows up as a shift in the numbers
         from . import mlearn
         cfg = c.read_json(root / "memory" / "ml_config.json", {}) or {}
