@@ -1,7 +1,7 @@
 {
   "platform-relnotes": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "200",
     "hash": "7feb28c93a47326ec1c467f1a817571c34902c3163db0ecb20f0a7ea3f0a1cff",
     "seen": [
       "c43dc535a9ba",
@@ -13,9 +13,9 @@
     ]
   },
   "platform-llms": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
-    "last_modified": "Tue, 10 Nov 2026 09:02:54 GMT",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "200",
+    "last_modified": "Tue, 10 Nov 2026 17:43:46 GMT",
     "hash": "cb07fc76ea4055c0e4557dd577165f0a739398524014788f208db3dfa02cb874",
     "seen": [
       "e2ab33e270b5",
@@ -914,8 +914,8 @@
     ]
   },
   "cc-docs-llms": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "304",
     "etag": "W/\"zIMRNefB17kyGR9LpL6s-p1_XFW-xZLnNGSqKk6WAT8\"",
     "hash": "fe04a609e137986ef60ff7fc649beebc563902b81150b81151f5b6092e6c4e54",
     "seen": [
@@ -1161,8 +1161,8 @@
     ]
   },
   "cc-changelog": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "304",
     "etag": "W/\"b7ab7a9a085774730004ed723e04957cb56a2a94984cb725b891a9af054e6c34\"",
     "hash": "a074556107911c423a449df2f0b1dbbabb51aaa66383b81c3ba4fea1c52679cf",
     "seen": [
@@ -1184,10 +1184,11 @@
     ]
   },
   "anthropic-sitemap": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
-    "hash": "28ec142be91bbf32182091fb57696f68b642c8fbea36ff89c6a9dfad50fc9a28",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "200",
+    "hash": "4749421c36369dcc47ba443028fc4ce33f0a31562a365eb9ad15d6b45764f0b2",
     "seen": [
+      "b3a26b5f8ada",
       "f75de63b48df",
       "71e0837a9684",
       "12db76f63f47",
@@ -1216,18 +1217,32 @@
     ]
   },
   "status": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
-    "etag": "W/\"1b619beed9c914248f69a2564479b9c9\"",
-    "hash": "1b619beed9c914248f69a2564479b9c93c7221de92cb30d483bcdbd405f5d8ac",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "200",
+    "etag": "W/\"2e4978799ae4c9ce8af870253c11bf45\"",
+    "hash": "2e4978799ae4c9ce8af870253c11bf4564e884884334359240e917d491997d0f",
     "seen": []
   },
   "hf-daily-papers": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
-    "etag": "W/\"2b9f7-hVnHvQMPyvmjPypvwwtMB57bDug\"",
-    "hash": "e87f7dafd0f91e2178757ec4579ad5943f3375783980a646670cb6293309359d",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "200",
+    "etag": "W/\"2b5bf-7+rJbNiV4p+Ej5dF8z0n3CtIr2Y\"",
+    "hash": "79ddca06b401219993f0c26ec97a5ed36d19815a1b4726244a1589af6535ba80",
     "seen": [
+      "bda2bbbe51cd",
+      "8702ff33f1ff",
+      "447fde64a056",
+      "d0bd5b4afada",
+      "fd3bce808917",
+      "131f9b01cd47",
+      "9995fc873fba",
+      "6a12e376ec47",
+      "375a273501ec",
+      "753d5211795a",
+      "b92ddaf404ca",
+      "902f49478158",
+      "f42eeb206b4f",
+      "fc4ab8fab3b1",
       "63eb7f7f2aec",
       "28db437d3876",
       "b659bf968a43",
@@ -1261,11 +1276,13 @@
     ]
   },
   "hf-blog": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
-    "etag": "W/\"40f2f-T2jo6TYXuYHZ56xAp6s3ALjzrfI\"",
-    "hash": "a75a6d41b8f5dec543fd3576818df3346e885dbdfc4f7e99ef1e36940084c8dc",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "200",
+    "etag": "W/\"41149-4QvSq//BGeVj0brTue1KdKO2rSA\"",
+    "hash": "f2d04bdf9e8314240b15ab6724333315830446aa8d9a6dbf69acd4f96d413eb1",
     "seen": [
+      "91aa6023aa85",
+      "de1e8dc4bfe0",
       "1e11704db9d1",
       "6bee98feb05f",
       "c066895d095b",
@@ -1294,9 +1311,9 @@
     ]
   },
   "arxiv-agent-memory": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
-    "hash": "637f8ba0aac10d9a576bed448493bc781d93275536ffbb4bdbe20d33edefe446",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "200",
+    "hash": "6df70d1969ef558ad39a0c6ef41418dd60aa29b4cd0cfb436674c41c0d5fc7ce",
     "seen": [
       "089abb17cac2",
       "386414866407",
@@ -1311,9 +1328,9 @@
     ]
   },
   "hn-claude": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
-    "hash": "7361e9d112036b41bdba9ee5f419c0158678aad72b5073718790d6c7ac506a1e",
+    "last_checked": "2026-11-10T17:49:10Z",
+    "last_status": "200",
+    "hash": "7faf4d1469b1ee5c9ed9558ba6494f87e9c014117cb18afcd3d49b5a46e6f3ce",
     "seen": [
       "4aedb2675db1",
       "1a858efb6e23"

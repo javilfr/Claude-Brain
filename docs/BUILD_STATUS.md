@@ -107,3 +107,31 @@ Blocking items from the final review, all fixed: a model could label its own not
 - Helpers were 73% of the cost. The first ten analysts ran on the session's model because nothing set theirs; later helpers used the brain's own agents or an explicit cheaper model. That is the reason every brain agent file sets its model.
 - The main conversation read 99% of its input from cache. Three tool results exceeded 5,000 tokens.
 - This was a deliberately heavy session: two research rounds of ten agents each were asked for by name. It is not a baseline for normal work.
+
+## Improvement session, 2026-11-10 (brain alone; branch `claude/optimistic-newton-sh6lcx`)
+
+The owner's instruction: a comprehensive analysis, a very detailed improvement plan, and the plan executed. The plan is `docs/plan/IMPROVEMENT_PLAN.md`; the tickets are CB-200 to CB-209 and CB-210 onward in `docs/plan/tickets.json`.
+
+### CB-200 Baseline (before any change)
+
+| Check | Result |
+|---|---|
+| `python3 -m unittest discover -s tests -t .` | 407 tests, OK, 33.1 s |
+| `brain doctor` | healthy; always-loaded text about 2,550 tokens |
+| `brain lint` | 0 errors, 0 notes |
+| `brain hr audit` | 100 templates in 10 groups, sound; by agent: scout 0, researcher 17, builder 48, writer 19, reviewer 15, redteam 1 |
+| `brain items check` | 141 items in 9 files, all valid |
+| `brain eval audit` | 12 tasks, 12 sound |
+| `brain learn consolidate` | the first real delta, `d-20261110-a431e755f2`: 3 operations, 4 files written (one ledger row, two settled hires folded into the statistics) |
+| `brain learn verify` | 1 delta replayed on `origin/main`; learned zone matches |
+| `brain radar --force` | 10 sources checked, 5 new leads, 0.71 s, 0 errors; the one official lead was a news item with no model or platform fact in it |
+
+### CB-201 Live platform checks (one-repository cloud session)
+
+| Question | What was seen | Evidence |
+|---|---|---|
+| Do the brain's hooks in `.claude/settings.json` load? | Yes. With `learned_zone_locked` set to true for the test, a Write to `memory/_hooktest.tmp` was refused with the hook's own message; the file was not created. The flag was restored | the tool error `PreToolUse:Write hook error … is in the learned zone` |
+| Do helpers honour `model`, `tools` and `omitClaudeMd`? | Yes for the scout: it ran on `claude-haiku-5-5`, had only Read, Grep and Glob, and had not been given `CLAUDE.md` | the model field in its transcript; its own reply |
+| Do a skill's own hooks fire? | Not applicable: no brain skill declares hooks | `grep -l '^hooks:' .claude/skills/*/SKILL.md` prints nothing |
+| Does an effort change keep the prompt cache? | Not testable from inside a session: only the owner can change effort. Left to the research memo | — |
+| Does the ledger see helpers started by a workflow? | It did not: it reported 1 helper and $3.42 while seven were running. Fixed (CB-210); the same moment then read 7 helpers and $13.14 | `tests/test_helper_transcripts.py` |
