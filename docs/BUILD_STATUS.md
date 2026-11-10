@@ -127,3 +127,31 @@ Every number below is from a command run in this session, before any change to t
 | `brain learn status` | 141 active items, 0 candidates, 0 in conflict; inbox empty |
 
 Difference from the handover: it said three inbox records were pending; consolidation found one inbox file holding the ledger row and the two settled hires (three records in one file).
+
+## End-to-end trial on a scratch project (2026-11-10, CB-202)
+
+A Python unit converter (km/miles, kg/lb, C/F, with tests) in a scratch repository with a local bare remote, run as a live lead would: boot, init, six-line requirements ledger, tickets, `plan schedule`, `hr staff`, two hires through `hr hire`, settle, gate, release, checkpoint, resume, handover.
+
+| Step | Result |
+|---|---|
+| Helpers | T1 (convert.py): plain brief on sonnet, used 4,647 of a 60,000 wage, check passed. T2 (tests, 10 tests): plain brief on sonnet, used 3,817 of 20,000, check passed |
+| Gate and release | `gate --all` exit 0; `release --push` fast-forwarded the remote's `master` to the gated commit |
+| Requirements | 6 of 6 done, each with a log from `req verify` |
+| Handover | refused while the brain had uncommitted changes; ready once they were committed and pushed |
+| Session so far (`brain ledger`) | main model 13.9M tokens read from cache (99%), helpers 43% of cost, $5.98 in total at list prices including the CB-205 reviewer still running |
+
+Found and fixed, each with a test:
+
+1. `boot` and `detect` looked only at the folders beside the brain, ignoring `--project`, `BRAIN_PROJECT` and the current repository, which every other command honours. Run from inside the project, boot said "no project attached".
+2. "a command-line unit converter in Python … with tests" was routed to long-form writing: "tests" matched "tesis" within one edit and won the tie. Exact matches now outweigh one-edit matches, and programming words were added.
+3. A tickets file written from memory (`minutes`, `depends`, `check`) was rejected by `plan schedule` and silently read by `hr staff` as "no acceptance command". Everyday names now map to `est`, `deps`, `accept`, and the plan skill names the fields.
+4. There was no way to force a plain brief once a template matched. `--template none` now does; the paired evaluation in CB-203 needs it.
+5. Each requirement already held its check, yet the lead had to run them one by one and copy the results. `brain req verify` runs them and records passes as evidence.
+
+Found and left for the ticket that owns them:
+
+- Selection (CB-204): `hr staff` picked no template for "Conversion core: convert.py with a convert function …", although `hr rack --search` puts `cli-script-builder` first for similar wording.
+- Templates (CB-205): `cli-script-builder` requires a dry-run flag and a "second run changes nothing" check, which mean nothing for a tool that changes no files. The rack has no template for writing unit tests for an existing module.
+- Wages: both small items used under a fifth of their wage (0.08 and 0.19). The learner adjusts bands from settled hires; two are not enough to move them.
+- `init` writes no root `.gitignore`, so `__pycache__/` was committed in the trial. Left open: it changes what the frozen contract installs.
+- `brain close` was not run for the trial on its own, because this session closes once at its end and a second close of the same session would be skipped as already consolidated.
