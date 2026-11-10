@@ -780,6 +780,8 @@ class DoctorProjectTests(Base):
         return p
 
     def test_a_healthy_project_is_one_ok_line(self):
+        """core-19: a project that is ready costs one line, and the check
+        writes nothing."""
         p = self.healthy()
         before = snapshot(p)
         code, out = self.run_cli("doctor", "--project", p)
@@ -793,6 +795,8 @@ class DoctorProjectTests(Base):
         self.assertEqual((code, out2), (0, out))
 
     def test_project_preflight_names_each_fault_and_its_fix(self):
+        """core-19: no git identity, no remote, a detached HEAD and a gate id
+        used twice: one FAIL line each, each with the step that fixes it."""
         p = self.project("shop")
         commit_all(p)
         self.set_manifest(p, gates=[{"id": "checks", "kind": "command", "command": "true"},
@@ -818,6 +822,9 @@ class DoctorProjectTests(Base):
             self.assertIn(": ", hit[0])
 
     def test_preflight_covers_the_release_branch_unpushed_work_and_damaged_files(self):
+        """core-19 (with core-05 and e2e-trial-01 as the faults it names):
+        work on the release branch, commits nobody pushed, conflict markers
+        or a damaged byte in STATE.md, and a folder that is not a repository."""
         p = self.healthy("app")
         self.set_manifest(p, release={"rule": "main-on-green", "branch": "work"})
         commit_all(p, "rule")
@@ -849,6 +856,8 @@ class DoctorProjectTests(Base):
         self.assertIn("init -b work", out)
 
     def test_each_contract_fault_carries_the_fix_that_fits_it(self):
+        """core-19, redteam-07: a credential in an owner file, a bad manifest
+        value and a missing contract file each get their own fix."""
         p = self.healthy("app")
         (p / "NEEDS_YOU.md").write_text((p / "NEEDS_YOU.md").read_text() + "\n## 1. Key\n" + "gh" + "p_" + "Ab3dEf6hIj" * 3 + "\n")
         self.set_manifest(p, family="cooking")
@@ -863,6 +872,8 @@ class DoctorProjectTests(Base):
         self.assertNotIn("Ab3dEf6hIj", out)
 
     def test_preflight_says_which_project_when_it_cannot_tell(self):
+        """core-19, core-09: the preflight uses the same resolver as every
+        other command."""
         self.project("shop")
         self.project("shop-admin")
         code, out = self.run_cli("doctor", "--project")
@@ -871,6 +882,8 @@ class DoctorProjectTests(Base):
         self.assertEqual(len(out.strip().splitlines()), 1, out)
 
     def test_plain_doctor_stays_as_it_is(self):
+        """core-19: without --project the self-test of the brain is unchanged
+        (the same eight checks, then 'brain is healthy')."""
         r = subprocess.run([sys.executable, str(ROOT / "bin" / "brain"), "doctor"], capture_output=True, text=True, cwd=str(self.ws),
                            env={**os.environ, "BRAIN_NO_NETWORK": "1"})
         lines = r.stdout.strip().splitlines()

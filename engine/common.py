@@ -455,7 +455,7 @@ def _found(value: Any) -> str:
         return "null"
     if isinstance(value, bool):
         return "true/false"
-    return {dict: "an object", list: "a list", str: "text", int: "a number", float: "a number"}.get(type(value), type(value).__name__)
+    return {dict: "an object", list: "a list", str: "text", int: "a number", float: "a decimal number"}.get(type(value), type(value).__name__)
 
 
 def _shaped(value: Any, spec: Any, where: str, problems: list[str]) -> Any:
