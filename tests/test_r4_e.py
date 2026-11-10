@@ -145,7 +145,7 @@ class ClosedSessionTest(LedgerBase):
         then a new session on the project as the remote holds it."""
         ws = self.tmp / "ws"
         brain = ws / "Claude-Brain"
-        shutil.copytree(ROOT, brain, ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "docs", "tests", "evals"))
+        shutil.copytree(ROOT, brain, ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "docs", "tests"))
         shutil.rmtree(brain / "learning" / "inbox", ignore_errors=True)
         c.write_json(brain / "learning" / "radar" / "state.json", {"sources": {"x": {"last_checked": "2026-11-10T10:59:00Z"}}})
         remote, app = ws / "remote.git", ws / "app"
@@ -307,6 +307,26 @@ class LiveCaptureTest(LedgerBase):
         (run,) = (self.proj / ".brain" / "log").glob("*-sess-1.json")
         self.assertAlmostEqual(c.read_json(run)["totals"]["cost"], OPUS + SONNET + HELPER, places=6)
         self.assertEqual(self.marker()["session"], "sess-2")
+
+    def test_a_live_file_does_not_fail_the_learned_zone_checks(self):
+        """lead-02: the live file sits inside learning/, which `learn verify`
+        and `guard diff` replay; an ignored, provisional file must not fail a locked brain."""
+        c.write_json(self.brain / "VERSION.json", {"learned_zone_locked": True})
+        shutil.copy(ROOT / ".gitignore", self.brain / ".gitignore")
+        (self.brain / "evals").mkdir()
+        (self.brain / "evals" / "known_project_ids.txt").write_text("# ids\n")
+        git_init(self.brain)
+        sh(self.brain, "git", "add", "-A")
+        sh(self.brain, "git", "commit", "-q", "-m", "base")
+        ledger.capture(self.brain, "sess-1", MAIN, SUBS, None, live=True)
+        self.assertEqual(len(self.live_files()), 1)
+        self.assertEqual(sh(self.brain, "git", "status", "--porcelain").stdout, "")
+        ok, lines = learn.verify(self.brain, "HEAD")
+        self.assertTrue(ok, lines)
+        ok, lines = guard.check_diff(self.brain, "HEAD")
+        self.assertTrue(ok, lines)
+        self.assertIn("0 kernel, 0 learned, 0 inbox", lines[0])
+        self.assertEqual(learn.pending_inbox(self.brain), [])
 
     def test_promote_live_is_what_a_checkpoint_can_call(self):
         ledger.capture(self.brain, "sess-1", MAIN, SUBS, None, live=True)
@@ -804,8 +824,10 @@ class LintRuleTest(unittest.TestCase):
             f.write(json.dumps({"text": "Ship it!", "tier": 2}) + "\n")
         self.assertEqual(lint.check_triggers(self.b), [])
 
-    def test_real_tree_trigger_hits_match_the_audit(self):
-        self.assertEqual(len(lint.skill_triggers(ROOT)), 10)
+    def test_every_real_skill_has_its_trigger_phrases_read(self):
+        triggers = lint.skill_triggers(ROOT)
+        self.assertEqual(sorted(triggers), sorted(p.parent.name for p in (ROOT / ".claude" / "skills").glob("*/SKILL.md")))
+        self.assertTrue(all(t == t.lower() and not t.endswith("…") for ts in triggers.values() for t in ts))
 
     def test_marked_fact_that_drifted_is_an_error(self):
         """quality-path-20: numbers restated by hand drift; a marked number is compared with the code."""
@@ -834,6 +856,14 @@ class LintRuleTest(unittest.TestCase):
         self.assertEqual([e for e in lint.check_facts(self.b) if "unknown" not in e], [])
         self.assertEqual(lint.fix_facts(self.b), 0)
 
+    def test_a_marker_shown_as_an_example_is_not_a_claim(self):
+        doc = self.b / "docs/HOWTO.md"
+        example = "Mark a number like this: `<!-- fact: tests -->410<!-- /fact -->`.\n\n```\n<!-- fact: templates -->7<!-- /fact -->\n```\n"
+        doc.write_text(example)
+        self.assertEqual(lint.check_facts(self.b), [])
+        self.assertEqual(lint.fix_facts(self.b), 0)
+        self.assertEqual(doc.read_text(), example)
+
     def test_fact_values_of_the_real_brain(self):
         self.assertEqual(lint.FACTS["templates"](ROOT), 100)
         self.assertEqual(lint.FACTS["engine-modules"](ROOT), len([p for p in (ROOT / "engine").glob("*.py") if p.name != "__init__.py"]))
@@ -856,7 +886,8 @@ class LintRuleTest(unittest.TestCase):
         notes = lint.agent_token_numbers(self.b)
         self.assertEqual(len(notes), 2, notes)
         self.assertTrue(notes[0].startswith(".claude/agents/builder.md:5:"), notes)
-        self.assertEqual(len(lint.agent_token_numbers(ROOT)), len(list((ROOT / ".claude" / "agents").glob("*.md"))))
+        (self.b / ".claude/agents/builder.md").write_text("---\nname: builder\ndescription: d\n---\nReturn a short list; long logs go in a file.\n")
+        self.assertEqual(lint.agent_token_numbers(self.b), [])
 
     def test_a_rule_listed_as_note_only_does_not_fail_the_lint(self):
         """The lead's switch: a new rule that fires on files another package owns reports until they are fixed."""

@@ -496,13 +496,20 @@ def _fact_value(name: str, root: Path) -> int | None:
         return None
 
 
+def _marked_facts(text: str) -> list[re.Match]:
+    """The fact markers of a document. One written inside code (a page that
+    explains the marker) is an example, not a claim, and is left alone."""
+    code = [m.span() for m in FENCE.finditer(text)] + [m.span() for m in CODE_SPAN.finditer(text)]
+    return [m for m in FACT.finditer(text) if not any(a <= m.start() < b for a, b in code)]
+
+
 def check_facts(root: Path) -> list[str]:
     """A marked number must equal the code's value. Numbers restated by hand
     in several documents drift apart; a marked one cannot."""
     out = []
     for f in fact_files(root):
-        for name, shown in FACT.findall(c.read_text(f)):
-            rel = f.relative_to(root)
+        for m in _marked_facts(c.read_text(f)):
+            name, shown, rel = m.group(1), m.group(2), f.relative_to(root)
             if name not in FACTS:
                 out.append(f"{rel}: unknown fact '{name}' (known: {', '.join(sorted(FACTS))})")
                 continue
@@ -517,20 +524,16 @@ def fix_facts(root: Path) -> int:
     Returns how many were changed."""
     changed = 0
     for f in fact_files(root):
-        text = c.read_text(f)
-
-        def put(m: re.Match) -> str:
-            nonlocal changed
+        text = original = c.read_text(f)
+        for m in reversed(_marked_facts(text)):   # from the end, so earlier positions stay valid
             value = _fact_value(m.group(1), root) if m.group(1) in FACTS else None
             if value is None or re.sub(r"[,\s]", "", m.group(2)) == str(value):
-                return m.group(0)
-            changed += 1
+                continue
             new = f"{value:,}" if "," in m.group(2) else str(value)   # keep the document's way of writing thousands
-            return m.group(0)[:m.start(2) - m.start()] + new + m.group(0)[m.end(2) - m.start():]
-
-        new_text = FACT.sub(put, text)
-        if new_text != text:
-            c.write_text(f, new_text)
+            text = text[:m.start(2)] + new + text[m.end(2):]
+            changed += 1
+        if text != original:
+            c.write_text(f, text)
     return changed
 
 
