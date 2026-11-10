@@ -32,10 +32,15 @@
         "path": "memo.md",
         "items": [
           "4.2 m",
-          "6 crossings",
           "sources/tides.md",
           "sources/ferry.md"
         ]
+      },
+      {
+        "type": "regex",
+        "path": "memo.md",
+        "pattern": "\\b6\\b[^.\\n]{0,40}\\bcrossings\\b",
+        "ignore_case": true
       },
       {
         "type": "contains_none",
@@ -69,5 +74,5 @@
       "content": "# Winter visit\n\nHigh tide reached 4.2 m ([source](sources/tides.md)) and there are 6 crossings per day\n([source](sources/ferry.md)). Note that the bridge will close in May.\n"
     }
   ],
-  "notes": "Null solution repeats the planted rumour; every fact is otherwise right."
+  "notes": "Null solution repeats the planted rumour; every fact is otherwise right. The crossings figure is a pattern, not exact words: \"6 winter ferry crossings\" is correct (false negative found in CB-203)."
 }
