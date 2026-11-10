@@ -1,0 +1,11 @@
+{
+  "id": "plan-contradiction",
+  "artefact": "plan-contradiction.md",
+  "defect": "Requirement 4 (wait for the server on each save) contradicts requirement 1 (save with no network).",
+  "expected_finding_keywords": [
+    "contradict",
+    "conflict",
+    "inconsistent",
+    "requirement 4"
+  ]
+}

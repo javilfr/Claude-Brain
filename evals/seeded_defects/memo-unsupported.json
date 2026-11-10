@@ -1,0 +1,12 @@
+{
+  "id": "memo-unsupported",
+  "artefact": "memo-unsupported.md",
+  "defect": "The claim that the move cuts backup time by 40% and removes all risk has no source.",
+  "expected_finding_keywords": [
+    "unsupported",
+    "no source",
+    "uncited",
+    "40%",
+    "unsourced"
+  ]
+}

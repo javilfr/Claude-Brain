@@ -7,21 +7,25 @@ description: Resume a project from its recorded state without asking. Use when t
 
 The owner wants work to continue from exactly where the last session stopped, with no questions and no re-planning. He types two words on his phone and expects hours of correct work.
 
-BRAIN means `python3 "${CLAUDE_SKILL_DIR}/../../../bin/brain"`.
+## Orient
 
-## Mechanical part
+Run `BRAIN boot` and act on its mode line; it already summarises `.brain/STATE.md`, so do not re-read what it printed.
 
-1. `BRAIN boot` finds the project, reads `.brain/STATE.md`, reports the mode (work, bootstrap, adopt, migrate, brain only, choose, stale brain), open items for the owner, stale facts, and whether another session holds the lease. It is about 15 lines; do not re-read the files it summarised.
-2. If the mode is `migrate`, run `BRAIN migrate` (it commits a backup first). If it is `stale brain`, write nothing to the project and tell the owner the brain needs updating. If `bootstrap` or `adopt`, switch to the brain-new skill.
-3. If another session holds the lease, say which one in one line and continue only if the owner's message makes clear this chat is the active one.
-4. Check `NEEDS_YOU.md` and `.brain/DECISIONS.md` for lines the owner marked `RESOLVED:` or `OVERTURNED`, and apply them before resuming.
+- `work`: resume the recorded item at the recorded size.
+- `migrate`: run `BRAIN migrate`. It keeps a copy of the manifest under `.brain/log/backup/` before each step; commit its changes as their own commit.
+- `stale-brain`: write nothing to `.brain/` and tell the owner the brain needs updating.
+- `bootstrap` or `adopt`: switch to brain-new.
+- `choose`: boot picked the most recently active project; continue with it unless his message names another.
+- `brain-only`: no project is attached; answer what he asked.
 
-## Judgment
+If a warning says another session holds the lease, say which in one line and continue only if his message makes clear this chat is the active one. A line about an earlier session that was not closed means boot has already recorded what it could; mention it once and carry on. A radar line is a lead to check later in brain-learn, not a fact to act on now.
 
-Resume the item `STATE.md` names, at the size the project already records. Re-plan only if the state file says the plan is finished or an overturned decision invalidates it. If the recorded item is blocked on the owner, write or update its `NEEDS_YOU.md` entry and move to the next unblocked item.
+Apply any lines he marked `RESOLVED:` in `NEEDS_YOU.md` or `OVERTURNED` in `.brain/DECISIONS.md` before resuming. Re-plan only if the plan is finished or an overturned decision invalidates it. If the recorded item is blocked on him, update its `NEEDS_YOU.md` entry and move to the next unblocked item.
 
-Then continue with the brain-build skill. Checkpoint at each item boundary with `BRAIN checkpoint --item <id> --next <ids>`.
+## Keep going
+
+Continue with brain-build. An unattended run keeps working while `.brain/CHECKLIST.md` (regenerated at each checkpoint) has open lines and nothing blocks them; a progress report is not the end of the work. Continue on your own at most three times in a row, then stop and report. After the context is compacted, run `BRAIN resume` instead of re-reading files.
 
 ## Tell the owner
 
-At most five lines: where things stand, which item you are on, anything only he can do (pointing to `NEEDS_YOU.md`). Then work. Reply in the language he wrote in.
+At most five lines: where things stand, which item you are on, anything only he can do (pointing to `NEEDS_YOU.md`). Then work.

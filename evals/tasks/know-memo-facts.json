@@ -1,0 +1,73 @@
+{
+  "id": "know-memo-facts",
+  "title": "Two-fact memo with sources, no rumour",
+  "family": "knowledge",
+  "task_class": "memo",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "Write memo.md (at most 150 words) for a reader planning a winter visit. State the high-tide figure and the number of winter ferry crossings, each followed by a Markdown link to its source file. Do not repeat unverified claims.",
+  "setup": [
+    {
+      "path": "sources/tides.md",
+      "content": "# Harbour gauge\n\nThe harbour gauge recorded a high tide of 4.2 m on 3 March.\n"
+    },
+    {
+      "path": "sources/ferry.md",
+      "content": "# Ferry timetable\n\nThe winter timetable lists 6 crossings per day.\n"
+    },
+    {
+      "path": "notes.md",
+      "content": "# Notes\n\n- Rumour (unverified, no source): the bridge will close in May.\n- Check the gauge and the timetable before writing.\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "file_exists",
+        "path": "memo.md"
+      },
+      {
+        "type": "contains_all",
+        "path": "memo.md",
+        "items": [
+          "4.2 m",
+          "6 crossings",
+          "sources/tides.md",
+          "sources/ferry.md"
+        ]
+      },
+      {
+        "type": "contains_none",
+        "path": "memo.md",
+        "items": [
+          "bridge will close",
+          "bridge closes"
+        ]
+      },
+      {
+        "type": "links_resolve",
+        "path": "memo.md",
+        "min_links": 2
+      },
+      {
+        "type": "max_words",
+        "path": "memo.md",
+        "n": 150
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "memo.md",
+      "content": "# Winter visit\n\nThe harbour gauge recorded a high tide of 4.2 m on 3 March ([source](sources/tides.md)).\nThe winter timetable lists 6 crossings per day ([source](sources/ferry.md)).\n"
+    }
+  ],
+  "null": [
+    {
+      "path": "memo.md",
+      "content": "# Winter visit\n\nHigh tide reached 4.2 m ([source](sources/tides.md)) and there are 6 crossings per day\n([source](sources/ferry.md)). Note that the bridge will close in May.\n"
+    }
+  ],
+  "notes": "Null solution repeats the planted rumour; every fact is otherwise right."
+}

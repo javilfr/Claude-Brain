@@ -1,0 +1,41 @@
+{
+  "id": "data-unique-visitors",
+  "title": "Count unique visitors per day",
+  "family": "data",
+  "task_class": "aggregate",
+  "tier": 1,
+  "split": "heldout",
+  "prompt": "visits.csv has one row per page view. Write counts.json mapping each date to the number of distinct visitor ids seen that day.",
+  "setup": [
+    {
+      "path": "visits.csv",
+      "content": "visitor,date\nv1,2026-01-01\nv2,2026-01-01\nv1,2026-01-01\nv3,2026-01-01\nv2,2026-01-02\nv2,2026-01-02\nv4,2026-01-02\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "json_equals",
+        "path": "counts.json",
+        "fields": {
+          "2026-01-01": 3,
+          "2026-01-02": 2
+        }
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "counts.json",
+      "content": "{\"2026-01-01\": 3, \"2026-01-02\": 2}\n"
+    }
+  ],
+  "null": [
+    {
+      "path": "counts.json",
+      "content": "{\"2026-01-01\": 4, \"2026-01-02\": 3}\n"
+    }
+  ],
+  "notes": "Null solution counts rows instead of distinct visitors."
+}

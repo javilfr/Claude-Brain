@@ -1,0 +1,12 @@
+{
+  "id": "test-trivial",
+  "artefact": "test-trivial.py",
+  "defect": "The test compares the function with itself, so it passes whatever the function returns.",
+  "expected_finding_keywords": [
+    "trivial",
+    "tautolog",
+    "always pass",
+    "itself",
+    "no expected value"
+  ]
+}

@@ -7,29 +7,22 @@ description: Show where a project stands, what is next and what it has cost, in 
 
 The owner reads this on his phone. He wants to know what is done, what is next, whether anything waits on him, and what the work has cost, in under 15 lines and plain words.
 
-BRAIN means `python3 "${CLAUDE_SKILL_DIR}/../../../bin/brain"`.
+## Sources
 
-## Mechanical part
-
-1. `BRAIN status` regenerates `STATUS.md` from `.brain/STATE.md` (the only checkpoint) and prints the summary.
-2. `BRAIN ledger` gives token use and list-price cost for this session, by model and helper, and the share of input read from cache. Project totals come from `STATUS.md`.
-3. `BRAIN req list` if he asks how complete the work is against his request.
-4. `BRAIN budget` only if he asks about the brain's own size.
+- `BRAIN status` regenerates `STATUS.md` from `.brain/STATE.md` (the only checkpoint) and prints the summary.
+- `BRAIN ledger` gives this session's token use and list-price cost, by model and helper, and the share of input read from cache. Project totals come from `STATUS.md`.
+- `BRAIN release --check-live` when `release.live_url` is set in `.brain/project.json`: it says whether the live address serves the latest release. It pushes nothing.
+- `BRAIN req list` if he asks how complete the work is against his request.
+- `BRAIN budget` only if he asks about the brain's own size; `BRAIN ml report` only if he asks what the brain has learned about routing or cost.
 
 Do not read the plan, decisions or logs to answer; the scripts already summarise them. Do not restate the same fact twice.
 
 ## Judgment
 
-Say plainly if anything is wrong: a red gate, a live address serving an old version, a second chat holding the lease, a stale model-facts file, an item waiting on him. These come first.
+Put anything wrong first: a red gate, a live address serving an old version, a second chat holding the lease, a stale model-facts file, an item waiting on him.
 
-Cost is list-price equivalent: on his subscription he is not billed these dollars, and the real limit is his plan's usage window. Say so once if he asks about money.
+Cost is list-price equivalent: on his subscription he is not billed these dollars, and the real limit is his plan's usage window. Say so once if he asks about money. Give two cost lines: this session (tokens, list-price dollars, cache share) and the project to date.
 
 ## Shape of the reply
 
-- Line 1: the one-sentence state.
-- Done since last status (up to 4 lines).
-- Next (up to 3 lines).
-- Waiting on you: the `NEEDS_YOU.md` item numbers, or "nothing".
-- Cost: this session and project to date.
-
-Reply in the language he wrote in. No headers beyond what fits on a phone screen.
+A phone-screen shape: one-sentence state, done since the last status, next, waiting on you (the `NEEDS_YOU.md` item numbers, or "nothing"), cost. No headers beyond what fits on a phone screen.

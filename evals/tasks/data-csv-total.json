@@ -1,0 +1,41 @@
+{
+  "id": "data-csv-total",
+  "title": "Total one region of a sales CSV",
+  "family": "data",
+  "task_class": "aggregate",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "orders.csv lists orders with region and amount. Write total.json as {\"region\": \"north\", \"total\": N} where N is the sum of amount for region north.",
+  "setup": [
+    {
+      "path": "orders.csv",
+      "content": "order,region,amount\n1,north,120\n2,south,300\n3,north,45\n4,east,80\n5,north,1015\n6,south,60\n7,North,0\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "json_equals",
+        "path": "total.json",
+        "fields": {
+          "region": "north",
+          "total": 1180
+        }
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "total.json",
+      "content": "{\"region\": \"north\", \"total\": 1180}\n"
+    }
+  ],
+  "null": [
+    {
+      "path": "total.json",
+      "content": "{\"region\": \"north\", \"total\": 1620}\n"
+    }
+  ],
+  "notes": "Null solution is the all-regions total, a common slip."
+}

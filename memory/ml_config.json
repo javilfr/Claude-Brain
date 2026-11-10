@@ -1,0 +1,124 @@
+{
+  "_help": "Every tunable constant of engine/mlearn.py. Changing a value here changes behaviour without a code edit; learning or the owner may tune them. Sources: docs/research/round2/03-routing-ml.md, 08-online-learning.md, 07-evaluation.md section 4.4.",
+  "version": 1,
+  "state": {
+    "_help": "Bounds that keep stats/ml.json small however long the brain runs.",
+    "seen_cap": 2000,
+    "outcome_log_cap": 200,
+    "ratio_cap": 30,
+    "alarm_cap": 10,
+    "promotion_cap": 20,
+    "review_cap": 30,
+    "pending_session_cap": 50,
+    "round_digits": 6
+  },
+  "bandit": {
+    "_help": "Hierarchical discounted Beta-Bernoulli Thompson sampling (round2/03 sections 2.1-2.3). K_G and K_F are the capped pseudo-counts pulling class toward family toward global; gamma is the discount per update of an arm cell; n_cap bounds the discounted count; model_change_n is the effective count kept when an arm's model id changes; drift_gamma is the one-off extra discount a drift alarm applies to its class. min_outcomes and min_arms gate acting; near_best is delta; propensity_draws is the Monte-Carlo size.",
+    "K_G": 4.0,
+    "K_F": 6.0,
+    "gamma": 0.97,
+    "n_cap": 40.0,
+    "model_change_n": 4.0,
+    "drift_gamma": 0.9,
+    "min_outcomes": 8,
+    "min_arms": 2,
+    "near_best": 0.05,
+    "propensity_draws": 200,
+    "cost_decay": 0.9,
+    "score_rework_pass": 0.5,
+    "arms": [["haiku", "low"], ["sonnet", "low"], ["sonnet", "medium"], ["opus", "low"], ["opus", "medium"], ["opus", "high"], ["fable", "medium"], ["fable", "high"]],
+    "effort_cost": {"low": 0.6, "medium": 1.0, "high": 1.6, "max": 2.4},
+    "token_mix": {"in": 0.95, "out": 0.05},
+    "prior_tokens": 200000
+  },
+  "explore": {
+    "_help": "Safe exploration, invariant I-10. Cheaper arms are eligible only with a verifying check, risk in safe_risks and tier <= max_tier. At most max_rate of eligible tasks in the window explore, and wasted spend (failed explorations) stays under max_waste of window spend. exploit_margin and exploit_n decide when a cheaper arm counts as exploitation rather than exploration (10th-percentile pass rate within the margin of the baseline mean, with enough family evidence).",
+    "safe_risks": ["trivial", "standard"],
+    "max_tier": 2,
+    "max_rate": 0.25,
+    "max_waste": 0.05,
+    "window": 50,
+    "exploit_margin": 0.05,
+    "exploit_n": 5.0,
+    "z10": 1.2816
+  },
+  "calibration": {
+    "_help": "Estimate calibration (round2/08 section 4): log ratio actual/estimate, EW mean with half-life in tasks, pooled toward the family with K pseudo-tasks; quantiles from the last state.ratio_cap ratios; acts at min_n. Before that, p50 is the estimate and p80 is prior_p80_factor times it. drift_cap is the n a class keeps after a drift alarm.",
+    "half_life": 20,
+    "K": 5.0,
+    "min_n": 5,
+    "prior_p80_factor": 1.5,
+    "drift_cap": 5
+  },
+  "drift": {
+    "_help": "Drift charts per task class (round2/08 section 5, round2/07 section 4.4). Reference = first ref_n observations (median, 1.4826 x MAD, floored at sigma_floor). EWMA on normalised log tokens (lam, L); Page-Hinkley on the same stream (delta and lambda in sigma units); one-sided CUSUM on first-pass failures (k above the reference failure rate, threshold h). An alarm needs confirm_charts different charts signalling within confirm_window observations. After an alarm the reference is rebuilt from the next ref_n observations; the alarm shows on boot until then.",
+    "ref_n": 15,
+    "sigma_floor": 0.05,
+    "ewma_lam": 0.2,
+    "ewma_L": 3.0,
+    "ph_delta": 0.5,
+    "ph_lambda": 5.0,
+    "cusum_k": 0.1,
+    "cusum_h": 2.5,
+    "confirm_charts": 2,
+    "confirm_window": 3
+  },
+  "credit": {
+    "_help": "Memory credit (round2/08 section 3). Only followed items get credit; advantage = y - class baseline, split equally among followed items. Baseline is an EW mean of y with rate baseline_alpha from baseline_prior. Ranking multiplier = clamp(base + slope x lower bound, low, high) where the lower bound is mean - z x sd of the Beta posterior; neutral (1.0) until min_n followed uses. Owner-stated items always get high (I-08). correction_weight is the harmful mass an owner correction naming an item adds.",
+    "baseline_alpha": 0.1,
+    "baseline_prior": 0.6,
+    "min_n": 3,
+    "z": 1.28,
+    "base": 0.7,
+    "slope": 0.6,
+    "low": 0.7,
+    "high": 1.3,
+    "correction_weight": 1.0
+  },
+  "flaky": {
+    "_help": "Gate flakiness: Beta(prior_a + pass-after-fail on an unchanged commit, prior_b + failures that stayed failed). A score >= rerun means re-run once before calling it red; >= investigate is flagged in the report.",
+    "prior_a": 0.5,
+    "prior_b": 4.5,
+    "rerun": 0.2,
+    "investigate": 0.5
+  },
+  "retention": {
+    "_help": "Usage-based forgetting (round2/08 section 11): R = exp(-t/S), t = days since last followed use; S starts at s0_days by item type and grows by growth per followed use, capped at cap_days; importance 3 multiplies S by important_factor. Owner-stated and standing items do not decay. learn decay proposes demotion when R < threshold.",
+    "s0_days": {"rule": 45, "pitfall": 45, "fact": 120, "playbook": 90, "preference": 120},
+    "s0_default": 45,
+    "growth": 0.4,
+    "cap_days": 365,
+    "important_factor": 2.0,
+    "threshold": 0.15
+  },
+  "review": {
+    "_help": "Review stopping by capture-recapture (Chapman). Another round only if the estimated remaining blocking defects >= min_remaining; the estimate is used only when the overlap is >= min_overlap, otherwise overlap that small means many are likely unseen and another round is run; never more than max_rounds.",
+    "min_remaining": 1.0,
+    "min_overlap": 2,
+    "max_rounds": 3
+  },
+  "sizing": {
+    "_help": "Learned sizing in shadow (round2/08 section 6): multinomial Naive Bayes over salted word hashes, Laplace alpha, likelihood damped by 1/sqrt(words), rule tier as prior (rule_prior, the rest shared). A hint needs min_strong strong labels, posterior >= min_conf and a one-step difference; weak labels count weak_weight. act stays false until shadow evidence earns it; even then it only lowers a tier (I-11).",
+    "act": false,
+    "alpha": 0.5,
+    "rule_prior": 0.7,
+    "min_strong": 30,
+    "min_conf": 0.85,
+    "weak_weight": 0.3,
+    "max_vocab": 2000,
+    "tiers": [0, 1, 2, 3]
+  },
+  "offline": {
+    "_help": "Offline policy check by self-normalised inverse propensity scoring (round2/03 section 2.6): weights clipped at clip; trusted only with effective sample size >= min_ess and >= min_per_arm logged runs per arm.",
+    "clip": 10.0,
+    "min_ess": 30.0,
+    "min_per_arm": 10
+  },
+  "report": {
+    "_help": "Owner report wording thresholds (round2/03 section 2.7): fewer than too_early effective outcomes = too early; below medium = LOW; below high = MEDIUM; else HIGH.",
+    "max_lines": 12,
+    "too_early": 5,
+    "medium": 15,
+    "high": 30
+  }
+}

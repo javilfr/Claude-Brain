@@ -5,22 +5,22 @@ description: Leave everything saved and pushed so a new chat can continue, and g
 
 # Hand over
 
-The owner changes chats often, usually because context is running out, and the most repeated complaint in his history is losing the thread when that happens. The outcome: both repos committed and pushed, no helpers still running, a handover file, and one line he can paste into a new chat.
+The owner changes chats often, usually because context is running out, and the most repeated complaint in his history is losing the thread when that happens. Offer a handover yourself when the session is long and quality may start to drop, rather than waiting to be asked.
 
-BRAIN means `python3 "${CLAUDE_SKILL_DIR}/../../../bin/brain"`.
+## Goal
 
-Offer a handover yourself when the session is long and quality may start to drop, rather than waiting to be asked.
+Nothing still running; the state checkpointed; the session closed; both repositories committed and pushed on their working branches; `BRAIN handover` reporting ready.
 
-## Steps
+If the current item is close to finished, finish it; otherwise stop starting new work and leave it resumable. Wait for or stop every helper and background command, because nothing may still be writing when the chat ends. Commit the work itself on the project's working branch; unfinished work is pushed as a branch, never kept only in a temporary folder.
 
-1. Stop starting new work. Finish the current item if it is close; otherwise leave it in a state that can be resumed and say exactly what is half done.
-2. Wait for or stop every running helper and background command. Nothing may still be writing when the chat ends.
-3. `BRAIN checkpoint --item <current> --next <ids>` with notes on anything half finished and where it lives.
-4. `BRAIN req check` to show which ledger lines still lack evidence; they go into the handover, not into a claim of done.
-5. `BRAIN handover` writes `.brain/HANDOVER.md`, refreshes `STATUS.md`, and prints the line to paste.
-6. Commit and push the project on its working branch. Unfinished work is pushed as a branch, never only kept in a temporary folder. Push the brain's learning inbox if `close` wrote to it (run the brain-learn skill's close step first).
-7. Check `git status` is clean in both repos and that the pushes succeeded.
+Order matters here:
+
+1. `BRAIN checkpoint --item <current id> --note "<what is half finished and where it lives>" --push`.
+2. `BRAIN close`. Commit the learning inbox file it wrote in the brain repository and push the brain's working branch (brain-learn says where it goes next).
+3. `BRAIN handover`. It writes `.brain/HANDOVER.md` and `STATUS.md`, commits and pushes the project's bookkeeping files itself, then checks both repositories and prints the line to paste. Fix what it reports and run it again; a repeat run passes once both are clean.
+
+Ledger lines it counts as open go in the note, never into a claim of done.
 
 ## Tell the owner
 
-Three lines at most: what is done, what the next chat will do first, and the line to paste, in a box he can copy. Reply in his language. If anything could not be pushed, say so first.
+Three lines at most: what is done, what the next chat will do first, and the line to paste, in a box he can copy. If anything could not be pushed, say so first.

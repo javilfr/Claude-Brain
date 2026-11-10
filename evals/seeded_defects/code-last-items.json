@@ -1,0 +1,12 @@
+{
+  "id": "code-last-items",
+  "artefact": "code-last-items.py",
+  "defect": "Off-by-one: the range stops at len(items) - 1, so the final item is never returned.",
+  "expected_finding_keywords": [
+    "off-by-one",
+    "off by one",
+    "last item",
+    "final item",
+    "len(items) - 1"
+  ]
+}

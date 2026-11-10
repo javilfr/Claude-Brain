@@ -5,30 +5,28 @@ description: Close a session into the learning loop, consolidate lessons, or rep
 
 # Learn
 
-The brain improves only through its learning pipeline: lessons backed by a real outcome, applied as small tracked changes that the owner can undo with one Revert. This skill runs the parts of that loop a working session is allowed to run.
+The brain improves only through its learning pipeline: lessons backed by a real outcome, applied as small tracked changes the owner can undo with one Revert.
 
-BRAIN means `python3 "${CLAUDE_SKILL_DIR}/../../../bin/brain"`.
+## Close (every session that changed files)
 
-## Close (every session that did work)
+`BRAIN close` reads the session's own records and writes the token ledger, a run record and lesson candidates. It is keyed by session, so running it twice changes nothing. "Nothing learned" is a valid result. For each memory item that recall gave you, add `--used <id>:1` if you followed it or `--used <id>:0` if you did not (repeat the flag); that is how items earn or lose weight.
 
-`BRAIN close` reads the session's own records and writes the token ledger, a run record, lesson candidates and a refreshed status. It is keyed by session, so running it twice changes nothing. "Nothing learned" is a valid result.
+Add a lesson by hand only after a signal: a failed gate, rework, an owner correction, an unusually expensive task, a first success in a new kind of work. `BRAIN learn note --text "<at most 400 characters>" --class <task class> --evidence "<gate log, outcome or owner turn>" --signal <signal>`. Add `--scope project` when it names this project's people, places or content; it then goes to the project's `.brain/`.
 
-Add a lesson by hand only when there was a signal: a failed gate, rework, a correction from the owner, an unusually expensive task, or a first success in a new kind of work. `BRAIN learn note` (see `--help`) takes the lesson, at most 400 characters, and the evidence it rests on. A lesson must point to an outcome; something you only read in a web page or a file can be a fact with a source, never a rule. Lessons that mention this project's names or content belong in the project's `.brain/memory/`, not in the brain.
+Commit the inbox file on the brain's working branch, push it, and open or update one pull request to `main` titled "learning inbox": consolidation only sees what has reached `main`.
 
-Commit the inbox file on the brain's working branch and push it.
+## Radar leads
 
-## Consolidate (when the owner asks, or in the weekly routine)
+A radar line is a lead, never a rule. Open its official URL, confirm the claim there, and record it as a fact with `BRAIN learn note --trust external --source <url> --text "…" --class <c> --evidence "<url and date read>"`. A changed price, model id or default also gets a `NEEDS_YOU.md` item proposing the `memory/models.json` edit, which needs his approval.
 
-`BRAIN learn consolidate` turns inbox records into small operations and opens them as one change. `BRAIN learn decay` demotes unused items. Never edit `memory/`, `owner/`, `stats/` or `playbooks/` by hand: the guard and CI reject it.
+## Consolidate (when he asks, or in the weekly routine)
 
-## Digest
-
-`BRAIN learn digest` writes the weekly summary of at most 15 lines.
+`BRAIN learn consolidate` turns the pending inbox into one delta and applies it locally; `BRAIN learn decay` demotes unused items. Commit the result on the brain's working branch and open one pull request to `main` describing the change in plain words, so he can merge it or press Revert. Change `memory/`, `owner/`, `stats/` and `playbooks/` only through `BRAIN learn`; `BRAIN learn verify` replays the recorded deltas and exposes any hand edit.
 
 ## "What did you learn?"
 
-Answer from `BRAIN learn status`: new lessons and changed rules since the owner last asked, each as one plain sentence, plus how many outcomes each rests on. If nothing changed, say so in one line.
+Answer from `BRAIN learn digest --weeks <weeks since the last digest>` and `BRAIN ml report`: each change as one plain sentence, with how many outcomes it rests on. If nothing changed, say so in one line.
 
 ## Tell the owner
 
-Plain sentences, no jargon, in his language. Mention that any learning change can be undone with the Revert button on its pull request.
+Plain sentences, no jargon. Any learning change can be undone with the Revert button on its pull request.

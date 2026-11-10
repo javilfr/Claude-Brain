@@ -1,0 +1,65 @@
+{
+  "id": "lang-es-glossary",
+  "title": "Translate a paragraph into Spanish with a glossary",
+  "family": "language",
+  "task_class": "translation",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "Translate source.md into Spanish in es.md. Use the terms in glossary.json exactly; keep the meaning and length.",
+  "setup": [
+    {
+      "path": "source.md",
+      "content": "Make a backup of the photo library every Sunday. Copy the whole library folder to the external drive,\nthen check that the backup opens. Keep the last four backups and delete older ones only after the\nnewest backup has been checked.\n"
+    },
+    {
+      "path": "glossary.json",
+      "content": "{\"backup\": \"copia de seguridad\", \"folder\": \"carpeta\", \"library\": \"biblioteca\"}\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "contains_all",
+        "path": "es.md",
+        "items": [
+          "copia de seguridad",
+          "carpeta",
+          "biblioteca"
+        ]
+      },
+      {
+        "type": "contains_none",
+        "path": "es.md",
+        "items": [
+          "backup",
+          "librería",
+          "folder"
+        ]
+      },
+      {
+        "type": "min_words",
+        "path": "es.md",
+        "n": 34
+      },
+      {
+        "type": "max_words",
+        "path": "es.md",
+        "n": 75
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "es.md",
+      "content": "Haz una copia de seguridad de la biblioteca de fotos cada domingo. Copia toda la carpeta de la biblioteca\nal disco externo y después comprueba que la copia de seguridad se abre. Conserva las cuatro últimas copias\nde seguridad y borra las más antiguas solo después de comprobar la más reciente.\n"
+    }
+  ],
+  "null": [
+    {
+      "path": "es.md",
+      "content": "Haz un backup de la librería de fotos cada domingo. Copia toda la carpeta de la librería al disco externo\ny después comprueba que el backup se abre. Conserva los cuatro últimos backups y borra los más antiguos\nsolo después de comprobar el más reciente.\n"
+    }
+  ],
+  "notes": "Length bounds are about 0.8x to 1.8x the 42-word source. Null solution uses the false friend 'librería' and leaves 'backup'."
+}

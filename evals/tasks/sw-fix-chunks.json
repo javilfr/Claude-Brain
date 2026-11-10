@@ -1,0 +1,36 @@
+{
+  "id": "sw-fix-chunks",
+  "title": "Fix chunks dropping the last partial chunk",
+  "family": "software",
+  "task_class": "bugfix",
+  "tier": 1,
+  "split": "heldout",
+  "prompt": "The tests in test_listing.py fail. Fix listing.py so they pass, without editing the tests.",
+  "setup": [
+    {
+      "path": "listing.py",
+      "content": "def chunks(items, size):\n    \"\"\"Split items into lists of at most size elements, in order.\"\"\"\n    return [items[i:i + size] for i in range(0, len(items) - size + 1, size)]\n"
+    },
+    {
+      "path": "test_listing.py",
+      "content": "import unittest\n\nfrom listing import chunks\n\n\nclass ChunkTests(unittest.TestCase):\n    def test_partial_last(self):\n        self.assertEqual(chunks([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]])\n\n    def test_empty(self):\n        self.assertEqual(chunks([], 3), [])\n\n    def test_short(self):\n        self.assertEqual(chunks([1, 2], 5), [[1, 2]])\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    }
+  ],
+  "grader": {
+    "type": "command",
+    "command": "{python} -m unittest -q test_listing",
+    "files": [
+      {
+        "path": "test_listing.py",
+        "content": "import unittest\n\nfrom listing import chunks\n\n\nclass ChunkTests(unittest.TestCase):\n    def test_partial_last(self):\n        self.assertEqual(chunks([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]])\n\n    def test_empty(self):\n        self.assertEqual(chunks([], 3), [])\n\n    def test_short(self):\n        self.assertEqual(chunks([1, 2], 5), [[1, 2]])\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "listing.py",
+      "content": "def chunks(items, size):\n    \"\"\"Split items into lists of at most size elements, in order.\"\"\"\n    return [items[i:i + size] for i in range(0, len(items), size)]\n"
+    }
+  ],
+  "null": []
+}

@@ -1,0 +1,60 @@
+{
+  "id": "know-reading-list",
+  "title": "Index page linking every document",
+  "family": "knowledge",
+  "task_class": "index",
+  "tier": 1,
+  "split": "heldout",
+  "prompt": "Write index.md with one bullet per file in docs/: a relative Markdown link to the file and a one-line description. At most 120 words.",
+  "setup": [
+    {
+      "path": "docs/a-intro.md",
+      "content": "# Introduction\n\nWhat the archive holds and who it is for.\n"
+    },
+    {
+      "path": "docs/b-setup.md",
+      "content": "# Setup\n\nHow to open the archive on a new computer.\n"
+    },
+    {
+      "path": "docs/c-faq.md",
+      "content": "# Questions\n\nShort answers to common questions.\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "contains_all",
+        "path": "index.md",
+        "items": [
+          "docs/a-intro.md",
+          "docs/b-setup.md",
+          "docs/c-faq.md"
+        ]
+      },
+      {
+        "type": "links_resolve",
+        "path": "index.md",
+        "min_links": 3
+      },
+      {
+        "type": "max_words",
+        "path": "index.md",
+        "n": 120
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "index.md",
+      "content": "# Index\n\n- [Introduction](docs/a-intro.md): what the archive holds and who it is for.\n- [Setup](docs/b-setup.md): how to open the archive on a new computer.\n- [Questions](docs/c-faq.md): short answers to common questions.\n"
+    }
+  ],
+  "null": [
+    {
+      "path": "index.md",
+      "content": "# Index\n\n- [Introduction](docs/intro.md): what the archive holds.\n- [Setup](docs/setup.md): how to open it.\n- [Questions](docs/faq.md): common questions.\n"
+    }
+  ],
+  "notes": "Null solution links guessed file names that do not exist."
+}

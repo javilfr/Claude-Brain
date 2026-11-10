@@ -1,0 +1,11 @@
+{
+  "id": "translation-term",
+  "artefact": "translation-term.md",
+  "defect": "'library' is mistranslated as the false friend 'librería'; the glossary says 'biblioteca'.",
+  "expected_finding_keywords": [
+    "librería",
+    "false friend",
+    "mistranslat",
+    "biblioteca"
+  ]
+}

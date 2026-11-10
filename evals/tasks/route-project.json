@@ -1,0 +1,35 @@
+{
+  "id": "route-project",
+  "title": "Size a request: Build a small website with a booking for",
+  "family": "routing",
+  "task_class": "routing",
+  "tier": 0,
+  "split": "heldout",
+  "prompt": "Size this request on the brain's 0-3 scale (0 answer, 1 small task, 2 project, 3 programme) and write route.json as {\"tier\": N}. Request: \"Build a small website with a booking form, a database and deployment.\"",
+  "setup": [],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "json_equals",
+        "path": "route.json",
+        "fields": {
+          "tier": 2
+        }
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "route.json",
+      "content": "{\"tier\": 2}\n"
+    }
+  ],
+  "null": [
+    {
+      "path": "route.json",
+      "content": "{\"tier\": 1}\n"
+    }
+  ],
+  "notes": "Null solution is the plausible wrong label (1); under-sizing a whole deliverable skips the plan."
+}

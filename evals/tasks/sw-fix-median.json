@@ -1,0 +1,37 @@
+{
+  "id": "sw-fix-median",
+  "title": "Fix median for even-length lists",
+  "family": "software",
+  "task_class": "bugfix",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "The tests in test_stats.py fail. Fix stats.py so they pass, without editing the tests.",
+  "setup": [
+    {
+      "path": "stats.py",
+      "content": "def median(values):\n    \"\"\"Middle value of a non-empty list of numbers.\"\"\"\n    ordered = sorted(values)\n    mid = len(ordered) // 2\n    return ordered[mid]\n"
+    },
+    {
+      "path": "test_stats.py",
+      "content": "import unittest\n\nfrom stats import median\n\n\nclass MedianTests(unittest.TestCase):\n    def test_odd(self):\n        self.assertEqual(median([3, 1, 2]), 2)\n\n    def test_even(self):\n        self.assertEqual(median([4, 1, 3, 2]), 2.5)\n\n    def test_two(self):\n        self.assertEqual(median([10, 0]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    }
+  ],
+  "grader": {
+    "type": "command",
+    "command": "{python} -m unittest -q test_stats",
+    "files": [
+      {
+        "path": "test_stats.py",
+        "content": "import unittest\n\nfrom stats import median\n\n\nclass MedianTests(unittest.TestCase):\n    def test_odd(self):\n        self.assertEqual(median([3, 1, 2]), 2)\n\n    def test_even(self):\n        self.assertEqual(median([4, 1, 3, 2]), 2.5)\n\n    def test_two(self):\n        self.assertEqual(median([10, 0]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "stats.py",
+      "content": "def median(values):\n    \"\"\"Middle value of a non-empty list of numbers; mean of the two middle ones for even lengths.\"\"\"\n    ordered = sorted(values)\n    mid = len(ordered) // 2\n    if len(ordered) % 2:\n        return ordered[mid]\n    return (ordered[mid - 1] + ordered[mid]) / 2\n"
+    }
+  ],
+  "null": [],
+  "notes": "The grader rewrites test_stats.py before running, so editing the test cannot pass."
+}

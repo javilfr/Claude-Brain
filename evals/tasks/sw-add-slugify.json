@@ -1,0 +1,37 @@
+{
+  "id": "sw-add-slugify",
+  "title": "Add slugify with a test",
+  "family": "software",
+  "task_class": "feature",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "Add slugify(text) to text_utils.py: lower-case words of letters and digits joined by single hyphens, everything else dropped. Add a unit test for it in test_text_utils.py.",
+  "setup": [
+    {
+      "path": "text_utils.py",
+      "content": "def title_case(text):\n    \"\"\"Capitalise each word.\"\"\"\n    return \" \".join(w.capitalize() for w in text.split())\n"
+    }
+  ],
+  "grader": {
+    "type": "command",
+    "command": "{python} -m unittest -q grader_slugify test_text_utils",
+    "files": [
+      {
+        "path": "grader_slugify.py",
+        "content": "import unittest\n\nfrom text_utils import slugify\n\n\nclass SlugifyGrader(unittest.TestCase):\n    def test_basic(self):\n        self.assertEqual(slugify(\"Hello World\"), \"hello-world\")\n\n    def test_punctuation_and_spaces(self):\n        self.assertEqual(slugify(\"  Trip: Day 2, Part 1!  \"), \"trip-day-2-part-1\")\n\n    def test_empty(self):\n        self.assertEqual(slugify(\"!!!\"), \"\")\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "text_utils.py",
+      "content": "import re\n\n\ndef title_case(text):\n    \"\"\"Capitalise each word.\"\"\"\n    return \" \".join(w.capitalize() for w in text.split())\n\n\ndef slugify(text):\n    \"\"\"Lower-case words of letters and digits joined by hyphens.\"\"\"\n    return \"-\".join(re.findall(r\"[a-z0-9]+\", text.lower()))\n"
+    },
+    {
+      "path": "test_text_utils.py",
+      "content": "import unittest\n\nfrom text_utils import slugify\n\n\nclass SlugifyTests(unittest.TestCase):\n    def test_words(self):\n        self.assertEqual(slugify(\"Kyoto in Autumn\"), \"kyoto-in-autumn\")\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    }
+  ],
+  "null": [],
+  "notes": "The command also runs test_text_utils, so a solution without its own test fails."
+}

@@ -1,0 +1,35 @@
+{
+  "id": "route-small-edit",
+  "title": "Size a request: Rename the variable cnt to count in util",
+  "family": "routing",
+  "task_class": "routing",
+  "tier": 0,
+  "split": "dev",
+  "prompt": "Size this request on the brain's 0-3 scale (0 answer, 1 small task, 2 project, 3 programme) and write route.json as {\"tier\": N}. Request: \"Rename the variable cnt to count in utils.py.\"",
+  "setup": [],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "json_equals",
+        "path": "route.json",
+        "fields": {
+          "tier": 1
+        }
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "route.json",
+      "content": "{\"tier\": 1}\n"
+    }
+  ],
+  "null": [
+    {
+      "path": "route.json",
+      "content": "{\"tier\": 2}\n"
+    }
+  ],
+  "notes": "Null solution is the plausible wrong label (2); a bounded edit is never sized 2 (I-11)."
+}

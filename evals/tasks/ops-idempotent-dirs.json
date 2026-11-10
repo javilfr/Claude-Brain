@@ -1,0 +1,32 @@
+{
+  "id": "ops-idempotent-dirs",
+  "title": "Make a folder-setup script idempotent",
+  "family": "operations",
+  "task_class": "script",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "make_dirs.py fails or duplicates lines when run a second time. Change it so running it twice leaves exactly the same result as running it once: three folders and folders.txt listing each once.",
+  "setup": [
+    {
+      "path": "make_dirs.py",
+      "content": "\"\"\"Create the working folders and list them in folders.txt.\"\"\"\nfrom pathlib import Path\n\nfor name in (\"inbox\", \"archive\", \"exports\"):\n    Path(name).mkdir()\n    with open(\"folders.txt\", \"a\", encoding=\"utf-8\") as f:\n        f.write(name + \"\\n\")\n"
+    }
+  ],
+  "grader": {
+    "type": "command",
+    "command": "{python} check_idempotent.py",
+    "files": [
+      {
+        "path": "check_idempotent.py",
+        "content": "\"\"\"Grader: run make_dirs.py twice in a clean folder; the second run must change nothing.\"\"\"\nimport subprocess\nimport sys\nimport tempfile\nfrom pathlib import Path\n\n\ndef snapshot(root):\n    return sorted((str(p.relative_to(root)), p.read_bytes() if p.is_file() else b\"<dir>\") for p in root.rglob(\"*\"))\n\n\ndef run(root):\n    r = subprocess.run([sys.executable, \"make_dirs.py\"], cwd=root, capture_output=True)\n    if r.returncode:\n        sys.exit(f\"run failed with exit {r.returncode}\")\n\n\nwith tempfile.TemporaryDirectory() as tmp:\n    root = Path(tmp)\n    (root / \"make_dirs.py\").write_text(Path(\"make_dirs.py\").read_text())\n    run(root)\n    once = snapshot(root)\n    run(root)\n    if snapshot(root) != once:\n        sys.exit(\"second run changed the result\")\n    if any(not (root / n).is_dir() for n in (\"inbox\", \"archive\", \"exports\")):\n        sys.exit(\"a folder is missing\")\n    if sorted((root / \"folders.txt\").read_text().split()) != [\"archive\", \"exports\", \"inbox\"]:\n        sys.exit(\"folders.txt must list each folder once\")\nprint(\"idempotent\")\n"
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "make_dirs.py",
+      "content": "\"\"\"Create the working folders and list them in folders.txt; safe to run again.\"\"\"\nfrom pathlib import Path\n\nNAMES = (\"inbox\", \"archive\", \"exports\")\nfor name in NAMES:\n    Path(name).mkdir(exist_ok=True)\nPath(\"folders.txt\").write_text(\"\".join(n + \"\\n\" for n in NAMES), encoding=\"utf-8\")\n"
+    }
+  ],
+  "null": []
+}

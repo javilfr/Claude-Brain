@@ -1,0 +1,12 @@
+{
+  "id": "script-not-idempotent",
+  "artefact": "script-not-idempotent.py",
+  "defect": "The script appends the setting on every run, so running it twice duplicates the line.",
+  "expected_finding_keywords": [
+    "idempotent",
+    "duplicate",
+    "twice",
+    "every run",
+    "appends"
+  ]
+}

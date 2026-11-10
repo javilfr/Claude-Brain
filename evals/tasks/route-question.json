@@ -1,0 +1,35 @@
+{
+  "id": "route-question",
+  "title": "Size a request: What does the error ModuleNotFoundError ",
+  "family": "routing",
+  "task_class": "routing",
+  "tier": 0,
+  "split": "dev",
+  "prompt": "Size this request on the brain's 0-3 scale (0 answer, 1 small task, 2 project, 3 programme) and write route.json as {\"tier\": N}. Request: \"What does the error ModuleNotFoundError mean?\"",
+  "setup": [],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "json_equals",
+        "path": "route.json",
+        "fields": {
+          "tier": 0
+        }
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "route.json",
+      "content": "{\"tier\": 0}\n"
+    }
+  ],
+  "null": [
+    {
+      "path": "route.json",
+      "content": "{\"tier\": 1}\n"
+    }
+  ],
+  "notes": "Null solution is the plausible wrong label (1); a question is never sized above 0."
+}
