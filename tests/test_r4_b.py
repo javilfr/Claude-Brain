@@ -377,6 +377,10 @@ class ContractTests(Base):
         self.assertEqual(c.load_manifest(p)["gates"][0]["command"], "make test")
         self.assertIn("kept", out)
         self.assertEqual(len(out.strip().splitlines()), 1, out)
+        (p / ".brain" / "project.json").write_text('{"contract": 1, "gates": [}')  # damaged: must be left for a person to repair
+        code, out = self.run_cli("init", p, "--check", "make test")
+        self.assertEqual(code, 1, out)
+        self.assertEqual((p / ".brain" / "project.json").read_text(), '{"contract": 1, "gates": [}')
 
     def test_init_check_refuses_a_command_that_holds_a_credential(self):
         """e2e-trial-15 with redteam-07: the command is stored in a committed
@@ -387,6 +391,40 @@ class ContractTests(Base):
         self.assertIn("refused", out)
         self.assertNotIn("a1B2", out)
         self.assertFalse((p / ".brain").exists())
+
+    def test_validate_finds_a_credential_in_any_file_a_checkpoint_would_commit(self):
+        """redteam-07 (validate side; refusing at the point of entry is each
+        command owner's): with a key in STATE.md, NEEDS_YOU.md and a hire
+        brief, validate said 'contract v1 valid'."""
+        p = self.project()
+        key = "sk" + "_live_" + "Ab3dEf6hIj" * 2
+        (p / "NEEDS_YOU.md").write_text((p / "NEEDS_YOU.md").read_text() + f"\n## 1. Payments\nthe staging key is {key}\n")
+        state.checkpoint(p, note="payment key for staging is " + key)
+        (p / ".brain" / "log" / "hr").mkdir(parents=True)
+        (p / ".brain" / "log" / "hr" / "h-1.md").write_text(f"Deploy using token {key}\n")
+        (p / ".brain" / "log" / "run").mkdir(parents=True)
+        (p / ".brain" / "log" / "run" / "x.log").write_text(f"echo {key}\n")  # ignored by git, never committed
+        errs = contract.validate(p)
+        self.assertEqual(len(errs), 3, errs)
+        for rel in ("NEEDS_YOU.md", ".brain/STATE.md", ".brain/log/hr/h-1.md"):
+            hit = [e for e in errs if e.startswith(rel)]
+            self.assertEqual(len(hit), 1, (rel, errs))
+            self.assertIn("Stripe key", hit[0])
+        self.assertNotIn(key, " ".join(errs))
+        code, out = self.run_cli("validate", "--project", p)
+        self.assertEqual(code, 1, out)
+        self.assertNotIn(key, out)
+        self.assertEqual(c.secret_kind("nothing here"), "")
+        self.assertEqual(c.secret_kind("x " + key), "Stripe key")
+
+    def test_init_refuses_a_title_that_holds_a_credential(self):
+        """redteam-07: the title is written into four committed files."""
+        p = git_repo(self.ws / "fresh")
+        for cmd in ("init", "adopt"):
+            code, out = self.run_cli(cmd, p, "--title", "Shop gh" + "p_" + "Ab3dEf6hIj" * 3)
+            self.assertEqual(code, 1, out)
+            self.assertIn("refused", out)
+            self.assertFalse((p / ".brain").exists())
 
     def test_adopt_and_init_refuse_the_brain_itself_and_folders_inside_it(self):
         """core-14 (1): `brain adopt <the brain>` installed a project contract
@@ -802,6 +840,20 @@ class DoctorProjectTests(Base):
         self.assertEqual(code, 1, out)
         self.assertIn("not a git repository", out)
         self.assertIn("init -b work", out)
+
+    def test_each_contract_fault_carries_the_fix_that_fits_it(self):
+        p = self.healthy("app")
+        (p / "NEEDS_YOU.md").write_text((p / "NEEDS_YOU.md").read_text() + "\n## 1. Key\n" + "gh" + "p_" + "Ab3dEf6hIj" * 3 + "\n")
+        self.set_manifest(p, family="cooking")
+        (p / "STATUS.md").unlink()
+        code, out = self.run_cli("doctor", "--project", p)
+        self.assertEqual(code, 1, out)
+        by = {key: next((l for l in out.splitlines() if key in l), "") for key in ("NEEDS_YOU.md", "family", "missing STATUS.md")}
+        self.assertIn("take it out", by["NEEDS_YOU.md"])
+        self.assertNotIn("project.json", by["NEEDS_YOU.md"])
+        self.assertIn("correct .brain/project.json", by["family"])
+        self.assertIn("brain init", by["missing STATUS.md"])
+        self.assertNotIn("Ab3dEf6hIj", out)
 
     def test_preflight_says_which_project_when_it_cannot_tell(self):
         self.project("shop")

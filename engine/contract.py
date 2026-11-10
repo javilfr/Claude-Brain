@@ -275,7 +275,38 @@ def validate(project: Path, brain_root: Path | None = None) -> list[str]:
         errs.append(str(e))
     if c.find_secrets(c.read_text(project / ".brain" / "project.json")):
         errs.append("manifest looks like it contains a secret; use the environment's secret settings instead")
+    errs += secret_findings(project)
     return errs
+
+
+SCAN_LIMIT = 512 * 1024  # bytes; a larger file under .brain/ is a log, not something a person wrote
+
+
+def secret_findings(project: Path) -> list[str]:
+    """One line per file a checkpoint would commit (everything under .brain/
+    that git does not ignore there, and the two owner files) that holds
+    something shaped like a credential. Names the file and the kind, never
+    the value."""
+    project = Path(project)
+    brain_dir = project / ".brain"
+    files = [project / "NEEDS_YOU.md", project / "STATUS.md"]
+    for f in sorted(brain_dir.rglob("*")) if brain_dir.is_dir() else []:
+        rel = f.relative_to(brain_dir).parts
+        if rel[:1] == ("cache",) or rel[:2] == ("log", "run") or f.name == "project.json" or f.name.startswith(".tmp-"):
+            continue  # ignored by .brain/.gitignore, or (the manifest) reported above
+        files.append(f)
+    out = []
+    for f in files:
+        try:
+            if not f.is_file() or f.stat().st_size > SCAN_LIMIT:
+                continue
+            kind = c.secret_kind(f.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if kind:
+            out.append(f"{f.relative_to(project).as_posix()} holds what looks like a secret ({kind}): take it out and have that key replaced, "
+                       "because git history keeps what was committed")
+    return out
 
 
 def _load_migration(path: Path):
@@ -326,10 +357,10 @@ def set_check(project: Path, command: str) -> str:
     a command that is already there is never replaced. Returns what happened
     in a few words ("" when the command was already in place)."""
     path = Path(project) / ".brain" / "project.json"
+    if c.manifest_problem(project):
+        return "check command not set"  # a damaged manifest is left for a person; validation says what is wrong
     m = c.load_manifest(project, raw=True)
     commands, gates = m.setdefault("commands", {}), m.setdefault("gates", [])
-    if not isinstance(commands, dict) or not isinstance(gates, list):
-        return "check command not set"  # validation names the wrong-typed section
     gate = next((g for g in gates if isinstance(g, dict) and g.get("id") == "checks"), None)
     current = str((gate or {}).get("command") or "").strip()
     if current and current != command:
@@ -374,7 +405,7 @@ def cmd_init(args) -> int:
     if not c.is_empty_repo(project) and not c.is_managed(project) and not args.force:
         print("this folder already has content: use `brain adopt` (it surveys first and never moves existing files)")
         return 1
-    refused = c.secret_problem(args.check or "")
+    refused = c.secret_problem(f"{args.check or ''}\n{args.title or ''}")  # both are written into committed files
     if refused:
         print(refused)
         return 1
@@ -418,6 +449,9 @@ def cmd_adopt(args) -> int:
     if c.stale_brain(project):
         print(c.stale_brain(project))
         return 3
+    if c.secret_problem(args.title or ""):
+        print(c.secret_problem(args.title))
+        return 1
     s, made = adopt(project, args.title, args.family)
     pointer = " (CLAUDE.md got a pointer block above its content)" if any(x.startswith("CLAUDE.md (") for x in made) else ""
     print(f"adopted {project.name}: family {c.load_manifest(project).get('family')}; added {len(made)} contract file(s); existing files kept{pointer}")

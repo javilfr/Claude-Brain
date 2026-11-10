@@ -85,12 +85,15 @@ def _contract_problems(project: Path, at: str) -> list[tuple[str, str]]:
         from . import contract
         errs = contract.validate(project)
         for e in errs[:3]:
-            if e.startswith("missing ") or "pointer block" in e:
+            if e.startswith("missing ") or "no brain pointer block" in e:
                 out.append((e, again))
-            elif ": " in e and ("own id" in e or "brain migrate" in e):
-                out.append(tuple(e.split(": ", 1)))  # the message already carries its fix
-            else:
+            elif e.startswith(("manifest", "gate ")):  # a value or shape in the manifest
                 out.append((e, "correct .brain/project.json, then run `brain validate`"))
+            elif ": " in e:  # the message already carries its fix
+                what, fix = e.split(": ", 1)
+                out.append((what, fix))
+            else:
+                out.append((e, "fix it, then run `brain validate`"))
         if len(errs) > 3:
             out.append((f"{len(errs) - 3} more contract problem(s)", "run `brain validate` for the list"))
     for rel in MACHINE_READ:
@@ -151,7 +154,10 @@ def project_checks(project: Path) -> tuple[list[tuple[str, str]], str]:
     """Preflight of a managed project: ([(problem, fix)], one ok line). Reads
     only; every problem comes with the command or step that fixes it."""
     project = Path(project)
-    at = os.path.relpath(project)
+    try:  # the path to type from where the command was run
+        at = os.path.relpath(project)
+    except ValueError:
+        at = str(project)
     at = str(project) if at.count("..") > 2 else at
     problems = _contract_problems(project, at)
     git_problems, branch = _git_problems(project, at)

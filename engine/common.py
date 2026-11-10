@@ -289,14 +289,23 @@ def find_secrets(text: str) -> list[str]:
     return hits
 
 
+def secret_kind(text: str) -> str:
+    """The kind of credential the text seems to hold (a label, never the
+    value), or ""."""
+    for label, pat in SECRET_RULES:
+        if pat.search(text or ""):
+            return label
+    return ""
+
+
 def secret_problem(text: str) -> str:
     """One line to print when text holds something shaped like a credential,
     else "". It names the kind, never the value, and says what to do instead:
     chat and git history cannot be cleaned, so the engine refuses to store it."""
-    for label, pat in SECRET_RULES:
-        if pat.search(text or ""):
-            return (f"refused: this text holds what looks like a {label} (the value is not shown or stored). "
-                    "Ask for it through the secure credential form, or add a NEEDS_YOU item with the clicks to store it in the environment's settings")
+    label = secret_kind(text)
+    if label:
+        return (f"refused: this text holds what looks like a {label} (the value is not shown or stored). "
+                "Ask for it through the secure credential form, or add a NEEDS_YOU item with the clicks to store it in the environment's settings")
     return ""
 
 
