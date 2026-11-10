@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 131 from 8 analyst report(s) (core, e2e-trial, instructions, lead, owner-docs, quality-path, quality2, redteam). Decisions: 113 do, 2 do in part, 0 reproduce first, 16 later.
+Findings in: 151 from 9 analyst report(s) (core, e2e-trial, instructions, lead, learning, owner-docs, quality-path, quality2, redteam). Decisions: 131 do, 2 do in part, 0 reproduce first, 18 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -125,6 +125,7 @@ Owns: `engine/state.py`, `engine/detect.py`. New tests go in `tests/test_r4_a.py
 | core-17 | idea | L | later | Idea: make checkpoints merge-safe (append-only events, generated views) so two chats or two session branches never conflict on bookkeeping | a change to how state is stored; wait for evidence that two chats really collide |
 | e2e-trial-16 | idea | S | do | Idea: one call to end a session |  |
 | instructions-20 | idea | S | do | Idea: answer "Status" with one command |  |
+| learning-17 | idea | S | do | Idea: let boot and close run the loop's housekeeping, so learning does not wait for someone to remember |  |
 | owner-docs-16 | idea | M | later | Idea: a command that writes and closes NEEDS_YOU items, so every item has the same checked shape | useful, not urgent; NEEDS_YOU items are few and hand-written well today |
 | owner-docs-18 | idea | S | later | Idea: cost he can act on, as a comparison rather than dollars he is not charged | needs three recorded sessions per project before it can say anything |
 | redteam-20 | idea | S | do | Idea: one boot line for the health of the learning loop |  |
@@ -199,6 +200,7 @@ Owns: `engine/ledger.py`, `engine/guard.py`, `engine/lint.py`, `.claude/hooks`, 
 | e2e-trial-10 | should-fix | S | do | `brain close` as the skill writes it records `tier: null`, so the sizing learner gets no label from normal sessions |  |
 | lead-01 | should-fix | S | do | The token ledger did not see helpers started by a workflow (fixed: CB-210) |  |
 | lead-02 | should-fix | M | do | The session-end hook rewrites a tracked inbox file after every turn, so the tree is dirty after every turn and each turn ends with a request to commit |  |
+| learning-04 | should-fix | S | do | `close --used` credits items recall never showed; one claim promotes a candidate straight to active |  |
 | quality-path-08 | should-fix | M | do | After the lock, one edit removes it: the hook passes every kernel file including VERSION.json, `guard diff` exits 0 on an unlock, and Bash writes are not guarded (I-09) |  |
 | quality-path-09 | should-fix | S | do | Hook commands fail closed when the script path does not resolve: python3 exits 2, which blocks every edit and blocks stopping |  |
 | quality-path-13 | should-fix | M | do | Lint gaps: invalid option values, missing required options and two call forms pass; repeated sentences only note although the spec says fail; one transcript rule is missing; handover, memory items and HR templ… |  |
@@ -210,25 +212,48 @@ Owns: `engine/ledger.py`, `engine/guard.py`, `engine/lint.py`, `.claude/hooks`, 
 | quality2-09 | idea | M | later | Idea: incremental session ledger with cache-break detection | 0.085 s per turn today; revisit when a session's transcripts pass 100 MB |
 | redteam-15 | idea | S | later | Idea: a command hook that makes the release rule structural | hooks load only in one-repository chats, so this guard would be absent in normal two-repository work; the engine-side checks are done inste… |
 
-### Package F: Learning pipeline and recall (CB-217)
+### Package F: Learning pipeline (CB-217)
 
-Owns: `engine/learn.py`, `engine/items.py`, `engine/recall.py`, `learning/`, `memory/items.jsonl`, `memory/facts.jsonl`, `owner/`, `playbooks/`. New tests go in `tests/test_r4_f.py`.
+Owns: `engine/learn.py`, `learning/`, `memory/items.jsonl`, `memory/facts.jsonl`, `owner/`, `playbooks/`, `tests/test_rehearsal.py`. New tests go in `tests/test_r4_f.py`.
 
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
+| learning-01 | blocking | M | do | A hand-written inbox line becomes an active, top-ranked owner-stated rule and passes verify |  |
+| learning-02 | blocking | M | do | The loop does not close: a noted lesson stays an invisible candidate and is then forgotten |  |
 | redteam-01 | blocking | M | do | A year of normal use retires half of the brain's shipped knowledge, and a retired item cannot be restored |  |
 | redteam-02 | blocking | M | do | One forged line in the inbox becomes an active, permanent owner rule; a project's test script can plant it and the normal loop pushes it to the brain's main |  |
 | redteam-03 | blocking | S | do | The --quote check accepts turns the owner did not type (compaction summaries, turns from other sessions) |  |
 | redteam-04 | blocking | L | do | A hand-written delta rewrites, adds and retires the owner's instructions through `learn apply`, the replay check passes, and the locked-zone hook does not protect its own lock |  |
-| e2e-trial-09 | should-fix | M | do | Recall works only in English: the owner's Spanish request returns nothing while its translation returns three items |  |
+| learning-03 | should-fix | M | do | Project-scoped lessons are written as candidates and can never be recalled |  |
+| learning-06 | should-fix | M | do | Forgetting wipes out curated memory, is uncapped, and cannot be undone |  |
+| learning-07 | should-fix | M | do | A changed fact confirms the stale fact; facts cannot be superseded or re-verified through the pipeline |  |
+| learning-08 | should-fix | M | do | One malformed inbox record crashes consolidation; duplicated records are counted twice; a re-run digest breaks verify |  |
+| learning-09 | should-fix | S | do | At 400 items the whole pipeline deadlocks; item rows grow without bound |  |
+| learning-10 | should-fix | M | do | The admission gate refuses 28% of the brain's own seed lessons, and only after `learn note` said "recorded" |  |
+| learning-13 | should-fix | S | do | The pitfall rule cannot fire for a fail-then-fix inside one session and can fire across unrelated sessions |  |
+| learning-14 | should-fix | M | do | Conflicts are detected by keyword, can never be cleared, and harm votes lower an owner item's rank |  |
 | redteam-09 | should-fix | S | do | The brain's own test suite goes red after the first real lesson is consolidated, and again after the first decay |  |
 | redteam-11 | should-fix | M | do | Three red sessions in a row demote the rules that were followed, including facts and the release rule |  |
-| redteam-13 | should-fix | S | do | A file in the project's .brain/memory/ can present itself as an owner standing instruction in boot |  |
 | redteam-14 | should-fix | L | do | Learning dead ends: lessons noted once are never shown again, the routing learner can never start, and one item over 400 stops every later consolidation |  |
 | owner-docs-12 | minor | S | do | After "What did you learn?" the next "Hand over" cannot pass: the digest command writes a file in the brain that no command commits |  |
+| core-20 | idea | M | do | Idea: a two-container continuity rehearsal in the test suite, so CB-104 ('Continue in a new chat resumes the same item') is checked on every change instead of waiting for a live session |  |
+| learning-18 | idea | M | later | Idea: let proven family lessons graduate into the playbooks the lead actually reads | no learned family lesson has three supporting sessions yet; revisit after real use |
 | redteam-16 | idea | M | do | Idea: keep the year-in-a-minute simulation as a standing gate |  |
 | redteam-17 | idea | M | do | Idea: a weekly owner digest as the outside check on owner-level memory |  |
 | redteam-19 | idea | M | later | Idea: compact the learning history once a year | nothing to compact yet; revisit when the learning history is a year old |
+
+### Package M: Recall and memory items (CB-224)
+
+Owns: `engine/recall.py`, `engine/items.py`, `evals/recall_golden.jsonl`, `tests/test_recall.py`. New tests go in `tests/test_r4_m.py`.
+
+| Id | Severity | Size | Decision | Finding | Why later or in part |
+|---|---|---|---|---|---|
+| e2e-trial-09 | should-fix | M | do | Recall works only in English: the owner's Spanish request returns nothing while its translation returns three items |  |
+| learning-11 | should-fix | M | do | Recall returns noise instead of silence, and owner standing items take slots they do not earn |  |
+| learning-12 | should-fix | S | do | The golden recall test measures a configuration nobody runs and reads the brain's live learned state |  |
+| redteam-13 | should-fix | S | do | A file in the project's .brain/memory/ can present itself as an owner standing instruction in boot |  |
+| learning-16 | idea | M | do | Idea: make recall work for Spanish and dictated requests |  |
+| learning-20 | idea | M | do | Idea: mark what was only read, and give the owner a one-step undo for a single lesson |  |
 
 ### Package G: Routing, statistical learners and scheduler (CB-218)
 
@@ -238,15 +263,19 @@ Owns: `engine/mlearn.py`, `engine/route.py`, `engine/schedule.py`, `memory/ml_co
 |---|---|---|---|---|---|
 | instructions-02 | should-fix | M | do | A trigger followed by a task is sized by a stray word, and 17 of the 52 trigger phrases in the skill descriptions route as a plain answer |  |
 | instructions-10 | should-fix | S | do | brain-plan's parallel step: the tickets file format is not given, and the scheduler prices a helper's cold start at zero, so parallel work looks free |  |
+| learning-05 | should-fix | S | do | The promotion score rates a perfectly followed item below neutral, and promotion depends on batching |  |
 | owner-docs-09 | should-fix | M | do | Phrases the owner is told to type are not recognised by route or by any skill, and his real opening message today was sized "1 small task, data" |  |
 | instructions-17 | idea | M | do | Idea: a scripted walk-through of the owner's phrases as a regression test |  |
+| learning-15 | idea | L | later | Idea: credit items by comparing sessions where they were shown with sessions where they were not | needs many recorded sessions per task class before the comparison means anything |
 | owner-docs-15 | idea | M | do | Idea: one source for owner phrases |  |
 
 ### Package H: Radar, repo map and evaluation (CB-219)
 
 Owns: `engine/radar.py`, `engine/repomap.py`, `engine/evals.py`, `evals/`, `memory/radar_sources.json`, `memory/models.json`. New tests go in `tests/test_r4_h.py`.
 
-No findings yet.
+| Id | Severity | Size | Decision | Finding | Why later or in part |
+|---|---|---|---|---|---|
+| learning-19 | idea | S | do | Idea: a `brain eval recall` command that reports recall, precision, silence and token cost under production settings |  |
 
 ### Package I: HR engine and selection (CB-220)
 
@@ -297,7 +326,6 @@ Owns: `OWNER_GUIDE.md`, `NEEDS_YOU.md`, `README.md`, `docs/`, `GUIA.md`, `VERSIO
 | owner-docs-07 | should-fix | M | do | Numbers are restated by hand in five documents and have drifted; nothing checks them (lint covers neither docs/ nor numbers) |  |
 | owner-docs-10 | should-fix | S | do | OWNER_GUIDE.md has no answer for a chat that dies, where to see the result, how to merge on GitHub, or how to stop at once, and gives Spanish for three of nine phrases |  |
 | owner-docs-14 | minor | M | do | Five smaller statements that are untrue or that a new lead would misread |  |
-| core-20 | idea | M | do | Idea: a two-container continuity rehearsal in the test suite, so CB-104 ('Continue in a new chat resumes the same item') is checked on every change instead of waiting for a live session |  |
 | owner-docs-17 | idea | M | later | Idea: a Spanish edition of the guide, checked for parity | a second guide to keep in step; the guide gets Spanish phrases now, a full Spanish edition waits for the owner to ask |
 | owner-docs-19 | idea | M | later | Idea: a first-project walkthrough in the guide, then frozen as a rehearsal | needs the first real project (CB-110) |
 
