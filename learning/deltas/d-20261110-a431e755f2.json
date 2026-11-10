@@ -1,0 +1,103 @@
+{
+  "at": "2026-11-10T23:20:18Z",
+  "id": "d-20261110-a431e755f2",
+  "ops": [
+    {
+      "op": "ML_FOLD",
+      "records": [
+        {
+          "actual_tokens": 54250,
+          "at": "2026-11-10T14:20:51Z",
+          "base_agent": "builder",
+          "effort": "medium",
+          "explored": false,
+          "family": "software",
+          "group": null,
+          "has_check": true,
+          "id": "3b5882b82242a22e",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "session": "ad24da2f-7dc0-51cf-aa28-dee6f5e57a4f",
+          "size": "L",
+          "task_class": "software.eval",
+          "template": null,
+          "wage_tokens": 200000
+        },
+        {
+          "actual_tokens": 81995,
+          "at": "2026-11-10T14:35:00Z",
+          "band_tokens": 200000,
+          "base_agent": "reviewer",
+          "effort": "high",
+          "explored": false,
+          "family": "software",
+          "group": "review",
+          "has_check": false,
+          "id": "e140ce08fcc71dc0",
+          "kind": "hire",
+          "model": "opus",
+          "passed": null,
+          "propensity": 1.0,
+          "risk": "high",
+          "sealed": false,
+          "session": "ad24da2f-7dc0-51cf-aa28-dee6f5e57a4f",
+          "size": "L",
+          "task_class": "software.feature",
+          "template": "code-reviewer",
+          "wage_tokens": 200000
+        }
+      ]
+    },
+    {
+      "file": "stats/ledger/2026-11.jsonl",
+      "op": "APPEND_STAT",
+      "row": {
+        "at": "2026-11-10T17:31:29Z",
+        "cache_read_share": 0.9836,
+        "classes": [
+          "operations.build"
+        ],
+        "family": "",
+        "helpers": 40,
+        "id": "88f26a2ec360ecf3",
+        "kind": "ledger",
+        "model": "fable",
+        "models": {
+          "claude-fable-5-2": {
+            "cache_read": 143857031,
+            "cache_write": 4029514,
+            "cost": 110.655192,
+            "in": 874,
+            "out": 740047
+          },
+          "claude-opus-5-5": {
+            "cache_read": 105193978,
+            "cache_write": 2961957,
+            "cost": 57.171973,
+            "in": 1428,
+            "out": 1065884
+          },
+          "claude-sonnet-5-5": {
+            "cache_read": 9156873,
+            "cache_write": 1270003,
+            "cost": 7.667611,
+            "in": 348,
+            "out": 357622
+          }
+        },
+        "outcome": "ok",
+        "session": "ad24da2f-7dc0-51cf-aa28-dee6f5e57a4f",
+        "task_class": "operations.build",
+        "tier": 3,
+        "wall_minutes": 565.7
+      }
+    },
+    {
+      "file": "learning/inbox/2026-11-10-ad24da2f-7dc0-51cf-aa28-dee6f5e57a4f.jsonl",
+      "op": "MARK_INBOX"
+    }
+  ]
+}
