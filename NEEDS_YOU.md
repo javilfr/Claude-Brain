@@ -9,6 +9,8 @@ Things only you can do for the brain itself. All are optional and all are clicks
 - **Or:** tell me "merge the brain to main" in this chat and I will do it.
 - **Meanwhile:** everything is committed and pushed on the working branch.
 
+RESOLVED: 2026-11-10 — you approved it in chat and `main` was fast-forwarded to the built brain.
+
 ## 2. Protect the brain's `main` (5 minutes, after items 1 and 7)
 
 - **Why:** this is what makes "only changed by its own learning systems" a rule that GitHub enforces, not just a convention. With it, a change reaches `main` only through a pull request whose checks pass.
