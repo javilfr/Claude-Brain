@@ -303,5 +303,198 @@ class ValidateGateCommandTests(Base):
         self.assertIn(".brain/project.json", hit[0], "the line says where to fix it")
 
 
+# ---------------------------------------------------------------- start-up and the command line
+def engine_copy(dest: Path) -> Path:
+    """bin/ and engine/ as a fresh clone has them: no compiled files."""
+    shutil.copytree(ROOT / "bin", dest / "bin", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(ROOT / "engine", dest / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+    return dest
+
+
+LOADED = (
+    "import runpy, sys\n"
+    "sys.argv = sys.argv[1:]\n"
+    "try:\n    runpy.run_path(sys.argv[0], run_name='__main__')\nexcept SystemExit:\n    pass\n"
+    "print('LOADED ' + ' '.join(sorted(m for m in sys.modules if m.split('.')[0] in ('engine', 'urllib', 'sqlite3', 'ssl'))))\n"
+)
+
+
+def loaded_modules(cwd, *argv) -> set[str]:
+    """The engine modules (and the slow standard ones) one brain call loads."""
+    r = sh(cwd, sys.executable, "-c", LOADED, BRAIN, *argv)
+    line = [l for l in r.stdout.splitlines() if l.startswith("LOADED")]
+    return set(line[-1].split()[1:]) if line else {"<the call printed no module list>", r.stdout + r.stderr}
+
+
+class StartUpTests(Base):
+    def test_bytecode_is_kept_in_the_user_cache_and_never_in_the_tree(self):
+        """performance-03 (1): bin/brain switched bytecode off, so a fresh
+        clone compiled every module on every call (about 240 ms each). The
+        compiled files now live under the user's cache folder; the checkout
+        stays as git left it."""
+        copy = engine_copy(self.ws / "clone")
+        xdg = self.ws / "xdg"
+        env = dict(os.environ, XDG_CACHE_HOME=str(xdg))
+        r = self.brain("detect", script=str(copy / "bin" / "brain"), env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        cached = [f.name for f in (xdg / "claude-brain" / "pyc").rglob("*.pyc")]
+        self.assertTrue(any(n.startswith("common.") for n in cached), cached)
+        self.assertTrue(any(n.startswith("detect.") for n in cached), cached)
+        self.assertEqual([str(f) for f in copy.rglob("*") if f.name == "__pycache__" or f.suffix == ".pyc"], [])
+        self.assertEqual(self.brain("detect", script=str(copy / "bin" / "brain"), env=env).stdout, r.stdout)
+
+    def test_the_users_own_bytecode_settings_win(self):
+        """performance-03 (1): PYTHONDONTWRITEBYTECODE still means no compiled
+        files anywhere, and a PYTHONPYCACHEPREFIX the user set is used as it is."""
+        copy = engine_copy(self.ws / "clone")
+        script = str(copy / "bin" / "brain")
+        xdg = self.ws / "xdg-none"
+        self.brain("detect", script=script, env=dict(os.environ, XDG_CACHE_HOME=str(xdg), PYTHONDONTWRITEBYTECODE="1"))
+        self.assertEqual(list(xdg.rglob("*.pyc")) + list(copy.rglob("*.pyc")), [])
+        mine = self.ws / "mine"
+        self.brain("detect", script=script, env=dict(os.environ, XDG_CACHE_HOME=str(xdg), PYTHONPYCACHEPREFIX=str(mine)))
+        self.assertTrue(list(mine.rglob("common.*.pyc")))
+        self.assertEqual(list(xdg.rglob("*.pyc")) + list(copy.rglob("*.pyc")), [])
+
+    def test_loading_the_command_line_as_a_module_changes_nothing_in_the_caller(self):
+        """performance-03 (1): the test suite and the hooks load bin/brain as
+        a module; that must not move the caller's own bytecode settings."""
+        before = (sys.pycache_prefix, sys.dont_write_bytecode)
+        loader = importlib.machinery.SourceFileLoader("brain_cli_probe", BRAIN)
+        mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("brain_cli_probe", loader))
+        loader.exec_module(mod)
+        self.assertEqual((sys.pycache_prefix, sys.dont_write_bytecode), before)
+
+    def test_a_command_loads_only_the_module_that_owns_it(self):
+        """performance-03 (2): every call imported all twenty modules (and
+        through them urllib, ssl, xml, sqlite). A command now loads the one
+        module that registers it; help and a mistyped command load them all."""
+        self.assertEqual(loaded_modules(self.ws, "budget"), {"engine", "engine.common", "engine.budget"})
+        self.assertEqual(loaded_modules(self.ws, "validate", "--project", self.ws / "nowhere"), {"engine", "engine.common", "engine.contract"})
+        everything = loaded_modules(self.ws, "--help")
+        self.assertGreater(len([m for m in everything if m.startswith("engine.")]), 15, "help lists every command, so it loads every module")
+        helped = self.brain("--help")
+        for cmd in ("boot", "checkpoint", "hr", "doctor", "skill-audit"):
+            self.assertIn(f"\n    {cmd} ", helped.stdout)
+        typo = self.brain("chekpoint")
+        self.assertEqual(typo.returncode, 2)
+        self.assertIn("checkpoint", typo.stderr, "a mistyped command still names the real ones")
+
+    def test_the_command_table_matches_what_the_modules_register(self):
+        """performance-03 (2): the table that says which module owns a command
+        cannot drift from the code: it is compared with what each module's
+        register() really adds."""
+        from engine import COMMANDS, MODULES
+        self.assertEqual(sorted(set(COMMANDS.values()) - set(MODULES)), [], "a table entry names a module that is not in MODULES")
+        for module in MODULES:
+            _parser, sub, broken = cli().build([module])
+            self.assertEqual(broken, [])
+            registered = set(sub.choices)
+            listed = {cmd for cmd, owner in COMMANDS.items() if owner == module}
+            fix = "; ".join(f"add '{cmd}': '{module}'" for cmd in sorted(registered - listed)) or f"remove {sorted(listed - registered)}"
+            self.assertEqual(registered, listed, f"engine/__init__.py COMMANDS is out of date: {fix}")
+        self.assertEqual(set(cli().build()[1].choices), set(COMMANDS))
+
+    def test_a_command_missing_from_the_table_still_runs(self):
+        """performance-03 (2): the table is a short cut, not a gate: a command
+        it does not list is found by loading every module, as before."""
+        from engine import COMMANDS
+        with mock.patch.dict(COMMANDS, clear=True):
+            code, out = self.run_cli("budget")
+        self.assertEqual(code, 0, out)
+        self.assertIn("always-loaded", out)
+        with mock.patch.dict(COMMANDS, {"budget": "items"}):  # a wrong entry is no worse
+            self.assertEqual(self.run_cli("budget")[0], 0)
+
+    def test_a_broken_or_missing_module_is_still_named_in_one_line(self):
+        """performance-03 (acceptance: a broken module is still named) and
+        package D's note for bin/brain: `brain done` joins the commands that
+        answer "is unavailable: failed to load ..." when their module does not
+        import, and doctor still lists what failed."""
+        copy = engine_copy(self.ws / "broken-brain")
+        script = str(copy / "bin" / "brain")
+        (copy / "engine" / "req.py").write_text("def broken(:\n")
+        (copy / "engine" / "route.py").unlink()
+        for argv, needle in ((("done",), "req (SyntaxError"), (("req", "list"), "req (SyntaxError"),
+                             (("route", "fix the bug"), "route (ModuleNotFoundError")):
+            r = self.brain(*argv, script=script)
+            out = r.stdout + r.stderr
+            self.assertEqual(r.returncode, 1, out)
+            self.assertEqual(len(out.strip().splitlines()), 1, out)
+            for want in (f"'{argv[0]}' is unavailable", needle, "brain doctor"):
+                self.assertIn(want, out)
+            self.assertNotIn("Traceback", out)
+        r = self.brain("detect", script=script)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("unavailable", r.stdout, "a command whose module loads still runs")
+        doctor = self.brain("doctor", script=script)
+        self.assertIn("modules that failed to load:", doctor.stdout)
+        self.assertIn("req (SyntaxError", doctor.stdout)
+
+
+class UsageTests(Base):
+    def test_help_is_short_and_lists_each_command_once(self):
+        """performance-08: `brain --help` printed the list of commands three
+        times (3.8 kB). The braces list is gone; each command keeps its line."""
+        r = self.brain("--help")
+        self.assertEqual(r.returncode, 0)
+        self.assertLessEqual(len(r.stdout.encode()), 2800)
+        self.assertNotIn("{detect,boot", r.stdout)
+        self.assertEqual(r.stdout.count("checkpoint"), 1)
+
+    def test_a_usage_error_is_one_line_that_names_the_commands_help(self):
+        """performance-08: a missing argument or a mistyped flag printed the
+        whole usage block (250 to 760 bytes) before the one line that
+        mattered. Now: one line, what is wrong, and which help to read."""
+        p = self.project()
+        cases = (
+            (("init",), "path", "brain init --help", 120),
+            (("req", "set"), "id", "brain req set --help", 120),
+            (("boot", "--nmae", "shop"), "--nmae", "brain boot --help", 140),
+            (("req", "add", "--qoute", "x", "--project", p), "--qoute", "brain req add --help", 140),
+            (("checkpoint", "--stage", "building", "--project", p), "'building'", "brain checkpoint --help", 260),
+        )
+        for argv, names, helps, cap in cases:
+            r = self.brain(*argv)
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertEqual(r.stdout, "")
+            self.assertEqual(len(r.stderr.strip().splitlines()), 1, r.stderr)
+            self.assertIn(names, r.stderr)
+            self.assertIn(f"(see: {helps})", r.stderr)
+            self.assertNotIn("usage:", r.stderr)
+            self.assertLessEqual(len(r.stderr.encode()), cap, r.stderr)
+
+    def test_a_mistyped_flag_is_answered_with_the_flag_that_was_meant(self):
+        """performance-08: the session's transcripts show a help look-up after
+        most mistyped flags. The one line now offers the closest real flag."""
+        r = self.brain("boot", "--nmae", "shop")
+        self.assertIn("did you mean --name?", r.stderr)
+        r = self.brain("init", ".", "--zzz")
+        self.assertNotIn("did you mean", r.stderr, "nothing close: no guess")
+
+    def test_an_invalid_choice_still_names_the_valid_ones(self):
+        """performance-08 (acceptance): the short error keeps the list of
+        valid values, for an option and for a sub-command."""
+        r = self.brain("checkpoint", "--stage", "building")
+        for stage in ("intake", "build", "verify", "done"):
+            self.assertIn(stage, r.stderr)
+        r = self.brain("req", "ad")
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(len(r.stderr.strip().splitlines()), 1, r.stderr)
+        for name in ("add", "evidence", "check"):
+            self.assertIn(name, r.stderr)
+
+    def test_a_command_run_in_this_process_reports_usage_errors_the_same_way(self):
+        """performance-08: callers that reuse one command tree (the test
+        suites) get the same one-line answers."""
+        tree = cli().build()
+        err = io.StringIO()
+        with redirect_stderr(err), self.assertRaises(SystemExit) as stop:
+            cli().main(["boot", "--nmae"], tree=tree)
+        self.assertEqual(stop.exception.code, 2)
+        self.assertEqual(len(err.getvalue().strip().splitlines()), 1)
+        self.assertIn("(see: brain boot --help)", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
