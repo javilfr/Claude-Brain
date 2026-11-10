@@ -128,3 +128,19 @@ Every number below is from a command run in this session, before any change.
 | `brain learn status` | 141 active items, 0 candidate, 0 in conflict |
 
 Differs from the handover: the inbox held one file with three records (one ledger row, two settled hires), as stated; the scout tier still has no template (an open item for CB-206).
+
+### CB-201 Live platform checks (one-repo cloud session, 2026-11-10)
+
+Observations from this session's own tool results and transcripts. None is recorded as a fact in `memory/`, because no official page was checked for it; each is an observation of one session.
+
+| Question | Observed | How |
+|---|---|---|
+| Does the `PreToolUse` guard in `.claude/settings.json` fire? | **Yes.** With `learned_zone_locked` set to true for the test, a `Write` to `memory/_probe.txt` was refused with the guard's own message; the file was not created. `VERSION.json` was restored byte for byte afterwards | Live Write call |
+| Does the `Stop` hook (`session_end.py`) fire? | See the follow-up line below: it can only be seen after a turn ends | Inbox file keyed by this session id |
+| Do a skill's own frontmatter hooks fire? | **Not testable here.** No brain skill declares hooks, and skills are listed at session start, so a skill added now would not be offered. Stays open as CB-107 | `grep '^hooks:' .claude/skills/*/SKILL.md` finds none |
+| Do helpers honour `model`? | **Yes.** A builder hired with model sonnet produced only `claude-sonnet-5-5` turns; a writer hired with opus produced `claude-opus-5-5` turns. The subagent meta file also records `pickedEffortModel: claude-opus-5-5` for both, a field whose meaning is not documented | `subagents/*.jsonl` and `*.meta.json` |
+| Do helpers honour `effort`? | **Recorded as medium** in every request of both helpers (`"effort":"medium"`); whether the served effort matched cannot be seen | Transcript fields |
+| Do helpers honour `omitClaudeMd`? | **Yes.** The brain's `CLAUDE.md` opening sentence appears in the main transcript and in neither helper transcript | `grep -c` on the transcripts |
+| Does an effort change keep the prompt cache? | **Not testable by the session.** Effort is changed by the person (`/effort`), not by a tool. Stays open as CB-112 | — |
+
+Also seen: `brain hr hire` chose `rag-index-builder` for "Review all 100 HR templates … (biodiversity, ML experiments, RAG index …)", because listed domain nouns outweighed the verb. Passed to CB-204 as a test case.
