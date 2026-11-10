@@ -242,7 +242,6 @@ Owns: `engine/learn.py`, `learning/`, `tests/test_rehearsal.py`. New tests go in
 | owner-docs-12 | minor | S | do | After "What did you learn?" the next "Hand over" cannot pass: the digest command writes a file in the brain that no command commits |  |
 | core-20 | idea | M | do | Idea: a two-container continuity rehearsal in the test suite, so CB-104 ('Continue in a new chat resumes the same item') is checked on every change instead of waiting for a live session |  |
 | learning-18 | idea | M | later | Idea: let proven family lessons graduate into the playbooks the lead actually reads | no learned family lesson has three supporting sessions yet; revisit after real use |
-| ml-planning-18 | idea | M | do | Idea: closed-loop simulations from an empty state as standing regression tests for every learner |  |
 | redteam-16 | idea | M | do | Idea: keep the year-in-a-minute simulation as a standing gate |  |
 | redteam-17 | idea | M | do | Idea: a weekly owner digest as the outside check on owner-level memory |  |
 | redteam-19 | idea | M | later | Idea: compact the learning history once a year | nothing to compact yet; revisit when the learning history is a year old |
@@ -286,6 +285,7 @@ Owns: `engine/mlearn.py`, `engine/route.py`, `engine/schedule.py`, `memory/ml_co
 | learning-15 | idea | L | later | Idea: credit items by comparing sessions where they were shown with sessions where they were not | needs many recorded sessions per task class before the comparison means anything |
 | ml-planning-16 | idea | L | later | Idea: label request size automatically from what the session really consumed, and learn sizing over rule features instead of per-project word hashes | needs recorded sessions to set the thresholds; revisit after ten closed sessions |
 | ml-planning-17 | idea | M | do | Idea: let the classifier say 'unsure' instead of printing a confident wrong size at boot |  |
+| ml-planning-18 | idea | M | do | Idea: closed-loop simulations from an empty state as standing regression tests for every learner |  |
 | ml-planning-19 | idea | M | later | Idea: have the scheduler choose how many helpers to use by showing time against tokens, not time alone | the cold-start price is added now (instructions-10); the time-against-tokens table waits for a plan that needs it |
 | ml-planning-20 | idea | S | do | Idea: a learner health table so a learner with no data source is visible the day it happens |  |
 | owner-docs-15 | idea | M | do | Idea: one source for owner phrases |  |
