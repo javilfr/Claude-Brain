@@ -169,6 +169,50 @@ def cmd_evidence(args) -> int:
     return 0
 
 
+def cmd_verify(args) -> int:
+    """Run each open line's check command and record the result: exit 0 adds
+    the log as evidence and marks the line done; anything else leaves it open.
+    Found in the CB-202 trial: every line already held its check, yet the lead
+    had to run each one and copy the result by hand."""
+    project = c.need_project(args)
+    if not project:
+        return 1
+    from .gate import run_filtered
+    rows = load(project)
+    todo = [r for r in rows if r.get("status", "open") == "open" and (not args.id or r["id"] in args.id)]
+    if not todo:
+        print("no open requirement to verify")
+        return 0
+    failed = 0
+    for r in todo:
+        cmd = (r.get("check") or "").strip()
+        if not cmd:
+            print(f"{r['id']}: no check command; verify it another way and use `brain req evidence`")
+            failed += 1
+            continue
+        res = run_filtered(cmd, project, project, timeout=args.timeout)
+        if res["exit"] == 127:
+            print(f"{r['id']}: the check is not a runnable command (exit 127); verify it another way and use `brain req evidence`")
+            failed += 1
+            continue
+        if res["exit"] != 0:
+            print(f"{r['id']}: FAILED (exit {res['exit']}) · log {res['log']}")
+            for l in res["shown"][-4:]:
+                print("  " + l)
+            failed += 1
+            continue
+        ev = c.clip(f"`{cmd}` exit 0 on {c.today()} · log {res['log']}", 240)
+        r.setdefault("evidence", []).append(ev)
+        if r.get("passes_when"):
+            r["status"], r["done"] = "done", c.today()
+            print(f"{r['id']}: passed · done")
+        else:
+            print(f"{r['id']}: passed · left open: it has no 'passes when' yet")
+            failed += 1
+    save(project, rows)
+    return 1 if failed else 0
+
+
 def cmd_drop(args) -> int:
     project = c.need_project(args)
     if not project:
@@ -230,7 +274,7 @@ def cmd_check(args) -> int:
 
 
 def register(sub) -> None:
-    p = sub.add_parser("req", help="the requirements ledger: add, list, evidence, drop, check")
+    p = sub.add_parser("req", help="the requirements ledger: add, list, evidence, verify, drop, check")
     s = p.add_subparsers(dest="req_cmd")
     a = s.add_parser("add", help="add a line with the owner's exact words")
     c.add_project_arg(a)
@@ -252,6 +296,11 @@ def register(sub) -> None:
     a.add_argument("evidence", nargs="+")
     a.add_argument("--done", action="store_true")
     a.set_defaults(func=guarded(cmd_evidence))
+    a = s.add_parser("verify", help="run each open line's check; a pass records the log as evidence and marks it done")
+    c.add_project_arg(a)
+    a.add_argument("id", nargs="*", help="only these lines (default: every open line)")
+    a.add_argument("--timeout", type=int, default=600, help="seconds per check")
+    a.set_defaults(func=guarded(cmd_verify))
     a = s.add_parser("drop", help="drop a line with a reason")
     c.add_project_arg(a)
     a.add_argument("id")

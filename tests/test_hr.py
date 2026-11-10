@@ -256,6 +256,15 @@ class Contracts(Base):
         hr.settle(cpath, brain_root=self.b, project=p, sub_paths=[mine])
         self.assertEqual(len(c.read_jsonl(inbox[0])), 1, "settling twice records once")
 
+    def test_template_none_forces_a_plain_brief_and_supersedes_the_earlier_hire(self):
+        p = self.project()
+        first = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="true", family="software")
+        self.assertEqual(first["template"], "phone-ui-builder")
+        plain = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="true", family="software", template_id="none")
+        self.assertIsNone(plain["template"])
+        old = c.read_json(p / ".brain" / "log" / "hr" / f"{first['id']}.json", {})
+        self.assertEqual(old["status"], "superseded")
+
     def test_failed_check_is_recorded_as_failed_whatever_anyone_claims(self):
         p = self.project()
         con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="false")
@@ -547,6 +556,13 @@ class ReviewFindings(Base):
         code, out = self.run_cli("hr", "report")
         self.assertEqual(code, 0)
         self.assertIn("rack:", out)
+
+
+    def test_staff_reads_check_as_the_acceptance_command(self):
+        plan = Path(self._tmp.name) / "plan.json"
+        plan.write_text(json.dumps({"tickets": [{"id": "T-1", "title": "Build the settings screen for the phone layout", "check": "true"}]}))
+        code, out = self.run_cli("hr", "staff", str(plan))
+        self.assertNotIn("lead does it", out)
 
 
 class RealRack(unittest.TestCase):

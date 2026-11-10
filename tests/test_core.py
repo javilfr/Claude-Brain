@@ -212,6 +212,30 @@ class DetectTests(Base):
         self.assertEqual(Path(d["project"]).name, "second")  # most recently active
         self.assertEqual(detect.detect(self.brain, named="fresh")["mode"], "work")
 
+    def test_a_project_named_outright_wins_over_the_folders_beside_the_brain(self):
+        # Found in the CB-202 trial: boot ignored --project, BRAIN_PROJECT and
+        # the current folder, which every other command honours.
+        elsewhere = git_repo(self.ws / "elsewhere" / "proj")
+        self.assertEqual(detect.detect(self.brain)["mode"], "brain-only")
+        d = detect.detect(self.brain, explicit=str(elsewhere))
+        self.assertEqual((d["mode"], Path(d["project"]).name), ("bootstrap", "proj"))
+        os.environ["BRAIN_PROJECT"] = str(elsewhere)
+        try:
+            self.assertEqual(detect.detect(self.brain)["mode"], "bootstrap")
+        finally:
+            os.environ.pop("BRAIN_PROJECT")
+        old = os.getcwd()
+        os.chdir(elsewhere)
+        try:
+            self.assertEqual(detect.detect(self.brain)["mode"], "bootstrap")
+        finally:
+            os.chdir(old)
+        os.chdir(self.brain)
+        try:
+            self.assertEqual(detect.detect(self.brain)["mode"], "brain-only")  # the brain is never its own project
+        finally:
+            os.chdir(old)
+
     def test_boot_is_short_and_shows_position(self):
         p = self.project()
         state.checkpoint(p, item="T-7 build the list view", nxt=["T-8", "T-9"], stage="build", note="x" * 5000)
@@ -311,6 +335,22 @@ class ReqTests(Base):
         with redirect_stdout(buf):
             code = mod.main(list(argv))
         return code, buf.getvalue()
+
+    def test_verify_runs_each_check_and_marks_only_passes_done(self):
+        p = self.project()
+        os.environ["BRAIN_PROJECT"] = str(p)
+        self.run_cli("req", "add", "--quote", "passes", "--passes-when", "exit 0", "--check", "true")
+        self.run_cli("req", "add", "--quote", "fails", "--passes-when", "exit 0", "--check", "false")
+        self.run_cli("req", "add", "--quote", "prose", "--passes-when", "looks right", "--check", "no-such-command-xyz")
+        self.run_cli("req", "add", "--quote", "no bar", "--check", "true")
+        code, out = self.run_cli("req", "verify")
+        self.assertEqual(code, 1)
+        rows = {r["id"]: r for r in c.read_jsonl(p / ".brain" / "requirements.jsonl")}
+        self.assertEqual([rows[i]["status"] for i in ("R-001", "R-002", "R-003", "R-004")], ["done", "open", "open", "open"])
+        self.assertIn("exit 0", rows["R-001"]["evidence"][0])
+        self.assertIn("R-002: FAILED", out)
+        self.assertIn("not a runnable command", out)
+        self.assertIn("no 'passes when'", out)
 
     def test_check_blocks_until_every_line_has_evidence(self):
         p = self.project()

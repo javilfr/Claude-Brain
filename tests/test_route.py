@@ -62,6 +62,16 @@ class Classify(unittest.TestCase):
         self.assertEqual(route.classify("contniue")["task_class"], "resume")
         self.assertEqual(route.classify("trnaslate the whole website to japanese")["family"], "language")
 
+    def test_exact_words_beat_one_edit_matches_for_family(self):
+        # Found in the CB-202 trial: 'tests' matched 'tesis' (thesis) and a
+        # Python tool was routed to long-form writing.
+        for q in ("New project: a small command-line unit converter in Python (km/miles, kg/lb, C/F) with tests",
+                  "New project: a Flask service with tests", "Build a CLI in Rust"):
+            with self.subTest(q=q):
+                self.assertEqual(route.classify(q)["family"], "software")
+        self.assertEqual(route.classify("New project: a thesis on Roman roads")["family"], "knowledge")
+        self.assertEqual(route.classify("Write my tesis chapter")["family"], "knowledge")
+
 
 def outcomes(model, n, passed=True, start=0):
     return [{"kind": "outcome", "id": f"{model}{start + i}", "at": f"2026-01-01T{start + i:05d}",

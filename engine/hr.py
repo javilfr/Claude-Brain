@@ -542,7 +542,9 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     family, task_class = family or "software", task_class or "general"
     if risk not in RISKS:
         raise ValueError(f"unknown risk '{risk}'")
-    if template_id:
+    if template_id in PLAIN_IDS:
+        chosen = []  # the lead asked for a plain brief: the arm a paired evaluation compares against
+    elif template_id:
         chosen = [{"id": t["id"], "score": 1.0, "fit": 1.0, "coverage": 1.0, "multiplier": 1.0, "trials": 0, "template": t} for t in rack if t["id"] == template_id]
         if not chosen:
             raise ValueError(f"no template '{template_id}' in the rack")
@@ -873,6 +875,9 @@ def cmd_report(args) -> int:
     return 0
 
 
+PLAIN_IDS = ("none", "plain")
+
+
 def cmd_staff(args) -> int:
     """Plan the helpers for every open ticket in a plan file and total the payroll."""
     data = c.read_json(args.plan, None)
@@ -888,9 +893,11 @@ def cmd_staff(args) -> int:
     except Exception:
         state = {}
     total, rows = 0, []
+    from .schedule import normalise_ticket
     for t in data["tickets"]:
         if not isinstance(t, dict) or t.get("status") == "done":
             continue
+        t = normalise_ticket(t)
         task = " ".join(str(t.get(k, "")) for k in ("title", "goal"))
         best = select(task, rack, state, hc, t.get("family"), t.get("risk"))
         tpl = best[0]["template"] if best else None
@@ -932,7 +939,7 @@ def register(sub) -> None:
     h.add_argument("--tier", type=int, choices=(1, 2, 3), default=2)
     h.add_argument("--size", choices=("S", "M", "L", "XL"))
     h.add_argument("--agent", choices=BASE_AGENTS, help="restrict to templates for one base agent")
-    h.add_argument("--template", help="use this template instead of choosing")
+    h.add_argument("--template", help="use this template instead of choosing; 'none' writes a plain brief")
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")
     h.add_argument("--force", action="store_true", help="hire even when the rule says the lead should do it")

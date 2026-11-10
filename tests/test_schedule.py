@@ -316,5 +316,19 @@ class DoneTicketsTest(unittest.TestCase):
         self.assertEqual(plan["tickets"][0]["deps"], [])
 
 
+class TicketAliasTest(unittest.TestCase):
+    def test_everyday_field_names_are_read_as_the_canonical_ones(self):
+        # Found in the CB-202 trial: 'minutes', 'depends' and 'check' were not read.
+        from engine import schedule
+        plan = schedule.load_plan({"tickets": [
+            {"id": "A", "minutes": 5, "check": "true"},
+            {"id": "B", "minutes": 3, "depends": ["A"]},
+            {"id": "C", "est": 2, "minutes": 99, "deps": []},
+        ]})
+        by = {t["id"]: t for t in plan["tickets"]}
+        self.assertEqual((by["A"]["est"], by["B"]["deps"], by["C"]["est"]), (5, ["A"], 2))
+        self.assertEqual(schedule.normalise_ticket({"id": "A", "check": "x"})["accept"], "x")
+
+
 if __name__ == "__main__":
     unittest.main()

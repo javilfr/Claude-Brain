@@ -52,6 +52,26 @@ def _conflicts(a: str, b: str) -> bool:
     return a == b or b.startswith(a + "/") or a.startswith(b + "/")
 
 
+# Ticket fields are id, title, goal, files, deps, est (minutes), accept (the
+# acceptance command). A lead writing a tickets file from memory reaches for
+# the everyday words; found in the CB-202 trial, where 'check' was silently
+# read as "no acceptance command" and 'minutes' as a missing estimate.
+TICKET_ALIASES = {"minutes": "est", "estimate": "est", "depends": "deps", "depends_on": "deps",
+                  "after": "deps", "check": "accept", "acceptance": "accept", "acceptance_command": "accept"}
+
+
+def normalise_ticket(t: dict) -> dict:
+    """A copy with everyday field names mapped to the canonical ones; a
+    canonical field that is present always wins."""
+    if not isinstance(t, dict):
+        return t
+    out = dict(t)
+    for alias, key in TICKET_ALIASES.items():
+        if alias in out and key not in out:
+            out[key] = out[alias]
+    return out
+
+
 def load_plan(data: dict, agents: int | None = None) -> dict:
     """Validate and normalise a plan; raises PlanError with one clear line."""
     if not isinstance(data, dict) or not isinstance(data.get("tickets"), list):
@@ -65,6 +85,7 @@ def load_plan(data: dict, agents: int | None = None) -> dict:
     # already satisfied, so the same file serves as plan and as progress record.
     done = {str(t.get("id")) for t in data["tickets"] if isinstance(t, dict) and t.get("status") == "done"}
     for pos, t in enumerate(data["tickets"]):
+        t = normalise_ticket(t)
         if not isinstance(t, dict) or not t.get("id"):
             raise PlanError(f"ticket #{pos + 1} has no id")
         if str(t["id"]) in done:

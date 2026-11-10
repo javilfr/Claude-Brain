@@ -159,7 +159,9 @@ FAMILY_WORDS = {
                        "backend, frontend, code, bug, crash, deploy, vercel, react, button, boton, css, ui, screen, "
                        "pantalla, page, component, login, game, juego, minecraft, mod, repo, repository, branch, main, "
                        "typescript, javascript, html, database, server, extension, plugin, bot, agents, feature, field, fields, campo, "
-                       "tests, dark mode, layout, font"),
+                       "tests, dark mode, layout, font, python, cli, command line, script, scripts, program, programa, "
+                       "codigo, library, package, function, unit tests, flask, django, fastapi, node, rust, golang, "
+                       "java, kotlin, swift, service, microservice, endpoint, compiler, converter"),
 }
 FAMILY_ORDER = ("language", "data", "operations", "knowledge", "software")
 CLASS_WORDS = [  # (family, class, words) checked in order; first hit wins
@@ -179,7 +181,8 @@ CLASS_WORDS.append(("software", "software.release",
 RELEASE_VERBS = _vocab("deploy, release, ship, publish, launch, despliega, publica, lanza")
 OBJECT_FAMILY = [(p, fam) for fam, spec in (
     ("software", "app, apps, application, aplicacion, website, site, webapp, web, platform, plataforma, sitio, api, "
-                 "backend, game, juego, extension, plugin, bot, store, shop, tienda, tool, herramienta"),
+                 "backend, game, juego, extension, plugin, bot, store, shop, tienda, tool, herramienta, cli, "
+                 "command line, script, program, programa, library, package, service, converter"),
     ("knowledge", "report, informe, essay, ensayo, book, libro, brochure, folleto, deck, presentation, presentacion, "
                   "course, curso, guide, guia, handbook, manual, knowledge base, base de conocimiento, thesis, "
                   "strategy, estrategia, study, estudio, newsletter, dossier, assignment, rubric, tarea, letter, carta"),
@@ -202,8 +205,21 @@ def _first_object_family(tokens: list[str]) -> str | None:
     return None
 
 
+def _family_score(tokens: list[str], vocab: list[tuple[str, ...]]) -> float:
+    """One point per word matched exactly, half a point per word matched only
+    within one edit: 'tests' must not count as fully as 'tesis' (thesis)."""
+    score = 0.0
+    for phrase in vocab:
+        exact = any(tuple(tokens[i:i + len(phrase)]) == phrase for i in range(len(tokens)))
+        if exact:
+            score += 1.0
+        elif any(_phrase_at(tokens, i, phrase) for i in range(len(tokens))):
+            score += 0.5
+    return score
+
+
 def _family(tokens: list[str], manifest: dict) -> str:
-    scores = {f: float(len(_hits(tokens, FAMILY_WORDS[f]))) for f in FAMILY_ORDER}
+    scores = {f: _family_score(tokens, FAMILY_WORDS[f]) for f in FAMILY_ORDER}
     if _hits(tokens, _vocab("translate, traduce, traducir")):
         scores["language"] += 2
     obj = _first_object_family(tokens)
