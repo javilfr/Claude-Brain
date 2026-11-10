@@ -61,9 +61,16 @@ def load_plan(data: dict, agents: int | None = None) -> dict:
         raise PlanError("agents must be a positive integer")
     ids: list[str] = []
     tickets = []
+    # Finished tickets are not scheduled again, and a dependency on one is
+    # already satisfied, so the same file serves as plan and as progress record.
+    done = {str(t.get("id")) for t in data["tickets"] if isinstance(t, dict) and t.get("status") == "done"}
     for pos, t in enumerate(data["tickets"]):
         if not isinstance(t, dict) or not t.get("id"):
             raise PlanError(f"ticket #{pos + 1} has no id")
+        if str(t["id"]) in done:
+            continue
+        if done:
+            t = dict(t, deps=[d for d in (t.get("deps") or []) if str(d) not in done])
         tid = str(t["id"])
         if tid in ids:
             raise PlanError(f"duplicate ticket id: {tid}")

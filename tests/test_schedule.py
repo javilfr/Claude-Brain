@@ -289,5 +289,17 @@ class Packet(unittest.TestCase):
         self.assertTrue(any(l.startswith("Acceptance command: ") for l in lines))
 
 
+class DoneTicketsTest(unittest.TestCase):
+    def test_done_tickets_are_skipped_and_satisfy_dependencies(self):
+        from engine import schedule
+        plan = schedule.load_plan({"agents": 2, "tickets": [
+            {"id": "A", "est": 5, "status": "done"},
+            {"id": "B", "est": 3, "deps": ["A"]},
+            {"id": "C", "est": 2, "deps": ["B"], "status": "open"},
+        ]})
+        self.assertEqual([t["id"] for t in plan["tickets"]], ["B", "C"])
+        self.assertEqual(plan["tickets"][0]["deps"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
