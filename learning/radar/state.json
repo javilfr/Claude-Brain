@@ -1,18 +1,19 @@
 {
   "platform-relnotes": {
-    "hash": "7feb28c93a47326ec1c467f1a817571c34902c3163db0ecb20f0a7ea3f0a1cff",
+    "hash": "0fa6ce3b01c48f2f1a9c110614cdc38e3d04a1292a6107bd93347f521045bd16",
     "seen": [
       "c43dc535a9ba",
-      "b32a26281868",
+      "472164fa3175",
       "d31e95c7fae6",
       "98ff922369d0",
       "04827e03f1ac",
-      "551447217300"
+      "551447217300",
+      "b32a26281868"
     ]
   },
   "platform-llms": {
-    "last_modified": "Tue, 10 Nov 2026 09:02:54 GMT",
-    "hash": "cb07fc76ea4055c0e4557dd577165f0a739398524014788f208db3dfa02cb874",
+    "last_modified": "Tue, 10 Nov 2026 21:54:09 GMT",
+    "hash": "64ad4c75cdb789ad796a882db9f36eda660d3cf9942fc2ac5385b6ee2b4937d1",
     "seen": [
       "e2ab33e270b5",
       "6d5269fcb398",
@@ -151,12 +152,14 @@
       "7db7107c802d",
       "d62f78450c96",
       "0e82b84f4f04",
+      "7616ba882561",
       "6fc090cba5dc",
       "7e8caad08c0f",
       "06d31358c84e",
       "81bf2b9be69a",
       "dc028c471fa5",
       "3e92c240b0bb",
+      "0ef5fc305329",
       "ba87c6bd38ae",
       "cfee542bd8e7",
       "957d8dcebbf2",
@@ -167,6 +170,7 @@
       "64aecaa93b8b",
       "51c60113eb1a",
       "40b57629fdfc",
+      "219c0f314d67",
       "b8e7b7212aba",
       "6d8889ab55a6",
       "beeec352953e",
@@ -175,6 +179,7 @@
       "215e3135aad7",
       "79b3be33ff39",
       "18366fe1303b",
+      "121fab4cdeb6",
       "83e986725f42",
       "c7a605438dbc",
       "e13e836f9853",
@@ -182,7 +187,10 @@
       "6287481c49ed",
       "48d996995c1f",
       "039375ebeca4",
+      "382f8656160e",
+      "bedb40d2c459",
       "87417fe0fdf2",
+      "e473c2fdba6a",
       "0f306d7eeced",
       "b4af8edcae90",
       "28f3f7aeb6ee",
@@ -910,8 +918,8 @@
     ]
   },
   "cc-docs-llms": {
-    "etag": "W/\"zIMRNefB17kyGR9LpL6s-p1_XFW-xZLnNGSqKk6WAT8\"",
-    "hash": "fe04a609e137986ef60ff7fc649beebc563902b81150b81151f5b6092e6c4e54",
+    "etag": "W/\"iRaZhYNRKu8MN4HtsY3Rq9oN4AUcRGKxPjGeo0I6ZPE\"",
+    "hash": "f6a20dc9c56dcdb36f559a6d7f0b004d5601a47e16e7ada41a8385efc81625f1",
     "seen": [
       "2a0029977623",
       "f6a90c22eda8",
@@ -1115,6 +1123,18 @@
       "180ef7800521",
       "86a605eaeae2",
       "3dd535db6179",
+      "cd2ec3c28c1e",
+      "90ce8d1e0928",
+      "b9400974dec1",
+      "b25c89a6c1f4",
+      "1d1d88275756",
+      "f8010ec571a6",
+      "ed450abcfda6",
+      "229b2d84872c",
+      "77a794ee803f",
+      "644321939d34",
+      "7edfcc2b9d0e",
+      "b00a524bd4b6",
       "11fba86613d4",
       "9cfb399e89b2",
       "105f93c11913",
@@ -1139,19 +1159,7 @@
       "6949f7d75bb1",
       "36b5b127ab59",
       "fc4ea667ff0b",
-      "93749914f539",
-      "cd2ec3c28c1e",
-      "90ce8d1e0928",
-      "b9400974dec1",
-      "b25c89a6c1f4",
-      "1d1d88275756",
-      "f8010ec571a6",
-      "ed450abcfda6",
-      "229b2d84872c",
-      "77a794ee803f",
-      "644321939d34",
-      "7edfcc2b9d0e",
-      "b00a524bd4b6"
+      "93749914f539"
     ]
   },
   "cc-changelog": {
@@ -1176,8 +1184,9 @@
     ]
   },
   "anthropic-sitemap": {
-    "hash": "28ec142be91bbf32182091fb57696f68b642c8fbea36ff89c6a9dfad50fc9a28",
+    "hash": "5d2d9a62282cbaf915993ed77b5070d07b0f5716ed0fe9a9d1c4c3065b4c5b61",
     "seen": [
+      "b3a26b5f8ada",
       "f75de63b48df",
       "71e0837a9684",
       "12db76f63f47",
@@ -1206,14 +1215,33 @@
     ]
   },
   "status": {
-    "etag": "W/\"1b619beed9c914248f69a2564479b9c9\"",
-    "hash": "1b619beed9c914248f69a2564479b9c93c7221de92cb30d483bcdbd405f5d8ac",
+    "etag": "W/\"63ccec65896e75087846a23538aee5ee\"",
+    "hash": "63ccec65896e75087846a23538aee5ee8d2267ecf36db5d18ac28853e0eb4c96",
     "seen": []
   },
   "hf-daily-papers": {
-    "etag": "W/\"2b9f7-hVnHvQMPyvmjPypvwwtMB57bDug\"",
-    "hash": "e87f7dafd0f91e2178757ec4579ad5943f3375783980a646670cb6293309359d",
+    "etag": "W/\"2b627-kpMu1NaIG8doI/mvI46jsoYMbbM\"",
+    "hash": "d1187d5d77cc9559c1f5672089e841db1ce245b1fa97e61a916a13f0e3a7e1f9",
     "seen": [
+      "de30354bcb77",
+      "856722f69215",
+      "11aff58a5392",
+      "162a3fc3465a",
+      "132140523136",
+      "bda2bbbe51cd",
+      "8702ff33f1ff",
+      "447fde64a056",
+      "d0bd5b4afada",
+      "fd3bce808917",
+      "131f9b01cd47",
+      "9995fc873fba",
+      "6a12e376ec47",
+      "375a273501ec",
+      "753d5211795a",
+      "b92ddaf404ca",
+      "902f49478158",
+      "f42eeb206b4f",
+      "fc4ab8fab3b1",
       "63eb7f7f2aec",
       "28db437d3876",
       "b659bf968a43",
@@ -1247,9 +1275,11 @@
     ]
   },
   "hf-blog": {
-    "etag": "W/\"40f2f-T2jo6TYXuYHZ56xAp6s3ALjzrfI\"",
-    "hash": "a75a6d41b8f5dec543fd3576818df3346e885dbdfc4f7e99ef1e36940084c8dc",
+    "etag": "W/\"41149-4QvSq//BGeVj0brTue1KdKO2rSA\"",
+    "hash": "f2d04bdf9e8314240b15ab6724333315830446aa8d9a6dbf69acd4f96d413eb1",
     "seen": [
+      "91aa6023aa85",
+      "de1e8dc4bfe0",
       "1e11704db9d1",
       "6bee98feb05f",
       "c066895d095b",
@@ -1278,7 +1308,7 @@
     ]
   },
   "arxiv-agent-memory": {
-    "hash": "637f8ba0aac10d9a576bed448493bc781d93275536ffbb4bdbe20d33edefe446",
+    "hash": "99cf027586677aae060c3d93305df540dcd5e7f50749d23e7b777264c550993f",
     "seen": [
       "089abb17cac2",
       "386414866407",
@@ -1293,8 +1323,12 @@
     ]
   },
   "hn-claude": {
-    "hash": "7361e9d112036b41bdba9ee5f419c0158678aad72b5073718790d6c7ac506a1e",
+    "hash": "8953754dd08823b4d0067a74713620aba31f47e8cafe39093fa5dfa03ea9ca70",
     "seen": [
+      "7b35c1c7d78a",
+      "085c8ccbfc12",
+      "a69b226b4e37",
+      "6284fa7147ed",
       "4aedb2675db1",
       "1a858efb6e23"
     ]
