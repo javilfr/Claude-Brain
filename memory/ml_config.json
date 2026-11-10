@@ -32,13 +32,13 @@
     "prior_tokens": 200000
   },
   "explore": {
-    "_help": "Safe exploration, invariant I-10. Cheaper arms are eligible only with a verifying check, risk in safe_risks and tier <= max_tier. At most max_rate of eligible tasks in the window explore, and wasted spend (failed explorations) stays under max_waste of window spend. exploit_margin and exploit_n decide when a cheaper arm counts as exploitation rather than exploration (10th-percentile pass rate within the margin of the baseline mean, with enough family evidence).",
+    "_help": "Safe exploration, invariant I-10. Cheaper arms are eligible only with a verifying check, risk in safe_risks and tier <= max_tier. At most max_rate of eligible tasks in the window explore, and wasted spend (failed explorations) stays under max_waste of window spend. exploit_margin and exploit_n decide when a cheaper arm counts as exploitation rather than exploration (10th-percentile pass rate within the margin of the baseline mean, with enough family evidence). The margin is 0.10, the owner tolerance of round2/03 section 2.6, not the 0.05 of section 2.4: with n_cap 40 the 10th percentile sits about 0.06 below the mean, so 0.05 made exploitation a coin flip even for an equally good arm (measured in tests/test_mlearn.py).",
     "safe_risks": ["trivial", "standard"],
     "max_tier": 2,
     "max_rate": 0.25,
     "max_waste": 0.05,
     "window": 50,
-    "exploit_margin": 0.05,
+    "exploit_margin": 0.1,
     "exploit_n": 5.0,
     "z10": 1.2816
   },
@@ -51,17 +51,19 @@
     "drift_cap": 5
   },
   "drift": {
-    "_help": "Drift charts per task class (round2/08 section 5, round2/07 section 4.4). Reference = first ref_n observations (median, 1.4826 x MAD, floored at sigma_floor). EWMA on normalised log tokens (lam, L); Page-Hinkley on the same stream (delta and lambda in sigma units); one-sided CUSUM on first-pass failures (k above the reference failure rate, threshold h). An alarm needs confirm_charts different charts signalling within confirm_window observations. After an alarm the reference is rebuilt from the next ref_n observations; the alarm shows on boot until then.",
+    "_help": "Drift charts per task class (round2/08 section 5, round2/07 section 4.4). Reference = first ref_n observations: median, and the larger of 1.4826 x MAD and the standard deviation (floored at sigma_floor); failure rate as a Beta upper estimate (mean + p0_z sd). EWMA on normalised log tokens (lam, L); Page-Hinkley on the same stream (delta and lambda in sigma units; lambda 8 as in round2/07); one-sided CUSUM on first-pass failures (k above the reference rate, threshold h). An alarm needs confirm_charts different charts within confirm_window observations, or the CUSUM signalling cusum_confirm times in a row (it is the only chart on its stream). Thresholds were set by simulation in tests/test_mlearn.py: about 7% of 200-task stationary runs raise any alarm. After an alarm the reference is rebuilt from the next ref_n observations; the alarm shows on boot until then.",
     "ref_n": 15,
     "sigma_floor": 0.05,
     "ewma_lam": 0.2,
-    "ewma_L": 3.0,
+    "ewma_L": 3.5,
     "ph_delta": 0.5,
-    "ph_lambda": 5.0,
+    "ph_lambda": 8.0,
     "cusum_k": 0.1,
-    "cusum_h": 2.5,
+    "cusum_h": 4.0,
+    "p0_z": 1.0,
     "confirm_charts": 2,
-    "confirm_window": 3
+    "confirm_window": 3,
+    "cusum_confirm": 2
   },
   "credit": {
     "_help": "Memory credit (round2/08 section 3). Only followed items get credit; advantage = y - class baseline, split equally among followed items. Baseline is an EW mean of y with rate baseline_alpha from baseline_prior. Ranking multiplier = clamp(base + slope x lower bound, low, high) where the lower bound is mean - z x sd of the Beta posterior; neutral (1.0) until min_n followed uses. Owner-stated items always get high (I-08). correction_weight is the harmful mass an owner correction naming an item adds.",

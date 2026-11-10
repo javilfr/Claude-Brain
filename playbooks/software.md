@@ -17,10 +17,10 @@ Generated from `software.jsonl` by the learning pipeline. Do not edit by hand.
 ## Release
 
 - An app release is done only when the live address serves the new version. A deploy-only crash once escaped the local gate, and another project showed a 404 for a day and a half because the work stayed on a branch. `sw-live-check`
-- Update main only through `brain release`: it runs the full gate, pushes only on a recorded exit 0 and never force-pushes. In an earlier project two pushes reached main without a green check, one chained with `;` after a failing test run. `sw-release-command`
+- Update main only through `brain release --run-gates --push`: it pushes only when every gate recorded exit 0 on this commit and never force-pushes; without `--push` it only reports. In an earlier project two pushes reached main without a green check, one chained with `;` after a failing test run. `sw-release-command`
 - Before a release, build from a clean clone with the one documented command. It catches files and settings that exist only on the working machine. `sw-clean-clone`
 - Ship small verified increments the owner can see rather than one large release. He judges progress by what is live on his phone, and small releases make a bad change easy to find and revert. `sw-small-releases`
-- Tag each release the owner accepted as known-good, so "Go back" restores it in one step. After long iteration the owner once asked to return to an earlier state because quality had dropped. `sw-tag-known-good`
+- Record which release the owner accepted as known-good (each release is logged in `.brain/log/releases.jsonl`), so "Go back" can revert to it in one step without a force-push. After long iteration the owner once asked to return to an earlier state because quality had dropped. `sw-tag-known-good`
 
 ## Repo
 
@@ -28,7 +28,7 @@ Generated from `software.jsonl` by the learning pipeline. Do not edit by hand.
 
 ## Tests
 
-- Do not skip, delete or loosen a test to get a pass. A wrong test is reported with the reason and changed as its own item; the gate scans the diff for skip markers and removed tests. `sw-test-integrity`
+- Do not skip, delete or loosen a test to get a pass. A wrong test is reported with the reason and changed as its own item; the gate flags added skip markers and stubs in the diff, but not deleted tests, so a reviewer checks for those. `sw-test-integrity`
 - Test fixtures hold at least two of everything (two records, two users, two items). In an earlier project, tests written against one sample produced 17 end-to-end failures when a second sample was added. `sw-two-of-everything`
 
 ## Verify

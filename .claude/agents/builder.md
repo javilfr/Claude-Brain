@@ -1,6 +1,6 @@
 ---
 name: builder
-description: Starts cold, so each call pays for a fresh context: use for one bounded item with a runnable acceptance command and the files it owns named (a feature, a fix, a script, a data step). Returns the change and the check's actual result.
+description: Starts cold (a fresh context each call): use for one bounded item with an acceptance command and named files. Returns the change and the check's actual result.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 effort: medium

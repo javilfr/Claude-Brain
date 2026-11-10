@@ -1,6 +1,6 @@
 ---
 name: redteam
-description: The most expensive helper: use once, at the decision point of a one-way step (deleting or migrating data, an architecture hard to undo, spending money, publishing). Names likely failure modes and the evidence that would change the decision.
+description: The most expensive helper: use once, at a one-way step (deleting or migrating data, hard-to-undo architecture, spending money, publishing). Names failure modes and the evidence that would change the decision.
 tools: Read, Grep, Glob, Write
 model: fable
 effort: high

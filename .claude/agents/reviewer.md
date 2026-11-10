@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: A costly fresh-context call on a strong model: use for high-risk work (release, data change, public or legal content) or when no runnable check covers a requirement. Checks the work against the requirement lines given; reports findings with evidence. Does not fix.
+description: Costly fresh-context call: use for high-risk work (release, data change, public or legal content) or a requirement no runnable check covers. Reports findings with evidence; does not fix.
 tools: Read, Grep, Glob, Bash, Write
 model: opus
 effort: high

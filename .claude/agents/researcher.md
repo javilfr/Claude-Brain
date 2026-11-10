@@ -1,6 +1,6 @@
 ---
 name: researcher
-description: Starts cold and reads many pages, so use it only for a question whose answer must be cited: library and service behaviour, prices, laws, comparisons, background for a plan. Writes a memo file and returns a short summary with its path.
+description: Starts cold and reads many pages: use only when the answer must be cited (library or service behaviour, prices, laws, comparisons). Writes a memo; returns a summary and its path.
 tools: Read, Grep, Glob, WebSearch, WebFetch, Write
 model: sonnet
 effort: medium

@@ -2,12 +2,17 @@
 check over a diff.
 
 Why: the owner wants the brain to change only through its own learning
-pipeline. Three zones make that checkable (MASTER_PLAN 6.4):
+pipeline. Four zones make that checkable (MASTER_PLAN 6.4, EXECUTION_PLAN 4.3):
 - inbox   ``learning/inbox/``: any session may append records here;
+- state   ``learning/radar/``: bookkeeping a script rewrites in a working
+  session (radar etags and seen ids); allowed like the inbox, but rewrites
+  are fine and the manifest replay ignores it, because it is not memory;
 - learned ``memory/``, ``owner/``, ``stats/``, ``playbooks/``, ``learning/``:
   written only by ``brain learn apply``;
-- kernel  everything else (engine, method, CLAUDE.md, ``memory/models.json``):
-  changes need the owner.
+- kernel  everything else (engine, method, CLAUDE.md) plus the hand-written
+  files inside the learned directories (prices and roles, learning
+  constants, radar sources, the promotion rules page): changes need the
+  owner, because learning must never change its own rules (I-09).
 Until VERSION.json sets ``learned_zone_locked`` the brain is being built, so
 every rule here downgrades to a warning.
 """
@@ -19,18 +24,22 @@ from pathlib import Path
 
 from . import common as c
 
-# Inside the learned directories but hand-written: prices and the rules page.
-KERNEL_FILES = ("memory/models.json", "learning/PROMOTION_RULES.md")
+# Inside the learned directories but hand-written.
+KERNEL_FILES = ("memory/models.json", "memory/ml_config.json", "memory/radar_sources.json",
+                "learning/PROMOTION_RULES.md")
+STATE_DIRS = ("learning/radar/",)
 
 
 def zone_of(relative_path: str) -> str:
-    """"inbox", "learned" or "kernel" for a path relative to the brain root."""
+    """"inbox", "state", "learned" or "kernel" for a path relative to the brain root."""
     rel = str(relative_path).replace("\\", "/")
     while rel.startswith("./"):
         rel = rel[2:]
     rel = rel.lstrip("/")
     if rel.startswith(c.INBOX_DIR):
         return "inbox"
+    if rel.startswith(STATE_DIRS):
+        return "state"
     if rel in KERNEL_FILES:
         return "kernel"
     if rel.startswith(c.LEARNED_ZONE):
@@ -57,6 +66,8 @@ def check_path(path: str, mode: str = "work", brain_root: Path | None = None) ->
         return 0, f"warning: {zone} zone edit allowed only because the brain is in its bootstrap period"
     if zone == "inbox":
         return 0, "inbox: allowed (append records only)"
+    if zone == "state":
+        return 0, "state: allowed (rewritten by its own script, not part of memory)"
     if zone == "kernel":
         return 2, "kernel change: needs the owner"
     if mode == "learn":
@@ -102,10 +113,11 @@ def check_diff(brain_root: Path | None = None, base: str | None = None) -> tuple
         return False, ["guard diff: not a git repository"]
     base = base or learn.default_base(root)
     added = _added_lines(root, base)
-    zones: dict[str, int] = {"kernel": 0, "learned": 0, "inbox": 0}
+    zones: dict[str, int] = {"kernel": 0, "learned": 0, "inbox": 0, "state": 0}
     for rel in added:
         zones[zone_of(rel)] += 1
-    lines = [f"changed files: {zones['kernel']} kernel, {zones['learned']} learned, {zones['inbox']} inbox (base {base})"]
+    lines = [f"changed files: {zones['kernel']} kernel, {zones['learned']} learned, {zones['inbox']} inbox, "
+             f"{zones['state']} state (base {base})"]
     ok = True
     for rel, rows in sorted(added.items()):
         hits = c.find_secrets("\n".join(rows))

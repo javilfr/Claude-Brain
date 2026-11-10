@@ -8,5 +8,5 @@ Read before reporting an app or feature done. Includes everything in `code-chang
 - [ ] Are the project's budgets met (bundle size, load time), measured on a quiet machine?
 - [ ] If data is migrated, was a backup taken and a restore tested first?
 - [ ] Were screenshots taken at phone size and desktop size, and looked at?
-- [ ] If the project releases from `main`: did `BRAIN release` push on a green gate, and does the live address serve the new version?
+- [ ] If the project releases from `main`: did `BRAIN release --run-gates --push` push, and did its live check pass?
 - [ ] Has the owner been told the address and what to check on his phone?

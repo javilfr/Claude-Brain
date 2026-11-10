@@ -11,12 +11,14 @@ If you are the owner, start with **[OWNER_GUIDE.md](OWNER_GUIDE.md)**: how to st
 | `CLAUDE.md` | The short always-loaded core: request sizing, core rules, pointers |
 | `.claude/agents/` | Six helper agents (scout, researcher, builder, writer, reviewer, redteam), each with a set model and effort |
 | `.claude/skills/` | Ten skills loaded on demand: start, new, plan, build, verify, research, create, handover, learn, status |
+| `.claude/hooks/`, `.claude/settings.json`, `.claude-plugin/` | Optional hooks and a plugin manifest; hooks do not load in a two-repository cloud session, so nothing depends on them |
 | `bin/brain`, `engine/` | The command-line engine (Python standard library only) |
-| `method/` | Lifecycle, routing, efficiency, quality and model guidance, read on demand |
-| `playbooks/` | Practice per family of work, and `dod/` definitions of done |
+| `method/` | Lifecycle, routing, efficiency, quality and model guidance, and `dod/` definitions of done, read on demand |
+| `playbooks/` | Practice per family of work (`.jsonl` items, with generated `.md` views) |
 | `contract/` | The versioned `.brain/` schema, project template and migrations |
-| `memory/`, `owner/`, `stats/`, `learning/` | The learned zone: rules, facts, the owner's standing instructions, the token ledger, the learning audit trail |
-| `evals/`, `tests/` | Test sets, contract fixtures and unit tests |
-| `docs/` | The master plan, engine spec and research reports |
+| `memory/`, `owner/`, `stats/`, `learning/` | The learned zone: rules, facts, model data and radar sources, the owner's standing instructions, the token ledger, the learning inbox and radar state |
+| `evals/`, `tests/` | Evaluation tasks, seeded defects, recall and routing sets, contract fixtures and unit tests |
+| `.github/workflows/ci.yml` | The check named **brain**: tests, self-test, lint, item and eval checks on every push and pull request |
+| `docs/` | The master plan, execution plan, engine spec, decisions, tickets and research reports |
 
-The learned zone (`memory/`, `owner/`, `stats/`, `playbooks/`, `learning/`) is written only by `bin/brain learn`; hand edits are rejected by the guard and CI. Changes to everything else are engineering changes that need the owner's approval.
+The learned zone (`memory/`, `owner/`, `stats/`, `playbooks/`, `learning/`) is written only by `bin/brain learn`. On every pull request CI runs `brain guard diff` and `brain learn verify`, which detect hand edits; until the learned zone is locked at version 1.0 the replay only warns, and the check blocks a merge only once the owner makes it required in the branch settings. Changes to everything else are engineering changes that need the owner's approval.

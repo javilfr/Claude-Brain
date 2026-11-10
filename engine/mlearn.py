@@ -448,8 +448,15 @@ def _drift_step(st: dict, cfg: dict, cls: str, x: float | None, fail: int | None
             med = xs[len(xs) // 2] if len(xs) % 2 else (xs[len(xs) // 2 - 1] + xs[len(xs) // 2]) / 2
             dev = sorted(abs(v - med) for v in xs)
             mad = dev[len(dev) // 2] if len(dev) % 2 else (dev[len(dev) // 2 - 1] + dev[len(dev) // 2]) / 2
-            ch["mu0"], ch["sigma0"] = med, max(d["sigma_floor"], 1.4826 * mad)
-            ch["p0"] = (sum(ch["ref_fail"]) + 1.0) / (len(ch["ref_fail"]) + 2.0)
+            mean = sum(xs) / len(xs)
+            sd = math.sqrt(sum((v - mean) ** 2 for v in xs) / (len(xs) - 1))
+            # The larger of the robust and the classical spread: from 15 points
+            # the MAD alone is often too small, and every chart then cries wolf.
+            ch["mu0"], ch["sigma0"] = med, max(d["sigma_floor"], 1.4826 * mad, sd)
+            # Upper estimate of the reference failure rate: 15 points pin it
+            # down poorly, and an underestimate turns the CUSUM into a random walk.
+            fa, fb = sum(ch["ref_fail"]) + 1.0, len(ch["ref_fail"]) - sum(ch["ref_fail"]) + 1.0
+            ch["p0"] = min(1.0, 2.0 * fa / (fa + fb) - _beta_q(fa, fb, d["p0_z"]))
             ch["open"] = False
         return
     ch["k"] += 1
@@ -473,7 +480,10 @@ def _drift_step(st: dict, cfg: dict, cls: str, x: float | None, fail: int | None
             signals.append("cusum")
     ch["sig"] = [s for s in ch["sig"] if s[0] > ch["k"] - d["confirm_window"]] + [[ch["k"], s] for s in signals]
     charts = sorted({s[1] for s in ch["sig"]})
-    if len(charts) < d["confirm_charts"]:
+    # The failure chart is the only one on its stream, so it may confirm
+    # itself by signalling cusum_confirm observations in a row.
+    run = sum(1 for s in ch["sig"] if s[1] == "cusum" and s[0] > ch["k"] - d["cusum_confirm"])
+    if len(charts) < d["confirm_charts"] and run < d["cusum_confirm"]:
         return
     direction = "down" if ch["ew"] < 0 and "cusum" not in charts else "up"
     promoted = [p for p in st["promotions"] if str(p[0]) <= at]

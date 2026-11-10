@@ -33,4 +33,4 @@ Generated from `data.jsonl` by the learning pipeline. Do not edit by hand.
 
 ## Secrets
 
-- Ask for API keys through the secure credential form. Never write a key into a file, commit, log or reply; if one is pasted in chat, do not repeat it and suggest rotating it. Keys were pasted into chat three times in past projects. `data-keys-form`
+- Ask for API keys through the secure credential form, or add a NEEDS_YOU item with the clicks to store the key in the environment's settings. Never write a key into a file, commit, log or reply; if one is pasted in chat, do not repeat it and suggest rotating it. Keys were pasted into chat three times in past projects. `data-keys-form`

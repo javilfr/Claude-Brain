@@ -1,6 +1,6 @@
 ---
 name: writer
-description: Starts cold on a mid-cost model: use for long or voice-sensitive prose (reports, articles, guides, chapters, translations, Spanish and English editions), not short replies. Works in parts, reports measured word counts, matches the requested language.
+description: Starts cold: use for long or voice-sensitive prose (reports, articles, guides, chapters, translations), not short replies. Works in parts, measures word counts, matches the requested language.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: opus
 effort: medium

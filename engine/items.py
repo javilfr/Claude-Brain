@@ -1,24 +1,35 @@
-"""Memory items: one schema for rules, facts, preferences and playbook lines.
+"""Memory items: one schema for rules, pitfalls, facts, preferences and playbook lines.
 
 Files (JSONL, one item per line):
   brain:   memory/items.jsonl, memory/facts.jsonl, owner/standing.jsonl,
            owner/preferences.jsonl, playbooks/<family>.jsonl
   project: .brain/memory/*.jsonl   (scope "project")
+
+Optional fields (round2/01 sections 3.6, 3.7, 3.15):
+  valid_from, valid_to  ISO dates; facts are bi-temporal, a superseded item
+                        gets ``valid_to`` and stays on disk as history;
+  superseded_by         ids of the items that replaced this one;
+  by_model              model that wrote the lesson, because memory written
+                        by a stronger model can mislead a weaker one.
+A ``pitfall`` is a rule learned from a failure that was later fixed; like a
+rule it can never come from text that was merely read.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import re
 from pathlib import Path
 
 from . import common as c
 
-TYPES = ("rule", "fact", "preference", "standing", "playbook")
+TYPES = ("rule", "pitfall", "fact", "preference", "standing", "playbook")
 TRUST = ("owner-stated", "observed", "derived", "seed", "external")
 STATUS = ("candidate", "probation", "active", "demoted", "retired")
 FAMILIES = ("software", "data", "knowledge", "language", "operations")
 MAX_TEXT = 400
 ID_RE = re.compile(r"^[a-z]{2,8}-[a-z0-9][a-z0-9-]{1,60}$")
 SCOPE_RE = re.compile(r"^(global|project|family:(%s))$" % "|".join(FAMILIES))
+MODEL_RE = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,60}$")
 
 # Prior (helpful, harmful) pseudo-counts by trust: what you stated starts strong.
 PRIOR = {"owner-stated": (8, 0), "observed": (2, 1), "seed": (2, 1), "derived": (1, 1), "external": (1, 1)}
@@ -46,6 +57,13 @@ def normalise(item: dict) -> dict:
     return out
 
 
+def _date(v) -> _dt.date | None:
+    try:
+        return _dt.date.fromisoformat(str(v)[:10]) if v else None
+    except ValueError:
+        return None
+
+
 def validate_item(item: dict) -> list[str]:
     """Problems with one item; empty list means valid."""
     errs: list[str] = []
@@ -67,7 +85,7 @@ def validate_item(item: dict) -> list[str]:
         errs.append(f"{iid}: status must be one of {STATUS}")
     if item.get("importance", 2) not in (1, 2, 3):
         errs.append(f"{iid}: importance must be 1, 2 or 3")
-    for k in ("class", "evidence", "supersedes", "conflicts"):
+    for k in ("class", "evidence", "supersedes", "conflicts", "superseded_by"):
         if not isinstance(item.get(k, []), list):
             errs.append(f"{iid}: {k} must be a list")
     for k in ("helpful", "harmful", "uses", "sessions", "projects"):
@@ -76,6 +94,14 @@ def validate_item(item: dict) -> list[str]:
             errs.append(f"{iid}: {k} must be a non-negative integer")
     if not item.get("created"):
         errs.append(f"{iid}: created date missing")
+    for k in ("valid_from", "valid_to"):
+        if item.get(k) is not None and _date(item[k]) is None:
+            errs.append(f"{iid}: {k} must be an ISO date (YYYY-MM-DD)")
+    vf, vt = _date(item.get("valid_from")), _date(item.get("valid_to"))
+    if vf and vt and vt < vf:
+        errs.append(f"{iid}: valid_to is before valid_from")
+    if "by_model" in item and not MODEL_RE.match(str(item["by_model"])):
+        errs.append(f"{iid}: by_model must be a model id or alias")
     if item.get("type") == "fact" and item.get("trust") == "external" and not item.get("source"):
         errs.append(f"{iid}: an external fact needs a source")
     # Text that was only read (web pages, project files, tool output) can supply
