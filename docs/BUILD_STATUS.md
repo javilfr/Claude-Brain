@@ -107,3 +107,23 @@ Blocking items from the final review, all fixed: a model could label its own not
 - Helpers were 73% of the cost. The first ten analysts ran on the session's model because nothing set theirs; later helpers used the brain's own agents or an explicit cheaper model. That is the reason every brain agent file sets its model.
 - The main conversation read 99% of its input from cache. Three tool results exceeded 5,000 tokens.
 - This was a deliberately heavy session: two research rounds of ten agents each were asked for by name. It is not a baseline for normal work.
+
+## 2026-11-10 improvement session (CB-200 to CB-209)
+
+### CB-200 Baseline and self-audit
+
+Every line below is a command run at the start of this session, before any change.
+
+| Check | Result |
+|---|---|
+| `python3 -m unittest discover -s tests -t .` | 407 tests, OK, 37.7 s |
+| `brain doctor` | brain is healthy; always-loaded budget about 2550 tokens; model facts verified 0 days ago |
+| `brain lint` | 0 errors, 0 notes |
+| `brain hr audit` | 100 templates in 10 groups (scout 0, researcher 17, builder 48, writer 19, reviewer 15, redteam 1); rack is sound |
+| `brain lint --transcript` | 0 whole-file re-reads, 0 serial read-only runs, 1 model, 0 helpers, 95% input from cache |
+| `brain items check` | 141 items in 9 files, all valid |
+| `brain eval audit` | 12 tasks, 12 sound |
+| `brain learn consolidate` | first real delta `d-20261110-a431e755f2`: 3 ops (APPEND_STAT 1, MARK_INBOX 1, ML_FOLD 1); 1 ledger row, 2 hire records folded into statistics, inbox empty |
+| `brain learn verify` | 1 delta replayed on `origin/main`; learned zone matches |
+
+Differs from the handover: the build session's 407 tests and clean audits reproduce exactly. The "brain is on its working branch, not `main`" line above is out of date (commit `19fb016`: the owner merged it); CB-209 corrects it.
