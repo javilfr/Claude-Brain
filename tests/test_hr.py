@@ -193,6 +193,32 @@ class Wage(Base):
 
 
 class Briefs(Base):
+    def test_agent_without_a_shell_is_told_the_lead_runs_the_check(self):
+        # CB-205 review: 17 researcher templates said "{check} passes" to an agent with no Bash
+        t = {"id": "r", "role_line": "Finds things.", "method": ["Read sources, because memory is stale."], "drift": "",
+             "scope_rule": "Read-only.", "done_check": "Every claim has a source; {check} passes.", "return_contract": "Short.",
+             "pitfalls": []}
+        b = hr.compose_brief(t, "researcher", "Find X.", "Y.", [], [], "test -s memo.md", "sonnet", "medium", "n.md")
+        self.assertIn("the lead's check `test -s memo.md`", b)
+        self.assertNotIn("Run `test -s memo.md` yourself", b)
+        b = hr.compose_brief(t, "builder", "Find X.", "Y.", [], [], "make test", "sonnet", "medium", "n.md")
+        self.assertIn("`make test` passes", b)
+
+    def test_no_check_keeps_the_template_evidence_clauses(self):
+        t = {"id": "d", "role_line": "Critiques.", "method": ["Score each criterion, because vague praise hides defects."],
+             "drift": "", "scope_rule": "Read-only.", "done_check": "Every criterion has a score and a screenshot; {check} passes.",
+             "return_contract": "Short.", "pitfalls": []}
+        b = hr.compose_brief(t, "reviewer", "Critique it.", "Y.", [], [], "", "sonnet", "medium", "n.md")
+        self.assertIn("Every criterion has a score and a screenshot", b)
+        self.assertNotIn("{check}", b)
+
+    def test_outside_content_line_for_templates_that_fetch(self):
+        t = {"id": "f", "role_line": "Builds.", "method": ["Fetch the current API docs, because recalled endpoints drift."],
+             "drift": "", "scope_rule": "Owns src.", "done_check": "{check} exits 0.", "return_contract": "Short.", "pitfalls": []}
+        self.assertIn(hr.HYGIENE, hr.compose_brief(t, "builder", "Do it.", "Y.", [], [], "make", "sonnet", "medium", "n.md"))
+        t["method"] = ["Write the parser, because input varies."]
+        self.assertNotIn(hr.HYGIENE, hr.compose_brief(t, "builder", "Do it.", "Y.", [], [], "make", "sonnet", "medium", "n.md"))
+
     def test_brief_has_every_part_and_stays_short(self):
         text = hr.compose_brief(self.rack[0], "builder", "Add the settings screen.", "The owner needs it on his phone.", ["src/settings/"],
                                 ["docs/spec.md, section 2"], "npm test", "sonnet", "medium", "/x/notes.md")

@@ -31,7 +31,7 @@ Plus three to five `method` lines: concrete, checkable practices, each with its 
 | `scope_rule` | owns / does not touch / at the edge | 40 words |
 | `done_check` | what proves it; may contain `{check}` for the task's own command | 40 words |
 | `return_contract` | order, word cap, overflow file, verified versus unverified | 60 words |
-| `pitfalls` | the failure modes of agents in this work | 1 to 3, 22 words each |
+| `pitfalls` | the failure modes of agents in this work | 1 or 2, 22 words each (only two are rendered) |
 | `needs` | what the lead must supply for the brief to be complete | up to 5 |
 | `size` | S, M, L or XL: the starting wage band | |
 | `risk` | trivial, standard, high, one-way-door | |
@@ -53,7 +53,7 @@ The stable body (role line, method, drift, scope rule, done check, return contra
 
 ## How a brief is composed
 
-`brain hr hire` renders, in this order: `<task>` (goal), why, the working folder, the role line, `<scope>`, `<inputs>` (paths, never pasted content), the template's method lines and drift followed by every constraint the lead added (those are never dropped), up to two pitfalls, `<done_when>`, a tier block chosen by model and effort, a line about outside content for agents that read it, and `<return>`. With no acceptance command, `<done_when>` asks for named evidence instead of pointing at a command that does not exist.
+`brain hr hire` renders, in this order: `<task>` (goal), why, the working folder, the role line, `<scope>`, `<inputs>` (paths, never pasted content), the template's method lines and drift followed by every constraint the lead added (those are never dropped), up to two pitfalls, `<done_when>`, a tier block chosen by model and effort, a line about outside content for agents that read it or whose template fetches pages or APIs, and `<return>`. With no acceptance command, `<done_when>` keeps the template's own evidence clauses (the ones that do not mention the check) and asks for named evidence, instead of pointing at a command that does not exist. For an agent without a shell (researcher, redteam, scout), the check is named as the lead's, which runs it after the helper returns.
 
 | Model and effort | Added | Left out |
 |---|---|---|

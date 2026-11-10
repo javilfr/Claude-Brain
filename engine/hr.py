@@ -37,6 +37,8 @@ CONTRACT_ID = re.compile(r"^h-\d{8}-[0-9a-f]{6}(-\d+)?$")
 BRIEF_WARN, BRIEF_MAX = 350, 500  # words: above the first a note, above the second an error
 WRITES = {"builder", "writer"}                 # base agents that change files
 READS_OUTSIDE = {"researcher"}                 # base agents that read untrusted content
+RUNS_COMMANDS = {"builder", "writer", "reviewer"}  # base agents with Bash (.claude/agents/*.md)
+FETCHES = re.compile(r"\b(fetch|fetched|curl|web page|webpage|live page|api|docs online|pricing page|registry|registries)\b", re.I)
 STABLE_FIELDS = ("role_line", "method", "drift", "scope_rule", "done_check", "return_contract")
 
 DEFAULT_CFG = {
@@ -474,18 +476,29 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
         lines += ["", "How:"] + [f"- {x}" for x in constraints]
     if (t or {}).get("pitfalls"):
         lines.append("Watch for: " + " ".join(p.rstrip(".") + "." for p in t["pitfalls"][:2]))
-    if check:
-        done = (t or {}).get("done_check", "{check} exits 0.").replace("{check}", f"`{check}`")
+    evidence = "The outcome in the task is met, and your return names the evidence that shows it (a file and line, an output, a measurement)."
+    template_done = (t or {}).get("done_check", "{check} exits 0.")
+    if check and base_agent in RUNS_COMMANDS:
+        done = template_done.replace("{check}", f"`{check}`")
         if check not in done:
             done += f" Run `{check}` yourself and report its last line."
+    elif check:
+        # This agent has no shell: the lead runs the check after it returns.
+        done = template_done.replace("{check}", f"the lead's check `{check}`")
+        if check not in done:
+            done += f" The lead runs `{check}` after you return; you cannot run commands, so make the result something it can pass."
+        else:
+            done += " (The lead runs it; you cannot.)"
     else:
-        # No command was given: never point at a check that does not exist.
-        done = "The outcome in the task is met, and your return names the evidence that shows it (a file and line, an output, a measurement)."
+        # No command was given: keep the template's own evidence clauses and
+        # never point at a check that does not exist.
+        kept = [p.strip() for p in re.split(r"(?<=[;.])\s+", template_done) if p.strip() and "{check}" not in p]
+        done = (" ".join(kept).rstrip(";").rstrip(".") + "; your return names the evidence for each.") if kept else evidence
     lines += ["", f"<done_when>{done}</done_when>"]
     block = tier_block(model_alias, effort, base_agent)
     if block:
         lines += ["", block]
-    if base_agent in READS_OUTSIDE:
+    if base_agent in READS_OUTSIDE or FETCHES.search(" ".join(constraints + [template_done])):
         lines += ["", HYGIENE]
     ret = (t or {}).get("return_contract") or "At most 200 words: what you did, the check's result, anything you assumed."
     lines += ["", f"<return>{ret} Longer notes go in {notes_path}. {HONESTY}</return>"]
