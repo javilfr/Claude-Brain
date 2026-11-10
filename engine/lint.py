@@ -684,13 +684,15 @@ NOTE_SHORT = {
 }
 
 
-def _note_lines(hits: dict[str, list[str]], full: bool, width: int = 230) -> list[str]:
-    """One line per rule: its count and as many places as fit; every hit with ``full``."""
+def _note_lines(hits: dict[str, list[str]], full: bool) -> list[str]:
+    """One line per rule: its count and as many places as fit (fewer for a
+    rule that only reports); every hit with ``full``."""
     out = []
     for rule in RULES:
         rows = hits.get(rule) or []
         if rule not in REPORT_ONLY | NOTE_ONLY or not rows:
             continue
+        width = 150 if rule in REPORT_ONLY else 230
         if full:
             out += [f"note: {r}" for r in rows]
             continue

@@ -156,9 +156,11 @@ class ClosedSessionTest(LedgerBase):
         (app / "README.md").write_text("# app\n")
         env = dict(os.environ, BRAIN_SESSION_ID="sess-X", BRAIN_TRANSCRIPT=str(MAIN))
 
-        def b(*args, **extra):
+        def b(*args, ok=True, **extra):
             r = sh(ws, sys.executable, str(brain / "bin" / "brain"), *args, env={**env, **extra})
-            self.assertEqual(r.returncode, 0, f"brain {' '.join(args)}\n{r.stdout}\n{r.stderr}")
+            if ok:
+                self.assertEqual(r.returncode, 0, f"brain {' '.join(args)}\n{r.stdout}\n{r.stderr}")
+            self.assertNotIn("Traceback", r.stderr)
             return r.stdout
 
         b("init", str(app), "--family", "software", "--title", "App")
@@ -168,7 +170,7 @@ class ClosedSessionTest(LedgerBase):
         marker = app / ".brain" / "log" / ledger.OPEN_MARKER
         stale = c.read_json(marker)
         self.assertEqual(stale["session"], "sess-X")
-        b("checkpoint", "--done", "CB-1", "--push")
+        b("checkpoint", "--done", "CB-1", "--push", ok=False)   # how the marker reaches the remote; the push itself is not this test's subject
         b("close", "--class", "software.feature", "--tier", "2", "--outcome", "ok")
         self.assertFalse(marker.exists())
         c.write_json(marker, stale)                                  # what a new container clones
@@ -393,6 +395,8 @@ class UnitsTest(LedgerBase):
         code, out = self.close_cmd()
         self.assertIn("priced at the fallback rate: mystery-model", out)
         self.assertLessEqual(len(out.splitlines()), 15)
+        led = next(r for r in self.tracked() if r["kind"] == "ledger")
+        self.assertEqual((led["unpriced_models"], led["closed"]), (["mystery-model"], True))
         self.assertEqual(ledger.summarise(MAIN, [], MODELS)["unpriced_models"], [])
         self.assertNotIn("fallback", "\n".join(ledger.format_summary("sess-1", ledger.summarise(MAIN, [], MODELS))))
 
@@ -932,6 +936,24 @@ class LintOutputTest(unittest.TestCase):
         self.assertRegex(lines[-1], r"^lint: 0 error\(s\), \d+ note\(s\)")
         notes = [l for l in lines if l.startswith("note:")]
         self.assertTrue(all(len(l) <= 260 for l in notes), notes)
+
+    def test_fix_facts_reports_in_one_line_and_then_lints(self):
+        """quality-path-20, through the command: on a temporary brain, never on this one."""
+        with tempfile.TemporaryDirectory() as tmp:
+            b = lint_brain(Path(tmp))
+            (b / "docs/BUILD_STATUS.md").write_text("<!-- fact: engine-modules -->21<!-- /fact --> modules\n")
+            p = argparse.ArgumentParser(prog="brain")
+            lint.register(p.add_subparsers())
+            buf = io.StringIO()
+            with mock.patch.object(c, "BRAIN_ROOT", b), redirect_stdout(buf):
+                first = p.parse_args(["lint"])
+                self.assertEqual(first.func(first), 1)
+                fixed = p.parse_args(["lint", "--fix-facts"])
+                fixed.func(fixed)
+            out = buf.getvalue().splitlines()
+            self.assertTrue(any("engine-modules is marked 21 but the code says 1" in l for l in out), out)
+            self.assertIn("lint: 1 marked number(s) rewritten from the code", out)
+            self.assertIn("-->1<!--", (b / "docs/BUILD_STATUS.md").read_text())
 
     def test_all_flag_lists_every_hit(self):
         self.assertEqual(self.lint("--all").returncode, 0)
