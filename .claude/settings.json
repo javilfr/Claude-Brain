@@ -4,14 +4,20 @@
       {
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [
-          {"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py", "timeout": 5}
+          {"type": "command", "command": "[ -f \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py ] || exit 0; python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py", "timeout": 5}
+        ]
+      },
+      {
+        "matcher": "NotebookEdit|Bash",
+        "hooks": [
+          {"type": "command", "command": "[ -f \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py ] || exit 0; python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py", "timeout": 5}
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          {"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_end.py", "timeout": 20}
+          {"type": "command", "command": "[ -f \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_end.py ] || exit 0; python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_end.py", "timeout": 20}
         ]
       }
     ]

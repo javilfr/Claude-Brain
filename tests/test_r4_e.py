@@ -408,5 +408,243 @@ class CloseNoteTest(LedgerBase):
         self.assertEqual(code, 0, out)
 
 
+def temp_brain(locked: bool) -> Path:
+    tmp = Path(tempfile.mkdtemp())
+    shutil.copytree(ROOT / "engine", tmp / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(ROOT / ".claude" / "hooks", tmp / ".claude" / "hooks")
+    (tmp / "memory").mkdir()
+    shutil.copy(ROOT / "memory" / "models.json", tmp / "memory" / "models.json")
+    c.write_json(tmp / "VERSION.json", {"brain": "1.0.0", "learned_zone_locked": locked})
+    return tmp
+
+
+def run_guard(brain: Path, payload, cwd: Path | None = None) -> tuple[int, str, str]:
+    stdin = payload if isinstance(payload, str) else json.dumps(payload)
+    p = subprocess.run([sys.executable, "-B", str(brain / ".claude" / "hooks" / "guard_paths.py")], input=stdin,
+                       capture_output=True, text=True, timeout=20, cwd=str(cwd or brain))
+    return p.returncode, p.stdout, p.stderr
+
+
+class GuardHookTest(unittest.TestCase):
+    """quality-path-08: after the lock, one edit removed it. I-09 needs the
+    hook to stop at kernel files, to refuse the lock's own files, and to see
+    shell writes."""
+
+    def setUp(self):
+        self.brain = temp_brain(locked=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.brain)
+
+    def edit(self, rel, key="file_path"):
+        return run_guard(self.brain, {"tool_name": "Edit", "tool_input": {key: str(self.brain / rel)}})
+
+    def bash(self, command, cwd=None):
+        return run_guard(self.brain, {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(cwd or self.brain)})
+
+    def test_guard_hook_asks_for_kernel_paths_when_locked(self):
+        for rel in ("engine/learn.py", "CLAUDE.md", "memory/models.json", "docs/new-file.md"):
+            with self.subTest(rel):
+                code, out, err = self.edit(rel)
+                self.assertEqual((code, err), (0, ""))
+                decision = json.loads(out)["hookSpecificOutput"]
+                self.assertEqual((decision["hookEventName"], decision["permissionDecision"]), ("PreToolUse", "ask"))
+                self.assertIn("kernel change: needs the owner", decision["permissionDecisionReason"])
+                self.assertEqual(len(out.strip().splitlines()), 1)
+
+    def test_guard_hook_denies_the_lock_machinery(self):
+        for rel in ("VERSION.json", ".claude/hooks/guard_paths.py", ".claude/hooks/new.py", ".claude/settings.json", "engine/guard.py"):
+            with self.subTest(rel):
+                code, out, err = self.edit(rel)
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn("lock", err)
+                self.assertEqual(len(err.strip().splitlines()), 1)
+
+    def test_guard_hook_reads_notebook_path(self):
+        code, _, err = self.edit("memory/analysis.ipynb", key="notebook_path")
+        self.assertEqual(code, 2)
+        self.assertIn("learned zone", err)
+        self.assertEqual(self.edit("learning/inbox/a.ipynb", key="notebook_path")[0], 0)
+
+    def test_inbox_state_and_outside_paths_pass_silently(self):
+        for rel in ("learning/inbox/2026-11-10-s.jsonl", "learning/radar/state.json"):
+            self.assertEqual(self.edit(rel), (0, "", ""))
+        outside = run_guard(self.brain, {"tool_input": {"file_path": str(self.brain.parent / "elsewhere.txt")}})
+        self.assertEqual(outside, (0, "", ""))
+
+    def test_bash_write_to_learned_zone_is_caught(self):
+        b = self.brain
+        writes = [
+            "echo x >> memory/items.jsonl",
+            f"echo x > {b}/owner/standing.jsonl",
+            "cat new.jsonl | tee -a stats/ml.json",
+            "sed -i 's/a/b/' playbooks/software.md",
+            "rm -f memory/items.jsonl",
+            "rm -rf memory",
+            "mv memory/items.jsonl /tmp/gone.jsonl",
+            "cp /tmp/forged.jsonl memory/items.jsonl",
+            "git checkout -- memory/items.jsonl",
+            "git restore learning/manifest.jsonl",
+            "cd /tmp && truncate -s 0 \"$CLAUDE_PROJECT_DIR\"/memory/items.jsonl",
+            "python3 -c \"open('memory/items.jsonl', 'w').write('x')\"",
+            "sed -i 's/true/false/' VERSION.json",
+            "echo '{}' > .claude/settings.json",
+            "rm .claude/hooks/guard_paths.py",
+            "cd memory && rm items.jsonl",
+            "cd memory; echo x > items.jsonl",
+            "bash -lc 'echo x > memory/items.jsonl'",
+            "python3 - <<'PY'\nfrom pathlib import Path\nPath('memory/items.jsonl').write_text('x')\nPY",
+            "git checkout -- .",
+            "sudo rm -rf .claude",
+        ]
+        for command in writes:
+            with self.subTest(command):
+                code, out, err = self.bash(command)
+                self.assertEqual((code, out), (2, ""), err)
+                self.assertEqual(len(err.strip().splitlines()), 1)
+                lock = any(x in command for x in ("VERSION", ".claude", "-- ."))
+                self.assertIn("lock" if lock else "brain learn", err)
+        reads = [
+            "cat memory/items.jsonl",
+            "wc -l memory/items.jsonl 2>/dev/null",
+            "grep -c rule memory/items.jsonl > /tmp/count.txt",
+            "cp memory/items.jsonl /tmp/backup.jsonl",
+            "python3 bin/brain learn status 2>&1 | head -5",
+            "git diff -- memory/items.jsonl",
+            "echo x >> learning/inbox/2026-11-10-s.jsonl",
+            "rm /tmp/memory/items.jsonl",
+            "echo 'rm memory/items.jsonl is what the guard stops'",
+            "sed -n 1,5p VERSION.json",
+            "python3 bin/brain recall x > /tmp/out.txt; cat memory/items.jsonl",
+            "python3 -c \"print(open('memory/items.jsonl').read())\"",
+            "git checkout main",
+            "git stash",
+            "cp -r memory /tmp/backup",
+            "cd /tmp && rm items.jsonl",
+        ]
+        for command in reads:
+            with self.subTest(command):
+                self.assertEqual(self.bash(command), (0, "", ""))
+
+    def test_bash_paths_are_resolved_from_the_working_folder(self):
+        sub = self.brain / "memory"
+        self.assertEqual(self.bash("rm items.jsonl", cwd=sub)[0], 2)
+        self.assertEqual(self.bash("rm items.jsonl", cwd=self.brain.parent)[0], 0)
+        self.assertEqual(self.bash(f"rm {self.brain.name}/memory/items.jsonl", cwd=self.brain.parent)[0], 2)
+        self.assertEqual(self.bash(f"git -C {self.brain} checkout -- memory/items.jsonl", cwd=self.brain.parent)[0], 2)
+
+    def test_hook_still_fails_open_and_stays_fast(self):
+        import time
+        for stdin in ("not json", "", "[]", '{"tool_input": {}}', '{"tool_input": {"command": 5}}',
+                      '{"tool_input": {"command": "echo \\"unbalanced"}}', '{"tool_input": {"command": ""}}'):
+            with self.subTest(stdin):
+                t0 = time.monotonic()
+                self.assertEqual(run_guard(self.brain, stdin), (0, "", ""))
+                self.assertLess(time.monotonic() - t0, 1.0)
+
+    def test_an_unlocked_brain_behaves_as_before(self):
+        c.write_json(self.brain / "VERSION.json", {"learned_zone_locked": False})
+        for payload in ({"tool_input": {"file_path": str(self.brain / "VERSION.json")}},
+                        {"tool_input": {"file_path": str(self.brain / "engine" / "learn.py")}},
+                        {"tool_input": {"file_path": str(self.brain / "memory" / "items.jsonl")}},
+                        {"tool_input": {"notebook_path": str(self.brain / "memory" / "a.ipynb")}},
+                        {"tool_input": {"command": "rm -rf memory"}, "cwd": str(self.brain)}):
+            with self.subTest(str(payload)[:60]):
+                self.assertEqual(run_guard(self.brain, payload), (0, "", ""))
+
+
+class GuardEngineTest(unittest.TestCase):
+    def test_zone_of_ignores_case(self):
+        """quality-path-08: on a disk that ignores case MEMORY/items.jsonl is memory/items.jsonl."""
+        for path, zone in {"MEMORY/items.jsonl": "learned", "Owner/standing.jsonl": "learned",
+                           "Learning/Inbox/a.jsonl": "inbox", "LEARNING/RADAR/state.json": "state",
+                           "memory/MODELS.json": "kernel", "learning/promotion_rules.md": "kernel",
+                           "Engine/learn.py": "kernel"}.items():
+            with self.subTest(path):
+                self.assertEqual(guard.zone_of(path), zone)
+
+    def test_lock_machinery_is_named_in_one_place(self):
+        for rel in ("VERSION.json", ".claude/settings.json", ".claude/hooks/x.py", "engine/guard.py", "version.json"):
+            self.assertTrue(guard.is_lock_file(rel), rel)
+        for rel in ("engine/learn.py", "memory/items.jsonl", ".claude/skills/x/SKILL.md"):
+            self.assertFalse(guard.is_lock_file(rel), rel)
+
+    def test_unlocking_in_a_diff_fails_guard(self):
+        """quality-path-08: `guard diff` exited 0 on a diff that set the lock back to false."""
+        root = Path(tempfile.mkdtemp())
+        try:
+            c.write_json(root / "VERSION.json", {"learned_zone_locked": True})
+            (root / "evals").mkdir()
+            (root / "evals" / "known_project_ids.txt").write_text("# ids\n")
+            git_init(root)
+            sh(root, "git", "add", "-A")
+            sh(root, "git", "commit", "-q", "-m", "locked")
+            ok, lines = guard.check_diff(root, "HEAD")
+            self.assertTrue(ok, lines)
+            for unlocked in ({"learned_zone_locked": False}, {"brain": "1.0.0"}):
+                with self.subTest(unlocked):
+                    c.write_json(root / "VERSION.json", unlocked)
+                    ok, lines = guard.check_diff(root, "HEAD")
+                    self.assertFalse(ok)
+                    hit = [l for l in lines[:15] if "unlocks the learned zone" in l]
+                    self.assertEqual(len(hit), 1, lines)
+            (root / "VERSION.json").unlink()
+            self.assertFalse(guard.check_diff(root, "HEAD")[0])
+        finally:
+            shutil.rmtree(root)
+
+    def test_first_lock_is_not_an_unlock(self):
+        root = Path(tempfile.mkdtemp())
+        try:
+            c.write_json(root / "VERSION.json", {"learned_zone_locked": False})
+            git_init(root)
+            sh(root, "git", "add", "-A")
+            sh(root, "git", "commit", "-q", "-m", "open")
+            c.write_json(root / "VERSION.json", {"learned_zone_locked": True})
+            ok, lines = guard.check_diff(root, "HEAD")
+            self.assertTrue(ok, lines)
+        finally:
+            shutil.rmtree(root)
+
+
+class SettingsTest(unittest.TestCase):
+    def commands(self):
+        s = json.loads((ROOT / ".claude" / "settings.json").read_text())
+        return [h["command"] for event in s["hooks"].values() for entry in event for h in entry["hooks"]]
+
+    def test_hook_commands_exit_zero_when_the_script_is_missing(self):
+        """quality-path-09: python3 exits 2 when it cannot open the script, and
+        2 is the code that blocks an edit and blocks stopping."""
+        empty = Path(tempfile.mkdtemp())
+        try:
+            self.assertGreaterEqual(len(self.commands()), 3)
+            for command in self.commands():
+                for env in ({"CLAUDE_PROJECT_DIR": str(empty)}, {}):
+                    with self.subTest(command=command[-40:], env=bool(env)):
+                        base = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+                        p = subprocess.run(["sh", "-c", command], input="{}", capture_output=True, text=True,
+                                           env={**base, **env}, cwd=str(empty))
+                        self.assertEqual((p.returncode, p.stdout, p.stderr), (0, "", ""))
+        finally:
+            shutil.rmtree(empty)
+
+    def test_hook_commands_still_run_the_scripts(self):
+        brain = temp_brain(locked=True)
+        try:
+            shutil.copy(ROOT / ".claude" / "settings.json", brain / ".claude" / "settings.json")
+            payload = json.dumps({"tool_input": {"file_path": str(brain / "memory" / "items.jsonl")}})
+            for command in [x for x in self.commands() if "guard_paths.py" in x]:
+                p = subprocess.run(["sh", "-c", command], input=payload, capture_output=True, text=True,
+                                   env={**os.environ, "CLAUDE_PROJECT_DIR": str(brain)})
+                self.assertEqual(p.returncode, 2, p.stderr)
+        finally:
+            shutil.rmtree(brain)
+
+    def test_the_guard_also_sees_shell_and_notebook_calls(self):
+        s = json.loads((ROOT / ".claude" / "settings.json").read_text())
+        matchers = {m for e in s["hooks"]["PreToolUse"] if "guard_paths.py" in e["hooks"][0]["command"] for m in e["matcher"].split("|")}
+        self.assertLessEqual({"Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"}, matchers)
+
+
 if __name__ == "__main__":
     unittest.main()
