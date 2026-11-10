@@ -160,3 +160,25 @@ Observations from this session (2026-11-10), not official statements; none is re
 | Do helpers honour the agent file's model and effort? | **Yes.** The CB-205 reviewer, launched with no override, ran every turn on `claude-opus-5-5` at effort `high`, as `.claude/agents/reviewer.md` sets. The two builders ran on `claude-sonnet-5-5` at effort `medium` (model also passed explicitly) | `"model"` and `"effort"` fields in each helper transcript under `~/.claude/projects/…/subagents/` |
 | Is `omitClaudeMd` honoured? | **Yes.** No helper transcript contains the brain's `CLAUDE.md` text ("First, size the request"); the main transcript contains it 3 times | `grep -c` over the transcripts |
 | Does an effort change mid-session keep the prompt cache? | Not testable from inside a session: the lead cannot change its own effort with a tool | Still open as CB-112 |
+
+### CB-205 Template quality pass
+
+A fresh-context reviewer (hire `h-20261110-872034`, rubric-mapper on opus, settled: 144,271 of 200,000, check passed) read all 100 templates against `hr/GUIDELINES.md`; findings with file and line in `docs/review/CB-205-templates.md` (0 blocking).
+
+Fixed (renderer changes reach every template; each has a test in `tests/test_hr.py`):
+
+| Finding | Fix |
+|---|---|
+| 18 researcher and redteam briefs said to run a command; those agents have no shell | Shell-less agents are told the lead runs the check at settlement (`NO_SHELL_CHECK`; rendered into exactly those 18) |
+| 9 builders and 2 reviewers needed current web pages with no web tools | A brief whose template or task asks for current docs, and whose agent has no web tools, says so and asks the helper to name the page instead of guessing (`NO_WEB`; 10 templates) |
+| Review templates without severity or confidence | Reviewer and redteam briefs without their own grading ask for severity and confidence (`FINDING_GRADES`; 10 templates) |
+| The outside-content line went only to researchers | Also to reviewers and redteam, whose work is reading material they did not write |
+| canonical-facts-keeper looped "until the script finds none" on files it may not edit | Fix only owned documents; the loop ends at zero or at a list for the lead |
+| security-reviewer "top three paths"; premortem-redteam "three causes" against the redteam agent's "about five" | Every traced path tried or listed; about five causes |
+| migration-planner (researcher) told to inspect the running system | Works from config and exports in its inputs and names what it could not see |
+| visual-option-generator "three to five" against the source's "3-4" | Three or four |
+| voice-matcher "never" without a reason | Reason added |
+
+All 100 templates render a brief at most 403 words with no lint problem; `brain hr audit`: rack is sound.
+
+Left, with reasons: about 56 method lines in 48 templates state no reason (the reviewer's regex counts 74). Rewriting them is polish of unknown value until CB-203 shows whether a template beats a plain brief at all. The near-duplicate pairs (legal-citation-verifier / legal-research-analyst; api-integration-builder / api-live-prober) wait for selection data from CB-204. The research pass on the five thinly sourced data templates moved to CB-207. Owner pronouns in five templates are left as the owner's own files use them.

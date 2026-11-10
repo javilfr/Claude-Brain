@@ -36,7 +36,14 @@ RISKS = ("trivial", "standard", "high", "one-way-door")
 CONTRACT_ID = re.compile(r"^h-\d{8}-[0-9a-f]{6}(-\d+)?$")
 BRIEF_WARN, BRIEF_MAX = 350, 500  # words: above the first a note, above the second an error
 WRITES = {"builder", "writer"}                 # base agents that change files
-READS_OUTSIDE = {"researcher"}                 # base agents that read untrusted content
+READS_OUTSIDE = {"researcher", "reviewer", "redteam"}  # base agents whose work is reading material they did not write
+HAS_SHELL = {"builder", "writer", "reviewer"}  # base agents with Bash (.claude/agents/*.md)
+HAS_WEB = {"researcher"}                       # base agents with WebSearch and WebFetch
+FINDS = {"reviewer", "redteam"}                # base agents whose return is a list of findings
+NEEDS_WEB = re.compile(r"\b(current|latest|official) (docs|documentation|api|page|pages|release notes|changelog)\b|\bweb\b|\burl\b|\bonline\b", re.I)
+NO_SHELL_CHECK = "You have no shell: the lead runs it when settling, so make sure your output satisfies it."
+NO_WEB = "You have no web access: if current documentation is needed and is not in your inputs, say which page and stop short of guessing."
+FINDING_GRADES = "Give every finding a severity (blocking, should-fix, minor) and your confidence in it."
 STABLE_FIELDS = ("role_line", "method", "drift", "scope_rule", "done_check", "return_contract")
 
 DEFAULT_CFG = {
@@ -456,6 +463,11 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
         constraints.append(t["drift"])
     # What the lead added for this task is never dropped: it is the part no template knows.
     constraints += [e for e in (extra or []) if e.strip()]
+    stable = " ".join(str(v) for k, v in (t or {}).items() if k in STABLE_FIELDS)
+    if base_agent not in HAS_WEB and NEEDS_WEB.search(stable + " " + task):
+        constraints.append(NO_WEB)
+    if base_agent in FINDS and not re.search(r"severity|blocking|should-fix", stable, re.I):
+        constraints.append(FINDING_GRADES)
     if constraints:
         lines += ["", "How:"] + [f"- {x}" for x in constraints]
     if (t or {}).get("pitfalls"):
@@ -463,7 +475,11 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
     if check:
         done = (t or {}).get("done_check", "{check} exits 0.").replace("{check}", f"`{check}`")
         if check not in done:
-            done += f" Run `{check}` yourself and report its last line."
+            done += (f" Run `{check}` yourself and report its last line." if base_agent in HAS_SHELL
+                     else f" `{check}` is the check. {NO_SHELL_CHECK}")
+        elif base_agent not in HAS_SHELL:
+            # Found in the CB-205 review: 18 templates said to run a command their agent cannot run.
+            done += " " + NO_SHELL_CHECK
     else:
         # No command was given: never point at a check that does not exist.
         done = "The outcome in the task is met, and your return names the evidence that shows it (a file and line, an output, a measurement)."

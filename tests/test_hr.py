@@ -460,6 +460,28 @@ class ReviewFindings(Base):
         with_check = hr.compose_brief(tpl("y", done_check="The screen matches the spec."), "builder", "Do it.", "", [], [], "make ok", "opus", "high", "n")
         self.assertIn("Run `make ok` yourself", with_check)
 
+    def test_brief_never_asks_for_a_tool_the_base_agent_lacks(self):
+        """CB-205 review: 18 templates told shell-less agents to run a command; builders were told to read current docs with no web tools."""
+        for base in ("researcher", "redteam", "scout"):
+            text = hr.compose_brief(tpl("y", done_check="{check} exits 0."), base, "Do it.", "", [], [], "make ok", "opus", "high", "n")
+            self.assertNotIn("yourself", text, base)
+            self.assertIn(hr.NO_SHELL_CHECK, text, base)
+        builder = hr.compose_brief(tpl("y", method=["Read the latest documentation before coding, because APIs change."]),
+                                   "builder", "Do it.", "", [], [], "make ok", "opus", "high", "n")
+        self.assertIn(hr.NO_WEB, builder)
+        self.assertNotIn(hr.NO_SHELL_CHECK, builder)
+        researcher = hr.compose_brief(tpl("y", method=["Read the latest documentation, because APIs change."]),
+                                      "researcher", "Do it.", "", [], [], "", "opus", "high", "n")
+        self.assertNotIn(hr.NO_WEB, researcher)
+
+    def test_findings_are_graded_and_reviewers_get_the_outside_content_line(self):
+        plain = hr.compose_brief(tpl("y"), "reviewer", "Review it.", "", [], [], "", "opus", "high", "n")
+        self.assertIn(hr.FINDING_GRADES, plain)
+        self.assertIn(hr.HYGIENE, plain)
+        graded = hr.compose_brief(tpl("y", return_contract="Findings by severity."), "reviewer", "Review it.", "", [], [], "", "opus", "high", "n")
+        self.assertNotIn(hr.FINDING_GRADES, graded)
+        self.assertNotIn(hr.FINDING_GRADES, hr.compose_brief(tpl("y"), "builder", "Do it.", "", [], [], "", "opus", "high", "n"))
+
     def test_one_malformed_template_does_not_break_hiring_and_the_audit_reports_it(self):
         """S8."""
         bad = [{"when": "no id at all"}, {"id": "int-keys", "base_agent": "builder", "name": "x", "when": "x", "role_line": "x", "keywords": [1, 2], "method": ["a"], "families": ["software"]}, "not an object"]
