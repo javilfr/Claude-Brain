@@ -246,16 +246,20 @@ class LabelledSets(unittest.TestCase):
     def test_silence_on_unanswerable_queries_and_what_more_would_cost(self):
         """learning-11: queries with no good answer drew noise instead of
         silence (27 of these 45 were silent, with 34 noise items). The shipped
-        cuts are the strongest that lose no recall@3 (decision 2): 30 silent.
-        The finding's 70% needs min_units 2 (43 silent) or a higher floor,
-        and each of those loses an English query, so they stay off; this test
-        pins both sides, so the switch is revisited if that price disappears."""
+        cuts are the strongest that lose no recall@3 (decision 2): 31 silent,
+        26 noise items. The finding's 70% needs min_units 2 (44 silent) or a
+        higher floor, and each of those loses an English query, so they stay
+        off; this test pins both sides, so the switch is revisited if that
+        price disappears."""
         none, en = group(self.rows, "none"), group(self.rows, "en")
         shipped = self.prod(none)
-        self.assertGreaterEqual(shipped["silent"], 30, shipped)
+        self.assertGreaterEqual(shipped["silent"], 31, shipped)
+        self.assertLessEqual(round(shipped["items"] * shipped["n"]), 26, shipped)
+        for query in ("write a poem about the sea", "who won the 1998 world cup"):  # the finding's examples
+            self.assertEqual(r.recall(query, brain_root=SNAP, config=self.cfg), [], query)
         strict = self.prod(none, min_units=2)
         self.assertGreaterEqual(strict["silent"] / strict["n"], 0.9, strict)
-        self.assertLessEqual(strict["items"] * strict["n"], 5)
+        self.assertLessEqual(round(strict["items"] * strict["n"]), 5)
         self.assertLess(self.prod(en, min_units=2)["recall"], self.prod(en)["recall"])
         self.assertEqual(self.cfg["min_units"], 1)
 
@@ -324,11 +328,12 @@ class LabelledSets(unittest.TestCase):
                 raise AssertionError(f"the golden test read live learned state: {path}")
             return real_json(path, default)
 
+        case = test_recall.GoldenRegressionTest
+        names = [n for n in unittest.defaultTestLoader.getTestCaseNames(case) if "fallback" not in n]  # slow, same setUp
         with mock.patch.object(it, "load_items", load), mock.patch.object(c, "read_json", read_json):
-            suite = unittest.defaultTestLoader.loadTestsFromTestCase(test_recall.GoldenRegressionTest)
             result = unittest.TestResult()
-            suite.run(result)
-        self.assertGreaterEqual(result.testsRun, 3)
+            unittest.TestSuite(map(case, names)).run(result)
+        self.assertGreaterEqual(result.testsRun, 2)
         self.assertEqual([str(e[1])[-300:] for e in result.failures + result.errors], [])
 
 

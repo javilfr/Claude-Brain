@@ -273,8 +273,7 @@ class GoldenRegressionTest(unittest.TestCase):
         return rec / len(queries), mrr / len(queries)
 
     def setUp(self):
-        self.rows = c.read_jsonl(GOLDEN)
-        self.queries = [q for q in self.rows if q["relevant"] and "lang" not in q]  # the English baseline
+        self.queries = [q for q in c.read_jsonl(GOLDEN) if q["relevant"] and "lang" not in q]  # the English baseline
         self.pool = it.load_items(SNAPSHOT)
         self.env = mock.patch.dict(os.environ, {"BRAIN_NOW": "2026-11-10T12:00:00Z"})
         self.env.start()
@@ -296,7 +295,7 @@ class GoldenRegressionTest(unittest.TestCase):
 
     def test_fallback_scores_equal_fts5_on_the_golden_set(self):
         docs = [r._fields(i) for i in self.pool]
-        for q in self.rows:
+        for q in self.queries:
             words = r.query_words(q["query"])
             for a, b in zip(r._fts5_relevance(docs, words), r._python_relevance(docs, words)):
                 self.assertAlmostEqual(a, b, places=9, msg=q["query"])

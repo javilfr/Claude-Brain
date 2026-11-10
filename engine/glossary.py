@@ -15,9 +15,11 @@ evals/recall_snapshot/):
 - One target per word, or two alternatives joined with ``|`` when Spanish
   has one word where the items use two (``cambiar`` is change or switch).
   Recall treats the alternatives as one unit of the query.
-- No key is an English word that memory uses, so an English request is never
-  rewritten. False friends (``actual``, ``red``, ``sea``, ``resume``) are
-  left out on purpose.
+- No key turns an English word that memory uses into another word, so an
+  English request is never rewritten (a generated form such as ``decide``
+  may map to itself). False friends (``actual``, ``red``, ``sea``,
+  ``resume``) are left out on purpose, and ``_ENGLISH`` lists the English
+  words a generated form would hit (``quite`` from quitar).
 - Keys are stored without accents and lower-case, the way recall folds a
   query. Verb entries are infinitives; their common forms are generated
   (``arreglar`` covers arregla, arreglo, arreglando, arreglado, arreglalo).
@@ -29,15 +31,17 @@ import functools
 
 # Dictation fillers, English and Spanish: words that carry no topic. Each one
 # left in a query is a term memory does not contain, which lowers every
-# item's coverage of the query and turns a hit into silence.
+# item's coverage of the query and turns a hit into silence. The four
+# function words on the second line are in many items, so they also drew
+# matches for requests memory has nothing on ("write a poem about the sea").
 FILLERS = frozenset(
     "ok okay uh um uhm erm hmm eh hey please pls basically actually literally really just like want "
-    "wanna gonna gotta whether oops listen "
+    "wanna gonna gotta whether oops about but where who "
     "bueno pues vale venga oye porfa porfavor claro digamos "
     "quiero quieres quiere quieren queremos queria quisiera querria gustaria".split())
 FILLER_PHRASES = tuple(tuple(p.split()) for p in (
-    "you know", "i mean", "i think", "i guess", "kind of", "sort of", "o sea", "es decir", "a ver", "en plan",
-    "la verdad", "por favor"))
+    "you know", "i mean", "i think", "i guess", "kind of", "sort of", "o sea", "es decir", "a ver", "la verdad",
+    "por favor"))
 
 # Spanish function words: articles, prepositions, pronouns, auxiliaries and
 # question words. (The oldest twenty are also in recall.STOP.)

@@ -207,24 +207,23 @@ def load_items(brain_root: Path | None = None, project: Path | None = None, incl
 
 
 def check_files(files: list[Path], project_files: list[Path] | tuple = ()) -> list[str]:
-    """Schema problems in ``files`` plus, for each of ``project_files``, the
-    rows a project file may not hold (see ``project_claim``)."""
+    """Schema problems in ``files`` and ``project_files``; a row a project
+    file may not hold (see ``project_claim``) is one problem, named once."""
     errs: list[str] = []
     seen: dict[str, str] = {}
     brain_ids = frozenset(str(r.get("id", "")) for f in files for r in c.read_jsonl(f))
-    for f in project_files:
-        for raw in c.read_jsonl(f):
-            why = project_claim(normalise(raw), brain_ids)
-            if why:
-                errs.append(f"{f.name}: {raw.get('id', '?')} {why}; a project file holds only project lessons")
     for f in [*files, *project_files]:
         raw_lines = [l for l in c.read_text(f).splitlines() if l.strip()]
         rows = c.read_jsonl(f)
         if len(rows) != len(raw_lines):
             errs.append(f"{f.name}: {len(raw_lines) - len(rows)} line(s) are not valid JSON objects")
         for it in rows:
-            errs += [f"{f.name}: {e}" for e in validate_item(normalise(it))]
             iid = it.get("id", "")
+            why = project_claim(normalise(it), brain_ids) if f in project_files else ""
+            if why:
+                errs.append(f"{f.name}: {iid or '?'} {why}; a project file holds only project lessons")
+                continue
+            errs += [f"{f.name}: {e}" for e in validate_item(normalise(it))]
             if iid in seen:
                 errs.append(f"{f.name}: duplicate id {iid} (also in {seen[iid]})")
             seen[iid] = f.name
