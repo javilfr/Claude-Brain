@@ -223,7 +223,8 @@ class ConsolidateTest(BrainCase):
         self.inbox(note("Check the phone layout at 390 pixels before calling a screen done", session="s1"))
         self.consolidate()
         (iid, _), = self.items().items()
-        self.inbox(outcome("s1"), used("s1", iid))  # helped once, but still one session
+        # learning-02: a candidate is credited only when the injection log showed it.
+        self.inbox(outcome("s1"), used("s1", iid, shown=True))  # helped once, but still one session
         self.consolidate()
         row = self.items()[iid]
         self.assertEqual((row["helpful"], row["sessions"], row["status"]), (1, 1, "probation"))
@@ -253,23 +254,31 @@ class ConsolidateTest(BrainCase):
         self.assertEqual((row["helpful"], row.get("harmful", 0), row["uses"]), (0, 0, 2))
 
     def test_harm_demotes_but_never_an_owner_item(self):
-        """I-08: harm from outcomes demotes a lesson, never what the owner said."""
-        c.write_jsonl(self.root / "memory/items.jsonl", [item("lsn-aa"), item("own-aa", trust="owner-stated")])
+        """I-08: harm from outcomes never reaches what the owner said: his item
+        takes no harm vote at all (learning-14). A learned lesson takes the
+        votes, but four red sessions in one week are not yet a case for
+        demoting it (redteam-11; the lower-bound case is in tests/test_r4_f.py)."""
+        c.write_jsonl(self.root / "memory/items.jsonl", [item("lsn-aa", provenance="note:s0"),
+                                                         item("own-aa", trust="owner-stated")])
         recs = []
         for i in range(4):
             recs += [outcome(f"f{i}", passed=False), used(f"f{i}", "lsn-aa"), used(f"f{i}", "own-aa")]
         self.inbox(*recs)
         self.consolidate()
         rows = self.items()
-        self.assertEqual(rows["lsn-aa"]["status"], "demoted")
-        self.assertEqual((rows["own-aa"]["harmful"], rows["own-aa"]["status"]), (4, "active"))
+        self.assertEqual((rows["lsn-aa"]["harmful"], rows["lsn-aa"]["status"]), (4, "active"))
+        self.assertEqual((rows["own-aa"].get("harmful", 0), rows["own-aa"]["uses"], rows["own-aa"]["status"]), (0, 4, "active"))
 
     def test_owner_stated_note_is_enough_alone(self):
+        """learning-01, redteam-02: one owner statement is enough alone only
+        when its quote is found again in a transcript on disk (covered by
+        OwnerQuoteTest below). A bare inbox line with owner-shaped evidence
+        and no transcript is never an active rule: it waits for him."""
         self.inbox(note("Reply in the language the owner writes in", trust="owner-stated",
                         evidence=(OWNER_EV,)))
         self.consolidate()
         (row,) = self.items().values()
-        self.assertEqual(row["status"], "active")
+        self.assertEqual((row["status"], row["trust"], row["awaiting_owner"]), ("candidate", "observed", True))
 
     def test_unverified_owner_stated_note_is_rejected_at_consolidation(self):
         """B3: a note written straight into the inbox with model-made owner
@@ -305,17 +314,19 @@ class ConsolidateTest(BrainCase):
     def test_pitfall_needs_a_fail_then_pass_pair(self):
         text = "Check the exact expected output string before the first version of a greeting command"
         pit = note(text, session="s2", signal="gate-failed", **{"class": ["software"]})
-        self.inbox(outcome("s1", cls="software.feature", passed=False, at="2026-11-10T10:00:00Z"),
-                   {"kind": "ledger", "session": "s2", "at": NOW, "model": "opus", "models": {}},
-                   outcome("s2", cls="software.feature", passed=True, at="2026-11-10T11:00:00Z"), pit)
+        # learning-13: the failure and the fix are in the note's own session
+        # (its gate log), not in two sessions that may be different projects.
+        runs = [{"gate": "checks", "exit": 1, "commit": "a"}, {"gate": "checks", "exit": 0, "commit": "b"}]
+        self.inbox({"kind": "ledger", "session": "s2", "at": NOW, "model": "opus", "models": {}},
+                   outcome("s2", cls="software.feature", passed=True, first_pass=False, at="2026-11-10T11:00:00Z",
+                           gate_runs=runs), pit)
         delta, _ = self.consolidate()
         (row,) = self.items().values()
         self.assertEqual(row["type"], "pitfall")
         self.assertTrue(row["id"].startswith("pit-"))
         self.assertEqual(row["by_model"], "opus")
-        fail, ok = (r["id"] for r in delta["ops"][0]["records"])
-        self.assertIn(f"outcome:{fail}", row["evidence"])
-        self.assertIn(f"outcome:{ok}", row["evidence"])
+        (fixed,) = (r["id"] for r in delta["ops"][0]["records"])
+        self.assertIn(f"outcome:{fixed}", row["evidence"])
         self.assertEqual(I.validate_item(row), [])
 
     def test_gate_failed_note_without_pair_stays_a_rule(self):
@@ -403,7 +414,8 @@ class ApplyTest(BrainCase):
         bad = learn.make_delta([{"op": "ADD", "file": "memory/items.jsonl", "item": item("BAD ID")}])
         self.assertFalse(learn.apply_delta(bad, self.root)[0])
         c.write_jsonl(self.root / "memory/items.jsonl", [item(f"pb-item-{i:02d}") for i in range(3)])
-        add = learn.make_delta([{"op": "ADD", "file": "memory/items.jsonl", "item": item("pb-new-one")}])
+        # redteam-04: a delta file can add only a candidate, so the new item is one.
+        add = learn.make_delta([{"op": "ADD", "file": "memory/items.jsonl", "item": item("pb-new-one", status="candidate", provenance="note:s1")}])
         ok, lines = learn.apply_delta(add, self.root, budget=3)
         self.assertFalse(ok)
         self.assertIn("budget", lines[0])
@@ -543,11 +555,13 @@ class VerifyTest(BrainCase):
 class DecayDigestTest(BrainCase):
     def test_decay_without_retention_uses_days_and_flags_stale_facts(self):
         learn.MLEARN = types.SimpleNamespace()  # no retention: fixed-day fallback
+        # redteam-01: only what a session's note created fades, so these are learned lessons.
+        made = {"provenance": "note:s1"}
         c.write_jsonl(self.root / "memory/items.jsonl", [
-            item("pb-old-one", last_used="2026-08-01"),                           # 101 days unused
-            item("pb-old-imp", last_used="2026-08-01", importance=3),             # important: kept
-            item("pb-dead-one", status="demoted", last_used="2026-01-01"),        # 313 days unused
-            item("pb-fresh-one", last_used="2026-11-01"),
+            item("pb-old-one", last_used="2026-08-01", **made),                           # 101 days unused
+            item("pb-old-imp", last_used="2026-08-01", importance=3, **made),             # important: kept
+            item("pb-dead-one", status="demoted", last_used="2026-01-01", **made),        # 313 days unused
+            item("pb-fresh-one", last_used="2026-11-01", **made),
         ])
         c.write_jsonl(self.root / "memory/facts.jsonl", [
             item("fact-price", type="fact", text="Opus costs four dollars", verified_on="2026-01-01", recheck_days=90),
@@ -567,10 +581,11 @@ class DecayDigestTest(BrainCase):
     def test_decay_uses_retention_and_never_touches_owner_items(self):
         """I-08: an owner-stated item does not fade even when retention says so."""
         self.ml.ret = {"lsn-faded": 0.01, "own-aa": 0.0, "lsn-fresh": 0.9}
+        # redteam-01: only what a session's note created fades, so these are learned lessons.
         c.write_jsonl(self.root / "memory/items.jsonl", [
-            item("lsn-faded", last_used="2026-11-01"),     # recent by days, faded by retention
-            item("lsn-fresh", last_used="2026-01-01"),     # old by days, kept by retention
-            item("own-aa", trust="owner-stated", last_used="2025-01-01")])
+            item("lsn-faded", last_used="2026-11-01", provenance="note:s1"),     # recent by days, faded by retention
+            item("lsn-fresh", last_used="2026-01-01", provenance="note:s1"),     # old by days, kept by retention
+            item("own-aa", trust="owner-stated", last_used="2025-01-01", provenance="note:s1")])
         delta, _ = learn.build_decay(self.root)
         self.assertEqual(delta["ops"], [{"op": "SET_STATUS", "id": "lsn-faded", "status": "demoted"}])
 
@@ -646,14 +661,22 @@ class PathTraversalTest(BrainCase):
     def test_owner_stated_add_needs_verified_evidence(self):
         self.refused([{"op": "ADD", "file": "owner/standing.jsonl",
                        "item": item("own-new", trust="owner-stated", evidence=["owner:said-so"])}])
-        ok, lines = learn.apply_delta(learn.make_delta([{"op": "ADD", "file": "owner/standing.jsonl",
-                                                         "item": item("own-new", trust="owner-stated", evidence=[OWNER_EV])}]), self.root)
+        # redteam-04: well-formed owner evidence in a delta file is not enough;
+        # only a delta built by a command that checked his words may add it.
+        add = {"op": "ADD", "file": "owner/standing.jsonl", "item": item("own-new", trust="owner-stated", evidence=[OWNER_EV])}
+        self.refused([add])
+        proof = {"session": "s", "turn": "2026-11-10T10:00:00Z", "start": 0, "len": 20, "sha": "0123456789ab"}
+        ok, lines = learn.apply_delta(learn.trusted_delta([dict(add, owner=proof)]), self.root)
         self.assertTrue(ok, lines)
 
     def test_plain_item_files_still_work(self):
+        # redteam-04: a delta file adds candidates; the playbook line shows in
+        # the rendered page once it is on probation.
         ok, lines = learn.apply_delta(learn.make_delta([
-            {"op": "ADD", "file": "memory/items.jsonl", "item": item("lsn-one")},
-            {"op": "ADD", "file": "playbooks/software.jsonl", "item": item("pb-one", type="playbook")}]), self.root)
+            {"op": "ADD", "file": "memory/items.jsonl", "item": item("lsn-one", status="candidate", provenance="note:s1")},
+            {"op": "ADD", "file": "playbooks/software.jsonl",
+             "item": item("pb-one", type="playbook", status="candidate", provenance="note:s1")},
+            {"op": "SET_STATUS", "id": "pb-one", "status": "probation"}]), self.root)
         self.assertTrue(ok, lines)
         self.assertIn("pb-one", (self.root / "playbooks" / "software.md").read_text())
 
@@ -1010,14 +1033,19 @@ class CanonicalSeedTest(unittest.TestCase):
         for d in ("memory", "owner", "playbooks"):
             shutil.copytree(ROOT / d, tmp / d)
         fam = sorted((ROOT / "playbooks").glob("*.jsonl"))[0].relative_to(ROOT).as_posix()
-        targets = {"memory/items.jsonl": item("lsn-new-one"),
+        # redteam-04: items enter as candidates, and an item under owner/ only
+        # in a delta built by a command that checked the owner's words.
+        proof = {"session": "s", "turn": "2026-11-10T10:00:00Z", "start": 0, "len": 20, "sha": "0123456789ab"}
+        new = {"status": "candidate", "provenance": "note:s1"}
+        targets = {"memory/items.jsonl": item("lsn-new-one", **new),
                    "memory/facts.jsonl": item("fact-new-one", "The test fact is about a priced model", type="fact",
-                                              trust="external", source="https://example.test/x"),
-                   "owner/preferences.jsonl": item("pref-new-one", type="preference"),
-                   fam: item("pb-new-one", type="playbook")}
+                                              trust="external", source="https://example.test/x", **new),
+                   "owner/preferences.jsonl": item("pref-new-one", type="preference", evidence=[OWNER_EV]),
+                   fam: item("pb-new-one", type="playbook", **new)}
         before = {rel: (tmp / rel).read_text(encoding="utf-8").splitlines() for rel in targets}
-        ops = [{"op": "ADD", "file": rel, "item": it} for rel, it in targets.items()]
-        ok, lines = learn.apply_delta(learn.make_delta(ops, NOW), tmp)
+        ops = [{"op": "ADD", "file": rel, "item": it, **({"owner": proof} if rel.startswith("owner/") else {})}
+               for rel, it in targets.items()]
+        ok, lines = learn.apply_delta(learn.trusted_delta(ops, NOW), tmp)
         self.assertTrue(ok, lines)
         for rel in targets:
             with self.subTest(rel):

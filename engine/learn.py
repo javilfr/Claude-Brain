@@ -18,6 +18,17 @@ Why it is built this way (MASTER_PLAN Part 6, ENGINE_SPEC, EXECUTION_PLAN 4.2):
   checkable, new, not about one project), and promotion to ``active`` needs
   two independent keys (round2/01 sections 3.4-3.5). Owner-stated items are
   never demoted, decayed or superseded by learning (I-08).
+- The owner's authority cannot be claimed by writing a file. A record acts
+  as his words only when its quote is found again in a transcript on disk at
+  the moment it is consolidated; otherwise it waits for his yes
+  (``learn confirm``). Operations on what is his are accepted only in a delta
+  this process built after checking his words, never from a delta file, and
+  the same rules are applied when CI replays the history (2026-11-10 audit:
+  one forged inbox line had become an active owner rule).
+- Only what a session's note created fades with disuse or is demoted by
+  outcomes, a little per run, and it can be restored. In a simulated year
+  the old decay retired half of the shipped knowledge, the rule against
+  skipping tests included, with no way back.
 - Statistical learning lives in ``engine/mlearn.py``; this module hands it the
   new records in one ``ML_FOLD`` op and stores the state it returns in
   ``stats/ml.json``. The import is lazy so every other op works without it.
@@ -42,8 +53,8 @@ from . import common as c
 from . import items as I
 from .guard import zone_of
 
-OPS = ("ADD", "INC_HELPFUL", "INC_HARMFUL", "EDIT_TEXT", "SET_STATUS", "MOVE_SCOPE", "LINK", "SUPERSEDE",
-       "APPEND_STAT", "ML_FOLD", "MARK_INBOX")
+OPS = ("ADD", "INC_HELPFUL", "INC_HARMFUL", "EDIT_TEXT", "SET_STATUS", "MOVE_SCOPE", "LINK", "UNLINK", "SUPERSEDE",
+       "OWNER_CONFIRM", "RESTORE", "REVERIFY", "APPEND_STAT", "ML_FOLD", "MARK_INBOX")
 KINDS = ("ledger", "outcome", "used", "note", "review", "correction", "lead", "hire")
 FOLD_KINDS = ("outcome", "used", "review", "correction", "hire")   # inbox records mlearn learns from
 # ML_FOLD also carries "promotion" records the consolidation itself makes, so
@@ -57,8 +68,16 @@ MAX_EDIT_RATIO = 0.3      # EDIT_TEXT may change at most this share of an item
 MIN_EDIT_CHARS = 40       # and may not leave fewer characters than this
 PROMOTE_MULTIPLIER = 1.0  # mlearn.item_score needed for probation -> active
 DEMOTE_AFTER_DAYS = 90    # fallback when mlearn.retention is unavailable
-RETIRE_AFTER_DAYS = 90 + 180
+RETIRE_FURTHER_DAYS = 180  # a demoted lesson is retired this long after its demotion
+RETIRE_AFTER_DAYS = DEMOTE_AFTER_DAYS + RETIRE_FURTHER_DAYS  # for demotions recorded before ``demoted_on`` existed
+CANDIDATE_GRACE_DAYS = 180  # a candidate nobody was ever shown is not forgotten before this
 RETENTION_FLOOR = 0.15    # fallback for memory/ml_config.json retention.threshold
+MAX_VOTE_EVIDENCE = 20    # session:/outcome: entries kept per item; the counters hold the totals
+EVIDENCE_HEAD = 8         # an item's first entries (what the note brought) are always kept
+HARM_MIN_USES = 8         # demotion from outcomes needs this many followed uses,
+HARM_MIN_WEEKS = 3        # harm in this many different weeks,
+HARM_Z = 1.2816           # and a lower bound (10th percentile) on the harm share above one half
+NEAR_SHOW = 0.3           # word overlap from which ``learn note`` shows an existing item as close
 TRUST_NOTE = ("observed", "owner-stated", "external")
 SIGNALS = ("gate-failed", "rework", "owner-correction", "token-outlier", "first-success")
 # Evidence must point at an event a script can check: a gate, a test, an
@@ -83,8 +102,25 @@ OWNER_EV_RE = re.compile(r"^owner:turn@[0-9A-Za-z:.+-]{1,40}#[0-9a-f]{12}$")
 MIN_QUOTE = 12
 # Turns that look typed but were injected by the harness or another agent.
 NOT_OWNER_MARKERS = ("[SYSTEM NOTIFICATION", "Another Claude session sent a message", "Stop hook feedback",
-                     "[Subagent hand-back]", "<task-notification>", "<system-reminder")
-NEGATIVE_RE = re.compile(r"\b(never|don't|do not|must not|should not|shouldn't|avoid|no longer|cannot|can't|stop)\b", re.I)
+                     "[Subagent hand-back]", "<task-notification>", "<system-reminder",
+                     "This session is being continued from a previous conversation")
+# Row flags the client sets on text the owner did not type: injected context,
+# helper conversations, and the summary a compaction writes in his voice.
+NOT_TYPED_FLAGS = ("isMeta", "isSidechain", "isCompactSummary", "isVisibleInTranscriptOnly")
+PROOF_KEYS = ("session", "turn", "start", "len", "sha")
+# Deltas built in this process by a command that verified the owner's words
+# (by the hash of their ops). Only these, and the replay in ``verify``, may
+# carry owner-level operations; a delta read from a file never can.
+_TRUSTED: set[str] = set()
+# "stop" forbids only before a gerund ("stop pushing"); "stop and ask" tells you to ask.
+NEGATIVE_RE = re.compile(r"\b(never|don't|do not|must not|should not|shouldn't|avoid|no longer|cannot|can't|"
+                         r"stop\s+\w+ing|nunca|no\s+se\s+debe)\b", re.I)
+# Where a subordinate clause starts: polarity is read from the main clause, so
+# "run it twice because the cache cannot be trusted" is not a prohibition.
+CLAUSE_SPLIT_RE = re.compile(r"[,;:.]\s+|\s+(?:because|since|so that|so|when|whenever|if|unless|until|before|after|"
+                             r"while|although|though|to avoid|in case)\b", re.I)
+SUBORDINATE_START = frozenset("because since so when whenever if unless until before after while although though once "
+                              "for on in during with without".split())
 # Words that carry polarity are removed before comparing meaning, so that
 # "always X" and "never X" are recognised as the same subject.
 POLARITY_WORDS = frozenset("always never do don does doesn not no avoid must should shouldn cannot can stop longer".split())
@@ -99,6 +135,27 @@ IMPERATIVE_START = frozenset(
     "group link copy deploy release lock profile pair state report confirm search load print drop".split())
 # A condition first ("Before a release, run ...") is actionable when a verb follows.
 CONDITION_START = frozenset("before after when whenever if once while for on".split())
+# The looser test (learning-10): the whitelist above refused a quarter of the
+# brain's own seed lessons. A clause that opens with one of these words, or is
+# a noun phrase tied to a copula or a past tense, describes; anything else
+# that opens a clause is taken as an instruction or a norm.
+DESCRIBES_START = frozenset(
+    "it its there here is are was were be been being am has have had we i you he she they what which who why how "
+    "yesterday today and but or so because then also".split())
+DETERMINER_START = frozenset("a an the this that these those my our your his her their some many most several few".split())
+COPULA = frozenset("is are was were be been am has have had seems seemed looks looked became becomes "
+                   "es son era fue fueron está están".split())
+PAST_IRREGULAR = frozenset("broke went took came got saw fell lost ran found made gave kept had did said".split())
+SPANISH_CUE_RE = re.compile(r"\b(siempre|nunca|antes de|después de|hay que|debe[ns]?|no\s+\w+(?:es|as|en|an)\b)", re.I)
+# File names that belong to the platform or to every project of a kind, not to
+# one project: naming them does not make a lesson project-specific (learning-07).
+GENERIC_FILES = frozenset(
+    "claude.md skill.md agents.md readme.md settings.json .mcp.json package.json package-lock.json pyproject.toml "
+    "requirements.txt tsconfig.json state.md status.md needs_you.md plan.md decisions.md handover.md project.json".split())
+NUMBER_WORDS = frozenset(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen "
+    "eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million billion half "
+    "once twice double triple uno dos tres cuatro cinco seis siete ocho nueve diez cien mil".split())
 # Path-like tokens: ./x, ~/x, /x/y, a/b/c, or a file name with an extension.
 PATH_RE = re.compile(r"(?:^|[\s(\"'`])(?:\.{1,2}|~)?/[\w.-]+|\b[\w.-]+/[\w.-]+/[\w./-]*|"
                      r"\b[\w-]+\.(?:py|js|ts|tsx|jsx|mjs|json|jsonl|md|sh|ya?ml|toml|html|css|sql|go|rs|java|rb|txt|"
@@ -204,12 +261,97 @@ def pending_session_records(root: Path, sid: str) -> list[dict]:
             for r in c.read_jsonl(f) if r.get("session") == sid]
 
 
-def replace_session_records(root: Path, sid: str, records: list[dict], kinds: tuple[str, ...]) -> Path | None:
+def shown_ids(project: Path | None, sid: str) -> set[str]:
+    """Ids recall showed this session, from the project's injection log
+    (``.brain/log/recall.jsonl``): the proof a ``used`` record needs before a
+    candidate can be credited (learning-02)."""
+    if project is None:
+        return set()
+    out: set[str] = set()
+    for row in c.read_jsonl(Path(project) / ".brain" / "log" / "recall.jsonl"):
+        if str(row.get("session", "")) == sid and isinstance(row.get("ids"), list):
+            out.update(str(i) for i in row["ids"])
+    return out
+
+
+def project_votes(project: Path, sid: str, records: list[dict]) -> list[dict]:
+    """Apply this session's ``used`` records for lessons that live in the
+    project's own ``.brain/memory/`` to those files, and return the records
+    that still go to the brain (learning-03). A project lesson never leaves
+    its project, so its credit is kept there too: the same rules as in the
+    brain (credit from this session's outcomes, only when recall showed it,
+    one vote per session), probation to active on two supporting sessions,
+    and demotion only on the lower-bound case."""
+    files: dict[Path, list[dict]] = {}
+    frozen: set[Path] = set()  # a file with an unreadable line is never rewritten: that would drop the line
+    for p in I.project_item_files(project):
+        try:
+            files[p], bad = c.read_jsonl_counted(p)
+        except OSError:
+            continue
+        if bad:
+            frozen.add(p)
+    where = {str(r.get("id")): (p, r) for p, rows in files.items() for r in rows}
+    mine = [r for r in records if r.get("kind") == "outcome"]
+    good = bool(mine) and all(o.get("passed") is True and o.get("first_pass", True) is True for o in mine)
+    bad = any(o.get("passed") is False for o in mine)
+    keep, changed = [], set()
+    day = c.today()
+    for rec in records:
+        hit = where.get(str(rec.get("item"))) if rec.get("kind") == "used" else None
+        if hit is None:
+            keep.append(rec)
+            continue
+        path, row = hit
+        voted = [v for v in row.get("voted") or [] if isinstance(v, str)]
+        if path in frozen or rec.get("shown") is not True or sid in voted:
+            continue  # not shown this session, or this session already counted
+        row["last_used"] = day
+        row["voted"] = (voted + [sid])[-MAX_VOTE_EVIDENCE:]
+        changed.add(path)
+        if rec.get("followed") is not True:
+            continue
+        row["uses"] = int(row.get("uses", 0) or 0) + 1
+        if good:
+            row["helpful"] = int(row.get("helpful", 0) or 0) + 1
+            row["sessions"] = int(row.get("sessions", 0) or 0) + 1
+        elif bad:
+            row["harmful"] = int(row.get("harmful", 0) or 0) + 1
+            week = _iso_week(c.now())
+            weeks = [w for w in row.get("harm_weeks") or [] if isinstance(w, str)]
+            row["harm_weeks"] = (weeks + [week] if week not in weeks else weeks)[-8:]
+        it = I.normalise(row)
+        if it["status"] in ("candidate", "probation", "active") and harm_case(it):
+            row["status"] = "demoted"
+        elif it["status"] == "candidate" and it["helpful"] >= 1:
+            row["status"] = "probation"
+        elif it["status"] == "probation" and it["sessions"] >= 2:
+            row["status"] = "active"
+    for path in changed:
+        c.write_jsonl(path, files[path])
+    return keep
+
+
+def replace_session_records(root: Path, sid: str, records: list[dict], kinds: tuple[str, ...],
+                            project: Path | None = None) -> Path | None:
     """Put ``records`` in the session's inbox file, replacing earlier records
     of the same kinds from this session. Returns None (writes nothing) when a
     consolidated file already holds such records: counting twice is worse
-    than missing the tail of a session."""
+    than missing the tail of a session.
+
+    Each ``used`` record is marked ``shown`` true or false from the project's
+    injection log, here and not by the caller's word. ``project`` defaults to
+    the project the commands resolve (``common.resolve_project``)."""
     root = Path(root)
+    if any(r.get("kind") == "used" for r in records):
+        if project is None:
+            project = c.resolve_project(None, root)
+        managed = project is not None and c.is_managed(Path(project))
+        shown = shown_ids(Path(project), sid) if managed else set()
+        records = [{**r, "shown": str(r.get("item", "")) in shown} if r.get("kind") == "used" and managed else r
+                   for r in records]
+        if managed:
+            records = project_votes(Path(project), sid, records)
     consumed = consumed_inbox(root)
     for f in _session_files(root, sid):
         if f.relative_to(root).as_posix() in consumed and any(
@@ -253,14 +395,38 @@ def is_imperative(text: str) -> bool:
     return first in IMPERATIVE_START or bool(IMPERATIVE_RE.search(text))
 
 
+def _clause_words(clause: str) -> list[str]:
+    return [w for w in (x.lower().strip(".,:;!?\"'()`") for x in clause.split()) if w]
+
+
+def _clause_tells(clause: str) -> bool:
+    """True when one clause reads as an instruction or a norm."""
+    ws = _clause_words(clause)
+    if not ws:
+        return False
+    if ws[0] in IMPERATIVE_START or IMPERATIVE_RE.search(clause) or SPANISH_CUE_RE.search(clause):
+        return True
+    if ws[0] in DESCRIBES_START or ws[0] in CONDITION_START or len(ws) < 2:
+        return False
+    # After "the", "a", "this" a description is likelier, so look further.
+    wide = ws[0] in DETERMINER_START
+    if any(w in COPULA for w in ws[1:6 if wide else 5]):
+        return False  # "Builds are slow on Mondays"
+    return not any(w in PAST_IRREGULAR or re.fullmatch(r"[a-záéíóúñ]{2,}ed", w)
+                   for w in ws[1:4 if wide else 2])  # "Tests failed twice"
+
+
 def actionable(text: str) -> bool:
-    """A lesson must tell a future session what to do: an imperative verb
-    first, a modal cue (should, must, never, ...), or a condition followed by
-    a verb. Observations without an action are clutter in the store."""
+    """A lesson must tell a future session what to do. It does when one of its
+    clauses opens with a verb or states a norm ("Helpers write their detail
+    to a file"), or carries a cue (should, must, never, siempre, hay que).
+    A plain observation ("The build was slow on Tuesday") does not."""
     if is_imperative(text):
         return True
-    ws = [w.lower().strip(".,:;!\"'") for w in text.split()]
-    return bool(ws) and ws[0] in CONDITION_START and any(w in IMPERATIVE_START for w in ws[1:])
+    ws = _clause_words(text)
+    if ws and ws[0] in CONDITION_START and any(w in IMPERATIVE_START for w in ws[1:]):
+        return True
+    return any(_clause_tells(part) for part in re.split(r"[,;:.]\s+|\s+[-–—]\s+", text))
 
 
 def known_project_ids(root: Path) -> list[str]:
@@ -269,8 +435,11 @@ def known_project_ids(root: Path) -> list[str]:
 
 def project_specific(text: str, ids: list[str]) -> bool:
     """True when the text names a path, a file or a known project: such a
-    lesson belongs in that project's .brain/, not in the shared brain (I-05)."""
-    if PATH_RE.search(text):
+    lesson belongs in that project's .brain/, not in the shared brain (I-05).
+    Platform and ecosystem file names (CLAUDE.md, package.json) are not one
+    project's, so they do not count."""
+    plain = " ".join(w for w in text.split() if w.lower().strip(".,:;!?\"'()`") not in GENERIC_FILES)
+    if PATH_RE.search(plain):
         return True
     return any(re.search(r"(?<![A-Za-z0-9_-])" + re.escape(pid) + r"(?![A-Za-z0-9_-])", text, re.I) for pid in ids)
 
@@ -324,14 +493,25 @@ def norm_quote(text: str) -> str:
     return " ".join(str(text).casefold().split())
 
 
-def owner_turns(transcript: Path | str) -> list[tuple[str, str]]:
-    """(timestamp, text) of every turn the owner typed in a transcript: a
-    ``user`` row whose content is a string or text blocks, not a tool result,
-    not flagged ``isMeta`` or ``isSidechain``, and without a marker of text
-    the harness or another agent injected."""
-    out = []
+def owner_turns(transcript: Path | str, sid: str | None = None) -> list[tuple[str, str]]:
+    """(timestamp, text) of every turn the owner typed in a transcript.
+
+    A ``user`` row counts only when its content is a string or text blocks
+    (not a tool result), it carries none of the flags of injected text
+    (``NOT_TYPED_FLAGS``: a compaction summary is written in his voice but is
+    not his), it belongs to this session when ``sid`` is given, and its
+    ``origin`` says a human typed it. Rows without ``origin`` are accepted
+    only in a transcript where no user row has one (an older client), and
+    never when they hold a marker of harness or agent text."""
+    rows: list[tuple[str, str, object]] = []
+    any_origin = False
     for row in c.iter_jsonl_stream(transcript):
-        if row.get("type") != "user" or row.get("isMeta") or row.get("isSidechain"):
+        if row.get("type") != "user":
+            continue
+        any_origin = any_origin or "origin" in row
+        if any(row.get(k) for k in NOT_TYPED_FLAGS):
+            continue
+        if sid and isinstance(row.get("sessionId"), str) and row["sessionId"] != sid:
             continue
         msg = row.get("message") if isinstance(row.get("message"), dict) else {}
         if msg.get("role", "user") != "user":
@@ -346,24 +526,78 @@ def owner_turns(transcript: Path | str) -> list[tuple[str, str]]:
             continue
         if not text or any(m in text for m in NOT_OWNER_MARKERS):
             continue
-        out.append((str(row.get("timestamp") or "unknown"), text))
-    return out
+        rows.append((str(row.get("timestamp") or "unknown"), text, row.get("origin")))
+    if any_origin:
+        rows = [r for r in rows if isinstance(r[2], dict) and r[2].get("kind") == "human"]
+    return [(ts, text) for ts, text, _origin in rows]
+
+
+def owner_proof(quote: str, sid: str | None = None, whole_line: bool = False) -> tuple[dict | None, str]:
+    """(proof, "") when ``quote`` occurs in a turn the owner typed in this
+    session's transcript, else (None, one-line reason). The proof says which
+    turn and where in it, plus a hash of the quote: enough for a script to
+    check it again later, never the words themselves. ``whole_line`` also
+    accepts a short reply ("no 2") when it is a whole line of what he typed."""
+    q = norm_quote(quote or "")
+    sid = sid or c.session_id()
+    short = len(q) < MIN_QUOTE
+    if short and not (whole_line and len(q) >= 2):
+        return None, f"--quote must hold at least {MIN_QUOTE} characters of the owner's own words"
+    main, _subs = c.transcript_paths(sid)
+    if main is None or not Path(main).is_file():
+        return None, "no transcript of this session is on disk, so the owner's words cannot be checked"
+    for ts, text in owner_turns(main, sid):
+        norm = norm_quote(text)
+        if short and q not in [norm_quote(line) for line in text.splitlines()]:
+            continue
+        start = norm.find(q)
+        if start >= 0:
+            return {"session": sid, "turn": ts, "start": start, "len": len(q), "sha": c.sha256_text(q)[:12]}, ""
+    return None, "the quote is not in any turn the owner typed in this session"
+
+
+def proof_evidence(proof: dict) -> str:
+    return f"owner:turn@{proof['turn']}#{proof['sha']}"
+
+
+def proof_ok(proof) -> bool:
+    """A proof of the right shape whose evidence string is well formed."""
+    return isinstance(proof, dict) and all(k in proof for k in PROOF_KEYS) \
+        and all(isinstance(proof[k], str) and proof[k] for k in ("session", "turn", "sha")) \
+        and all(isinstance(proof[k], int) and not isinstance(proof[k], bool) and proof[k] >= 0 for k in ("start", "len")) \
+        and bool(OWNER_EV_RE.match(proof_evidence(proof)))
+
+
+def reverify_owner(rec: dict) -> bool | None:
+    """Check a record's owner proof against the transcript again.
+
+    True: the transcript of the record's session is on disk and a turn the
+    owner typed at that time holds, at that place, text with that hash.
+    False: the transcript is on disk and says otherwise, or the record has no
+    usable proof. None: no transcript on disk, so nothing can be said. Only
+    True lets a record act with the owner's authority (learning-01)."""
+    proof = rec.get("proof")
+    ev = rec.get("evidence")
+    if not proof_ok(proof) or proof["session"] != rec.get("session") or not isinstance(ev, list) \
+            or proof_evidence(proof) not in ev or proof["len"] < MIN_QUOTE:
+        return False
+    main, _subs = c.transcript_paths(proof["session"])
+    if main is None or not Path(main).is_file():
+        return None
+    for ts, text in owner_turns(main, proof["session"]):
+        if ts == proof["turn"]:
+            span = norm_quote(text)[proof["start"]:proof["start"] + proof["len"]]
+            if len(span) == proof["len"] and c.sha256_text(span)[:12] == proof["sha"]:
+                return True
+    return False
 
 
 def verify_owner_quote(quote: str, sid: str | None = None) -> tuple[str, str]:
     """(evidence, "") when ``quote`` occurs in a turn the owner typed in this
     session's transcript, else ("", one-line reason). The evidence names the
     turn and a hash of the quote, never the quote itself."""
-    q = norm_quote(quote or "")
-    if len(q) < MIN_QUOTE:
-        return "", f"--quote must hold at least {MIN_QUOTE} characters of the owner's own words"
-    main, _subs = c.transcript_paths(sid or c.session_id())
-    if main is None or not Path(main).is_file():
-        return "", "no transcript of this session is on disk, so the owner's words cannot be checked"
-    for ts, text in owner_turns(main):
-        if q in norm_quote(text):
-            return f"owner:turn@{ts}#{c.sha256_text(q)[:12]}", ""
-    return "", "the quote is not in any turn the owner typed in this session"
+    proof, why = owner_proof(quote, sid)
+    return (proof_evidence(proof), "") if proof else ("", why)
 
 
 def project_words(project: Path | None) -> list[str]:
@@ -518,8 +752,64 @@ def restates(a: str, b: str) -> bool:
     return jaccard(a, b) >= SIMILAR or containment(a, b) >= CONTAINED
 
 
+def main_clause(text: str) -> str:
+    """The clause that carries the instruction: the first one that does not
+    open with a subordinating word ("Before a release, run the gate" -> "run
+    the gate")."""
+    parts = [p.strip() for p in CLAUSE_SPLIT_RE.split(text) if p and p.strip()]
+    for part in parts:
+        if (_clause_words(part) or [""])[0] not in SUBORDINATE_START:
+            return part
+    return parts[0] if parts else text
+
+
 def negative(text: str) -> bool:
-    return bool(NEGATIVE_RE.search(text))
+    """Whether a lesson forbids. Read from its main clause only, so a reason
+    ("because the cache cannot be trusted") does not flip it (learning-14)."""
+    return bool(NEGATIVE_RE.search(main_clause(text)))
+
+
+def fact_keys(text: str) -> set[str]:
+    """The numbers and identifiers a fact states. Two facts about the same
+    subject with different keys disagree; with the same keys they are one
+    fact read twice (learning-07)."""
+    keys = set(re.findall(r"\d+(?:[.,]\d+)*", text))
+    for raw in text.split():
+        w = raw.strip(".,:;!?\"'()").lower()
+        if w in NUMBER_WORDS or w.startswith(("--", "`")) or re.search(r"[a-z0-9][_/][a-z0-9]|[a-z]\.[a-z]", w):
+            keys.add(w.strip("`"))
+    return keys
+
+
+def says_the_same(a: str, b: str, fact: bool) -> bool:
+    """Two texts about the same subject agree: the same polarity and, for
+    facts, the same numbers and names."""
+    return negative(a) == negative(b) and (not fact or fact_keys(a) == fact_keys(b))
+
+
+def learned(row: dict) -> bool:
+    """True for a rule or pitfall a session's note created. Only these fade
+    with disuse or are demoted by outcomes; shipped knowledge (seed, derived,
+    the owner's) and facts are not judged that way (redteam-01, redteam-11)."""
+    return str(row.get("provenance") or "").startswith("note:") and row.get("trust") == "observed" \
+        and row.get("type") in ("rule", "pitfall")
+
+
+def owner_level(rel: str | None, row: dict) -> bool:
+    """What only the owner may change: anything he stated, his standing
+    instructions, and every item under owner/ (I-08)."""
+    return row.get("trust") == "owner-stated" or row.get("type") == "standing" or str(rel or "").startswith("owner/")
+
+
+def harm_lower_bound(harmful: int, uses: int) -> float:
+    """Wilson lower bound (10th percentile) of the share of followed uses that
+    ended in a failed session."""
+    if uses <= 0:
+        return 0.0
+    p, z2 = harmful / uses, HARM_Z * HARM_Z
+    centre = p + z2 / (2 * uses)
+    margin = HARM_Z * ((p * (1 - p) / uses + z2 / (4 * uses * uses)) ** 0.5)
+    return (centre - margin) / (1 + z2 / uses)
 
 
 def edit_ratio(old: str, new: str) -> float:
@@ -543,10 +833,15 @@ def _item_files(root: Path) -> list[str]:
 
 class Workspace:
     """An in-memory copy of the learned files a delta touches. Ops are
-    applied here first; nothing reaches disk unless the whole delta passes."""
+    applied here first; nothing reaches disk unless the whole delta passes.
 
-    def __init__(self, root: Path):
+    ``owner_ok`` says whether this delta may carry owner-level operations: it
+    is true only for a delta built in this process by a command that verified
+    the owner's words, and for the replay in ``verify``."""
+
+    def __init__(self, root: Path, owner_ok: bool = False):
         self.root = Path(root)
+        self.owner_ok = owner_ok
         self.rows: dict[str, list[dict]] = {}
         self.orig: dict[str, str] = {}
         self.text: dict[str, str] = {}
@@ -555,6 +850,8 @@ class Workspace:
         self.retired: dict[str, int] = {}
         self.inbox_files: list[str] = []
         self.notes: list[str] = []
+        self.owner_notes: list[str] = []   # what now counts as his words, or waits for them: printed first
+        self.helped: set[str] = set()      # items that got a helpful vote in this delta
         self.votes = [0, 0]
         self.counts = {"APPEND_STAT": 0, "ML_FOLD": 0}
         cfg = c.read_json(self.root / ML_CONFIG, {})
@@ -597,11 +894,123 @@ class Workspace:
     def all_items(self) -> list[tuple[str, dict]]:
         return [(rel, r) for rel in sorted(self.rows) for r in self.rows[rel]]
 
+    def archived(self, iid: str) -> dict | None:
+        """The newest archive row of a retired item, or None."""
+        hits = [r for r in map(_loads, self._get_text(ARCHIVE).splitlines()) if r and r.get("id") == iid]
+        return hits[-1] if hits else None
+
+    def live_count(self, rel: str) -> int:
+        """Items of a file that count against its budget: all but the demoted."""
+        return sum(1 for r in self.rows.get(rel, []) if r.get("status", "active") != "demoted")
+
+    def live_conflicts(self, row: dict, day: str) -> list[str]:
+        """The item's conflicts that still stand: a link to an item that was
+        demoted, retired or superseded no longer blocks anything."""
+        out = []
+        for other in row.get("conflicts") or []:
+            _rel, o = self.find(str(other))
+            if o is not None and _live(o, day):
+                out.append(str(other))
+        return out
+
+    # -- the promotion rules, per operation
+    def authorised(self, op: dict) -> bool:
+        return self.owner_ok and proof_ok(op.get("owner"))
+
+    def rule_problem(self, op: dict) -> str:
+        """Why the promotion rules refuse this operation; "" when they allow it.
+
+        A delta nobody verified (``learn apply`` on a file) may add only
+        candidates with trust observed or external, and may not edit, move,
+        link, supersede, restore or change the status of anything that is the
+        owner's. Owner-level operations carry an ``owner`` proof and are
+        accepted only in a delta this process built after checking his words,
+        and in the replay of such a delta (redteam-04)."""
+        kind = op.get("op")
+        auth = self.authorised(op)
+        if "owner" in op and not auth:
+            return (f"{kind}: owner-level changes come only from a command that checked the owner's words "
+                    "(brain learn confirm or reject with --quote), never from a delta file")
+
+        def owned(iid) -> str:
+            rel, row = self.find(str(iid))
+            return str(iid) if row is not None and owner_level(rel, row) else ""
+
+        theirs = "is the owner's: only brain learn confirm or reject with --quote \"<his words>\" can change it"
+        if kind == "ADD":
+            item = op.get("item")
+            if not isinstance(item, dict):
+                return ""
+            it = I.normalise(item)
+            rel = str(op.get("file", ""))
+            if plain_path_problem(rel) or not ITEM_FILE_RE.match(rel):
+                return ""  # not an item file at all: refused as such below
+            if auth:
+                return "" if proof_evidence(op["owner"]) in it["evidence"] else \
+                    f"ADD: {it.get('id')}: the owner proof does not match the item's evidence"
+            if it["status"] != "candidate" or it["trust"] not in ("observed", "external") \
+                    or it["type"] in ("standing", "preference") or rel.startswith("owner/"):
+                return (f"ADD: {it.get('id')} must enter as a candidate with trust observed or external, outside owner/ "
+                        f"(it is {it['status']}, {it['trust']}, {it['type']}); the owner's words enter through "
+                        "brain learn note --quote")
+            # A new item starts from nothing: credit, sessions and rank are
+            # earned afterwards, and it is a lesson from a note like any other.
+            if any(it[k] for k in ("helpful", "harmful", "uses")) or it["sessions"] not in (0, 1) \
+                    or it["importance"] > 2 or it["supersedes"] or not str(it["provenance"]).startswith("note:"):
+                return (f"ADD: {it.get('id')} must start as a note does: provenance note:<session>, no votes or uses, "
+                        "at most one session, importance 1 or 2, superseding nothing")
+            return ""
+        if kind == "OWNER_CONFIRM":
+            return "" if auth else "OWNER_CONFIRM: needs the owner's words, checked by brain learn confirm --quote"
+        if kind == "INC_HARMFUL":
+            hit = owned(op.get("id"))
+            return f"INC_HARMFUL: {hit} is the owner's; harm votes never lower what he said (I-08)" if hit else ""
+        if auth:
+            return ""
+        if kind == "RESTORE":
+            rel, row = self.find(str(op.get("id", "")))
+            if row is None:
+                row = self.archived(str(op.get("id", "")))
+                rel = (row or {}).get("retired_from")
+            if row is not None and (owner_level(rel, row) or row.get("corrected")):
+                return (f"RESTORE: {row.get('id')} is the owner's, or he withdrew it; bringing it back needs his words: "
+                        "add --quote \"<his words>\"")
+        if kind in ("EDIT_TEXT", "MOVE_SCOPE", "SET_STATUS"):
+            hit = owned(op.get("id"))
+            if hit:
+                return f"{kind}: {hit} {theirs}"
+        if kind in ("LINK", "UNLINK"):
+            hit = owned(op.get("a")) or owned(op.get("b"))
+            if hit:
+                return f"{kind}: {hit} {theirs}"
+        if kind == "SUPERSEDE":
+            _rel, old = self.find(str(op.get("old", "")))
+            hit = owned(op.get("new")) or (owned(op.get("old")) if old is not None and old.get("trust") != "owner-stated" else "")
+            if hit:
+                return f"SUPERSEDE: {hit} {theirs}"
+        if kind == "SET_STATUS":
+            _rel, row = self.find(str(op.get("id", "")))
+            status = op.get("status")
+            if row is not None and status in I.STATUS:
+                old = row.get("status", "active")
+                iid = row.get("id")
+                if row.get("awaiting_owner") and status in ("probation", "active"):
+                    return (f"SET_STATUS: {iid} is waiting for the owner; only brain learn confirm {iid} "
+                            "--quote \"<his words>\" can put it to use")
+                if old == "demoted" and status in ("candidate", "probation", "active"):
+                    return f"SET_STATUS: {iid} is demoted; bring it back with: brain learn restore {iid} --reason \"<why>\""
+                if status == "active" and old not in ("probation", "active"):
+                    return f"SET_STATUS: {iid} can become active only from probation (it is {old})"
+        return ""
+
     # -- ops
     def apply_op(self, op: dict, at: str) -> str:
         """Apply one op; returns an error string, or "" on success."""
         kind = op.get("op")
         day = at[:10]
+        broken = self.rule_problem(op)
+        if broken:
+            return "promotion rules: " + broken
         if kind == "ADD":
             rel, item = op.get("file", ""), op.get("item")
             bad = plain_path_problem(rel)
@@ -617,7 +1026,12 @@ class Workspace:
             self._load_items(rel)
             self.rows[rel].append(item)
             self._touch_item(rel, item["id"])
-            self.notes.append(f"learned ({item['status']}) {item['id']}: {c.clip(item['text'], 90)}")
+            if item.get("awaiting_owner"):
+                self.owner_notes.append(f"waiting for the owner, not in use: {item['id']}: {c.clip(item['text'], 90)}")
+            elif item.get("trust") == "owner-stated":
+                self.owner_notes.append(f"recorded as the owner's words: {item['id']}: {c.clip(item['text'], 90)}")
+            else:
+                self.notes.append(f"learned ({item['status']}) {item['id']}: {c.clip(item['text'], 90)}")
             return ""
         if kind in ("INC_HELPFUL", "INC_HARMFUL"):
             rel, row = self.find(str(op.get("id", "")))
@@ -629,7 +1043,8 @@ class Workspace:
             field = "helpful" if kind == "INC_HELPFUL" else "harmful"
             row[field] = int(row.get(field, 0) or 0) + n
             self.votes[0 if field == "helpful" else 1] += n
-            row["uses"] = int(row.get("uses", 0) or 0) + 1
+            if not op.get("seen"):  # shown by recall but not followed refreshes the date only
+                row["uses"] = int(row.get("uses", 0) or 0) + 1
             row["last_used"] = day
             ev = list(row.get("evidence") or [])
             sid = op.get("session")
@@ -640,7 +1055,15 @@ class Workspace:
             for e in op.get("evidence") or []:
                 if e not in ev:
                     ev.append(e)
-            row["evidence"] = ev
+            row["evidence"] = _capped_evidence(ev)
+            if field == "helpful" and n > 0:
+                self.helped.add(row["id"])
+            if field == "harmful" and n > 0:
+                weeks = [w for w in row.get("harm_weeks") or [] if isinstance(w, str)]
+                week = _iso_week(_dt.date.fromisoformat(day))
+                row["harm_weeks"] = (weeks + [week] if week not in weeks else weeks)[-8:]
+                if op.get("correction"):
+                    row["corrected"] = day
             self._touch_item(rel, row["id"])
             return ""
         if kind == "EDIT_TEXT":
@@ -659,7 +1082,7 @@ class Workspace:
             self.notes.append(f"{row['id']}: text edited")
             return ""
         if kind == "SET_STATUS":
-            return self._set_status(str(op.get("id", "")), op.get("status"), day)
+            return self._set_status(str(op.get("id", "")), op.get("status"), day, by_owner=self.authorised(op))
         if kind == "MOVE_SCOPE":
             rel, row = self.find(str(op.get("id", "")))
             if row is None:
@@ -685,11 +1108,58 @@ class Workspace:
                 x[rel_kind] = lst
             self._touch_item(rel_a, a["id"])
             self._touch_item(rel_b, b["id"])
-            self.notes.append(f"{a['id']} and {b['id']} disagree; neither is promoted until evidence separates them"
+            self.notes.append(f"{a['id']} and {b['id']} disagree; neither is promoted until the owner settles it "
+                              f"(brain learn confirm <the one he means> --quote)"
                               if rel_kind == "conflicts" else f"{a['id']} supersedes {b['id']}")
+            return ""
+        if kind == "UNLINK":
+            ida, idb = str(op.get("a", "")), str(op.get("b", ""))
+            found = [(rel, row, other) for (rel, row), other in ((self.find(ida), idb), (self.find(idb), ida))
+                     if row is not None]
+            if not found:
+                return f"UNLINK: unknown items {ida} and {idb}"
+            for rel, row, other in found:
+                if other in (row.get("conflicts") or []):
+                    row["conflicts"] = [x for x in row["conflicts"] if x != other]
+                    self._touch_item(rel, row["id"])
+            self.notes.append(f"{ida} and {idb}: conflict cleared")
             return ""
         if kind == "SUPERSEDE":
             return self._supersede(str(op.get("old", "")), str(op.get("new", "")), day)
+        if kind == "OWNER_CONFIRM":
+            rel, row = self.find(str(op.get("id", "")))
+            if row is None:
+                return f"OWNER_CONFIRM: unknown item {op.get('id')}"
+            old = row.get("status", "active")
+            row.update(trust="owner-stated", status="active")
+            for gone in ("awaiting_owner", "demoted_on", "corrected"):
+                row.pop(gone, None)
+            ev = list(row.get("evidence") or [])
+            if proof_ok(op.get("owner")) and proof_evidence(op["owner"]) not in ev:
+                ev.append(proof_evidence(op["owner"]))
+            row["evidence"] = ev
+            self._touch_item(rel, row["id"])
+            self.owner_notes.append(f"recorded as the owner's words ({old} -> active): {row['id']}: "
+                                    f"{c.clip(str(row.get('text', '')), 90)}")
+            return ""
+        if kind == "RESTORE":
+            return self._restore(str(op.get("id", "")), op.get("reason"), day)
+        if kind == "REVERIFY":
+            rel, row = self.find(str(op.get("id", "")))
+            if row is None:
+                return f"REVERIFY: unknown item {op.get('id')}"
+            if row.get("type") != "fact":
+                return f"REVERIFY: {row['id']} is not a fact"
+            row["verified_on"] = day
+            sid = op.get("session")
+            ev = list(row.get("evidence") or [])
+            if sid and f"session:{sid}" not in ev:  # a second session read the same thing at the source
+                ev.append(f"session:{sid}")
+                row["sessions"] = int(row.get("sessions", 0) or 0) + 1
+                row["evidence"] = _capped_evidence(ev)
+            self._touch_item(rel, row["id"])
+            self.notes.append(f"{row['id']}: re-verified on {day}")
+            return ""
         if kind == "APPEND_STAT":
             rel = op.get("file", "")
             if plain_path_problem(rel) or not LEDGER_FILE_RE.match(rel) or not isinstance(op.get("row"), dict):
@@ -769,7 +1239,7 @@ class Workspace:
         self.counts["ML_FOLD"] += len(records)
         return ""
 
-    def _set_status(self, iid: str, status, day: str) -> str:
+    def _set_status(self, iid: str, status, day: str, by_owner: bool = False) -> str:
         rel, row = self.find(iid)
         if row is None:
             return f"SET_STATUS: unknown item {iid}"
@@ -783,8 +1253,45 @@ class Workspace:
             self._append(ARCHIVE, {**row, "status": "retired", "retired_on": day, "retired_from": rel})
         else:
             row["status"] = status
+            if status == "demoted":
+                row["demoted_on"] = day  # retirement counts from here, not from the last use
+                if by_owner:
+                    row["corrected"] = day  # he withdrew it: no vote revives it, only his words
+            else:
+                row.pop("demoted_on", None)
             self._touch_item(rel, iid)
         self.notes.append(f"{iid}: {old} -> {status}")
+        return ""
+
+    def _restore(self, iid: str, reason, day: str) -> str:
+        """Bring a demoted or retired item back (redteam-01, learning-06). A
+        learned lesson returns on probation and earns its way up again;
+        shipped knowledge returns as it was. Nothing is removed from the
+        archive: it is the history."""
+        if not isinstance(reason, str) or len(reason.split()) < 2:
+            return f"RESTORE: {iid} needs a reason of a few words"
+        rel, row = self.find(iid)
+        if row is not None:
+            old = row.get("status", "active")
+            if old != "demoted":
+                return f"RESTORE: {iid} is {old}, not demoted or retired"
+        else:
+            arch = self.archived(iid)
+            if arch is None:
+                return f"RESTORE: unknown item {iid}"
+            rel = str(arch.get("retired_from", ""))
+            if plain_path_problem(rel) or not ITEM_FILE_RE.match(rel):
+                return f"RESTORE: {iid} has no item file to return to"
+            old = "retired"
+            row = {k: v for k, v in arch.items() if k not in ("retired_on", "retired_from")}
+            self._load_items(rel)
+            self.rows[rel].append(row)
+        row["status"] = "candidate" if row.get("awaiting_owner") else "probation" if learned(row) else "active"
+        for gone in ("demoted_on", "corrected", "harm_weeks"):
+            row.pop(gone, None)
+        row["last_used"] = day  # the forgetting curve starts again from the restore
+        self._touch_item(rel, iid)
+        self.notes.append(f"{iid}: restored ({old} -> {row['status']}): {c.clip(' '.join(reason.split()), 120)}")
         return ""
 
     # -- checks and output
@@ -797,8 +1304,8 @@ class Workspace:
                 gone = self.retired.get(rel, 0)
                 if gone and gone > max(1, n_orig // 10):
                     errs.append(f"{rel}: would retire {gone} of {n_orig} items (limit 10%)")
-                if len(self.rows[rel]) > budget:
-                    errs.append(f"{rel}: {len(self.rows[rel])} items exceeds the budget of {budget}")
+                if self.live_count(rel) > budget:
+                    errs.append(f"{rel}: {self.live_count(rel)} items exceeds the budget of {budget}; run: brain learn decay")
                 for r in self.rows[rel]:
                     if r.get("id") in self.changed_ids:
                         errs += [f"{rel}: {e}" for e in I.validate_item(I.normalise(r))]
@@ -815,7 +1322,7 @@ class Workspace:
         return c.dump_jsonl(self.rows[rel]) if rel in self.rows else self.text.get(rel, self.orig.get(rel, ""))
 
     def changelog_lines(self) -> list[str]:
-        lines = list(self.notes)
+        lines = self.owner_notes + self.notes
         if any(self.votes):
             lines.append(f"{self.votes[0]} helpful and {self.votes[1]} harmful vote(s) recorded")
         if self.counts["APPEND_STAT"]:
@@ -825,6 +1332,30 @@ class Workspace:
         if self.inbox_files:
             lines.append(f"{len(self.inbox_files)} inbox file(s) consolidated")
         return lines
+
+
+def _loads(line: str) -> dict | None:
+    try:
+        row = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    return row if isinstance(row, dict) else None
+
+
+def _capped_evidence(ev: list) -> list:
+    """An item's evidence with its vote trail bounded: the first entries (what
+    the note brought) stay, and of the session:/outcome: entries added by
+    later votes only the newest are kept. The counters hold the totals, so a
+    row stays small however often its item is followed (learning-09)."""
+    head, tail = ev[:EVIDENCE_HEAD], ev[EVIDENCE_HEAD:]
+    votes = [e for e in tail if str(e).startswith(("session:", "outcome:"))]
+    drop = set(votes[:-MAX_VOTE_EVIDENCE]) if len(votes) > MAX_VOTE_EVIDENCE else set()
+    return head + [e for e in tail if e not in drop]
+
+
+def _iso_week(d) -> str:
+    y, w, _ = d.isocalendar()
+    return f"{y}-W{w:02d}"
 
 
 # ---------------------------------------------------------------- deltas
@@ -837,12 +1368,23 @@ def make_delta(ops: list[dict], at: str | None = None) -> dict:
     return {"id": f"d-{at[:10].replace('-', '')}-{ops_hash(ops)[:10]}", "at": at, "ops": ops}
 
 
+def trusted_delta(ops: list[dict], at: str | None = None) -> dict:
+    """A delta built by a command of this process that checked the owner's
+    words. Only such a delta may carry owner-level operations: the mark lives
+    in this process, so a file handed to ``learn apply`` can never have it."""
+    _TRUSTED.add(ops_hash(ops))
+    return make_delta(ops, at)
+
+
 def canonical(delta: dict) -> str:
     return json.dumps(delta, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
-def apply_delta(delta: dict, brain_root: Path | None = None, budget: int = DEFAULT_BUDGET) -> tuple[bool, list[str]]:
-    """Validate the whole delta in memory, then write. Returns (ok, lines)."""
+def apply_delta(delta: dict, brain_root: Path | None = None, budget: int = DEFAULT_BUDGET,
+                replay: bool = False) -> tuple[bool, list[str]]:
+    """Validate the whole delta in memory, then write. Returns (ok, lines).
+    ``replay`` is for ``verify``: a recorded delta is replayed with the same
+    rules, and its owner-level operations must carry a well-formed proof."""
     root = Path(brain_root or c.BRAIN_ROOT)
     ops = delta.get("ops")
     did, at = str(delta.get("id", "")), str(delta.get("at", ""))
@@ -852,7 +1394,7 @@ def apply_delta(delta: dict, brain_root: Path | None = None, budget: int = DEFAU
         return False, ["delta needs an id (lower-case, digits, dashes) and an ISO 'at' time"]
     if any(r.get("id") == did for r in manifest_rows(root)):
         return True, [f"delta {did} was already applied; nothing changed"]
-    ws = Workspace(root)
+    ws = Workspace(root, owner_ok=replay or ops_hash(ops) in _TRUSTED)
     for i, op in enumerate(ops):
         err = ws.apply_op(op, at)
         if err:
@@ -896,78 +1438,135 @@ def _item_scorer(ws: Workspace):
     return lambda item: float(fn(state, item))
 
 
+def harm_case(it: dict) -> bool:
+    """The lower-bound case that demotes a learned lesson on outcomes alone:
+    enough followed uses, harm in several different weeks, and a harm share
+    whose 10th percentile is above one half. Three red sessions in a row are
+    usually one outside cause (a registry down), not three verdicts (redteam-11)."""
+    weeks = [w for w in it.get("harm_weeks") or [] if isinstance(w, str)]
+    return it["uses"] >= HARM_MIN_USES and len(set(weeks)) >= HARM_MIN_WEEKS \
+        and harm_lower_bound(it["harmful"], it["uses"]) > 0.5
+
+
 def _transitions(ws: Workspace, at: str, min_sessions: int) -> list[dict]:
     """Status moves earned by evidence, applied to ``ws`` and returned as ops.
 
     probation -> active needs two independent keys: support from at least
     ``min_sessions`` sessions AND (when mlearn has data) a lower-bound
-    multiplier of at least 1.0. One owner statement is enough on its own.
-    Conflicting items are never promoted; harm demotes, except what the owner
-    stated (I-08)."""
+    multiplier of at least 1.0. A fact has no votes: it moves on the number of
+    sessions that read it at its source. Nothing here touches what is the
+    owner's or waits for him (I-08); only a learned lesson is demoted by
+    outcomes, on a lower-bound case, and any item by a correction whose quote
+    was verified. A conflict blocks promotion while the other side is live."""
     score = _item_scorer(ws)
+    day = at[:10]
     ops = []
-    for _ in range(3):  # candidate -> probation -> active can happen in one pass
-        moved = False
-        for _rel, row in ws.all_items():
-            it = I.normalise(row)
-            st, h, x = it["status"], it["helpful"], it["harmful"]
-            owner = it["trust"] == "owner-stated"
-            new = None
-            if not owner and x >= 3 and x > h and st not in ("demoted", "retired"):
-                new = "demoted"
-            elif owner and st in ("candidate", "probation"):
-                new = "active"
-            elif it["conflicts"]:
-                new = None
-            elif st == "candidate" and h >= 1:
-                new = "probation"
-            elif st == "probation" and it["sessions"] >= min_sessions and (
-                    score is None or score(it) >= PROMOTE_MULTIPLIER):
-                new = "active"
-            if new:
-                op = {"op": "SET_STATUS", "id": it["id"], "status": new}
-                ws.apply_op(op, at)
-                ops.append(op)
-                moved = True
-        if not moved:
-            break
+    # One move per item per consolidation: a candidate that earns probation
+    # today can become active at a later one, when it has been on probation
+    # in between; and a lesson demoted now is not revived by the same batch.
+    for rel, row in ws.all_items():
+        it = I.normalise(row)
+        st, h = it["status"], it["helpful"]
+        if it.get("awaiting_owner") or owner_level(rel, it) or st == "retired":
+            continue
+        op = None
+        if st == "demoted":
+            if it["id"] in ws.helped and not it.get("corrected") and not ws.live_conflicts(row, day):
+                op = {"op": "RESTORE", "id": it["id"], "reason": "a helpful vote after its demotion"}
+        elif it.get("corrected") or (learned(it) and it["importance"] < 3 and harm_case(it)):
+            op = {"op": "SET_STATUS", "id": it["id"], "status": "demoted"}
+        elif ws.live_conflicts(row, day):
+            op = None
+        elif it["type"] == "fact":
+            if st == "candidate" and (it["sessions"] >= 2 or it["supersedes"]):
+                op = {"op": "SET_STATUS", "id": it["id"], "status": "probation"}
+            elif st == "probation" and it["sessions"] >= max(2, min_sessions):
+                op = {"op": "SET_STATUS", "id": it["id"], "status": "active"}
+        elif st == "candidate" and h >= 1:
+            op = {"op": "SET_STATUS", "id": it["id"], "status": "probation"}
+        elif st == "probation" and it["sessions"] >= min_sessions and (
+                score is None or score(it) >= PROMOTE_MULTIPLIER):
+            op = {"op": "SET_STATUS", "id": it["id"], "status": "active"}
+        if op and ws.apply_op(op, at) == "":
+            ops.append(op)
     return ops
 
 
-def _fail_pass_pairs(outcomes: list[dict]) -> dict[str, tuple[str, str]]:
-    """Per task class, the first failed outcome followed later by a passing
-    one: the evidence a pitfall needs (round2/01 section 3.7)."""
-    pairs: dict[str, tuple[str, str]] = {}
-    by_class: dict[str, list[dict]] = {}
-    for o in outcomes:
-        by_class.setdefault(str(o.get("task_class", "")), []).append(o)
-    for cls, rows in sorted(by_class.items()):
-        fail = None
-        for o in sorted(rows, key=lambda r: (str(r.get("at", "")), str(r.get("id", "")))):
-            if o.get("passed") is False and fail is None:
-                fail = o
-            elif o.get("passed") is True and fail is not None:
-                pairs[cls] = (fail["id"], o["id"])
-                break
-    return pairs
+def _fixed_in_session(outcomes: list[dict]) -> dict[str, list[dict]]:
+    """Per session, its outcomes whose gate log shows a red run followed by a
+    green run of the same gate: the evidence a pitfall needs (round2/01
+    section 3.7). A failure in one session and a pass in another prove
+    nothing about each other: they may be different projects (learning-13)."""
+    out: dict[str, list[dict]] = {}
+    for o in sorted(outcomes, key=lambda r: (str(r.get("at", "")), str(r.get("id", "")))):
+        red: set[str] = set()
+        fixed = False
+        for g in o.get("gate_runs") if isinstance(o.get("gate_runs"), list) else []:
+            if not isinstance(g, dict) or not isinstance(g.get("exit"), int) or isinstance(g.get("exit"), bool):
+                continue
+            if g["exit"] != 0:
+                red.add(str(g.get("gate", "")))
+            elif str(g.get("gate", "")) in red:
+                fixed = True
+        if fixed:
+            out.setdefault(str(o.get("session", "")), []).append(o)
+    return out
 
 
-def _pitfall_pair(rec: dict, pairs: dict[str, tuple[str, str]]) -> tuple[str, str] | None:
-    """The fail/pass pair a gate-failed note is about, matched by class
-    (``software`` matches outcomes of ``software.feature``)."""
+def _pitfall_outcome(rec: dict, fixed: dict[str, list[dict]]) -> str | None:
+    """The fail-then-fix outcome of the note's own session that a gate-failed
+    note is about, matched by class (``software`` matches ``software.feature``)."""
     if rec.get("signal") != "gate-failed":
         return None
     tags = set(rec.get("class") or [])
-    for cls, pair in sorted(pairs.items()):
+    for o in fixed.get(str(rec.get("session", "")), []):
+        cls = str(o.get("task_class", ""))
         if cls in tags or cls.split(".")[0] in tags:
-            return pair
+            return str(o["id"])
     return None
 
 
-def _note_ops(ws: Workspace, rec: dict, at: str, pairs: dict, by_model: str, ids: list[str]) -> tuple[list[dict], str]:
-    """Ops for one note after the admission gate: a vote on an item it
-    restates, a conflict link, or an ADD (a pitfall when a fail/pass pair
-    backs it)."""
+def _support_ops(ws: Workspace, rel: str, row: dict, rec: dict, verified: bool) -> tuple[list[dict], str]:
+    """What a note does to an existing item it restates or confirms."""
+    sid = str(rec.get("session", ""))
+    iid = row["id"]
+    if rec.get("trust") == "owner-stated":
+        if verified and not owner_level(rel, row):
+            return [{"op": "OWNER_CONFIRM", "id": iid, "owner": rec["proof"]}], ""
+        if not verified:
+            return [], (f"the owner's words were not found again in a transcript on disk; it restates {iid}: "
+                        f"brain learn confirm {iid} --quote \"<his words>\"")
+    if row.get("type") == "fact":
+        return [{"op": "REVERIFY", "id": iid, "session": sid}], ""
+    # One session confirms an item once: the same note delivered twice, or a
+    # second note from the session that wrote the item, is not a second voice.
+    again = bool(sid) and f"session:{sid}" in (row.get("evidence") or [])
+    return [{"op": "INC_HELPFUL", "id": iid, "n": 0 if again else 1, "session": sid,
+             "evidence": [] if again else list(rec.get("evidence") or [])}], ""
+
+
+def nearest_items(ws: Workspace, text: str, fact: bool, day: str, limit: int = 2) -> list[tuple[float, str, dict]]:
+    """The existing items closest to ``text`` (candidates included), best
+    first: what ``learn note`` shows so the lead confirms one or rewords."""
+    out = []
+    for rel, row in ws.all_items():
+        if (row.get("type") == "fact") != fact or not _live(row, day):
+            continue
+        other = str(row.get("text", ""))
+        sim = max(jaccard(text, other), 0.75 * containment(text, other))
+        if sim >= NEAR_SHOW:
+            out.append((round(sim, 3), rel, row))
+    out.sort(key=lambda t: (-t[0], t[2].get("id", "")))
+    return out[:limit]
+
+
+def _note_ops(ws: Workspace, rec: dict, at: str, fixed: dict, by_model: str, ids: list[str]) -> tuple[list[dict], str]:
+    """Ops for one note after the admission gate: support for an item it
+    restates or names (``confirms``), or an ADD, with a conflict link or a
+    SUPERSEDE when it contradicts what is there. A note that claims the
+    owner's authority gets it only when its quote is found again in a
+    transcript on disk right now; otherwise it is added as a candidate that
+    waits for him and is never shown as a rule (learning-01, redteam-02)."""
     errs = check_note(rec)
     if rec.get("scope") == "project":
         errs.append("project lessons stay in the project")
@@ -976,51 +1575,113 @@ def _note_ops(ws: Workspace, rec: dict, at: str, pairs: dict, by_model: str, ids
     text = " ".join(str(rec["text"]).split())
     fact = rec.get("trust") == "external"
     if not fact and not actionable(text):
-        return [], "not actionable: say what to do (an imperative, or should/must/never)"
+        return [], "not actionable: say what to do (start with a verb, or use should, must or never)"
     if project_specific(text, ids):
         return [], "names a path, file or project: keep it in that project's .brain/"
-    pair = None if fact else _pitfall_pair(rec, pairs)
-    item = note_item(rec, at[:10], "pitfall" if pair else "rule", by_model)
-    if pair:
-        item["evidence"] += [f"outcome:{pair[0]}", f"outcome:{pair[1]}"]
     day = at[:10]
-    best, best_sim = None, -1.0
-    for _rel, row in ws.all_items():
-        if (row.get("type") == "fact") != fact or not _live(row, day):
-            continue
-        other = str(row.get("text", ""))
-        if not restates(item["text"], other):
-            continue
-        sim = jaccard(item["text"], other)
-        if sim > best_sim or (sim == best_sim and row["id"] < best["id"]):
-            best, best_sim = row, sim
     sid = str(rec.get("session", ""))
-    if best is not None and negative(best["text"]) == negative(item["text"]):
-        return [{"op": "INC_HELPFUL", "id": best["id"], "n": 1, "session": sid,
-                 "evidence": list(rec.get("evidence") or [])}], ""
+    claim = rec.get("trust") == "owner-stated"
+    verified = claim and reverify_owner(rec) is True
+    if rec.get("confirms") is not None:
+        rel, row = ws.find(str(rec["confirms"]))
+        if row is None or (row.get("type") == "fact") != fact or row.get("valid_to"):
+            return [], f"confirms {rec['confirms']}: no such {'fact' if fact else 'lesson'} in memory"
+        return _support_ops(ws, rel, row, rec, verified)
+    pit = None if fact else _pitfall_outcome(rec, fixed)
+    item = note_item(rec, day, "pitfall" if pit else "rule", by_model)
+    if pit:
+        item["evidence"].append(f"outcome:{pit}")
+
+    def same(row: dict) -> bool:
+        return says_the_same(item["text"], str(row.get("text", "")), fact)
+
+    # The item this note is about: one that says the same before one that
+    # says the opposite, a live one before a demoted one it would revive,
+    # then the closest in words.
+    best, best_key = None, None
+    for rel, row in ws.all_items():
+        if (row.get("type") == "fact") != fact or row.get("valid_to") or row.get("status") == "retired" \
+                or not restates(item["text"], str(row.get("text", ""))):
+            continue
+        demoted = row.get("status", "active") == "demoted"
+        if demoted and not same(row):
+            continue  # an opposite that is out of use is no conflict
+        key = (same(row), not demoted, jaccard(item["text"], str(row.get("text", ""))), [-ord(ch) for ch in row["id"]])
+        if best_key is None or key > best_key:
+            best, best_key = (rel, row), key
+    if best is not None and same(best[1]):
+        return _support_ops(ws, best[0], best[1], rec, verified)
     item["sessions"] = 1 if sid else 0
     if sid:
         item["evidence"].append(f"session:{sid}")
-    ops = [{"op": "ADD", "file": "memory/facts.jsonl" if fact else "memory/items.jsonl", "item": item}]
-    if best is not None:
-        ops.append({"op": "LINK", "a": item["id"], "b": best["id"], "rel": "conflicts"})
+    against_owner = best is not None and owner_level(*best)
+    add = {"op": "ADD", "file": "memory/facts.jsonl" if fact else "memory/items.jsonl", "item": item}
+    if claim and verified and not against_owner:
+        item["status"] = "active"
+        add["owner"] = rec["proof"]
+    elif claim:
+        item.update(trust="observed", awaiting_owner=True)
+    ops = [add]
+    if best is None:
+        return ops, ""
+    if fact:
+        if against_owner:
+            return [], f"changes a fact that is the owner's ({best[1]['id']}): only he can replace it"
+        return ops + [{"op": "SUPERSEDE", "old": best[1]["id"], "new": item["id"]}], ""
+    if against_owner or item.get("awaiting_owner"):
+        # One-sided: the owner's item is not touched, and a claim nobody
+        # checked cannot hold up the lesson it contradicts.
+        item["conflicts"] = [best[1]["id"]]
+    else:
+        ops.append({"op": "LINK", "a": item["id"], "b": best[1]["id"], "rel": "conflicts"})
     return ops, ""
 
 
-def _used_op(rec: dict, outcomes: list[dict]) -> dict | None:
-    """Credit for a followed item, read from the same session's outcomes:
-    every gate green on the first run is a helpful vote, a failed outcome a
-    harmful one, anything else just records the use. Never from the model."""
-    if rec.get("followed") is not True:
-        return None
+def _used_op(ws: Workspace, rec: dict, outcomes: list[dict]) -> tuple[dict | None, str]:
+    """(op, note) for a recalled item. Credit is read from the same session's
+    outcomes, never from the model: every gate green on the first run is a
+    helpful vote, a failed outcome a harmful one, anything else just records
+    the use. Facts and what is the owner's take no votes from outcomes; a
+    candidate is credited only when the injection log proved recall showed
+    it (``shown``, written by the script that recorded the use)."""
     sid = str(rec.get("session", ""))
+    iid = rec.get("item")
+    neutral = {"op": "INC_HELPFUL", "id": iid, "n": 0, "session": sid, "evidence": []}
+    if rec.get("followed") is not True:
+        return ({**neutral, "seen": True} if rec.get("shown") is True else None), ""
+    rel, row = ws.find(str(iid))
+    if row is None or row.get("awaiting_owner"):
+        return neutral, ""
     mine = [o for o in outcomes if str(o.get("session", "")) == sid]
     ev = [f"outcome:{o['id']}" for o in mine]
+    votes = row.get("type") != "fact" and not owner_level(rel, row)
     if mine and all(o.get("passed") is True and o.get("first_pass", True) is True for o in mine):
-        return {"op": "INC_HELPFUL", "id": rec.get("item"), "n": 1, "session": sid, "evidence": ev}
+        if not votes:
+            return neutral, ""
+        if row.get("status") == "candidate" and rec.get("shown") is not True:
+            return neutral, f"no credit for {iid}: a candidate is credited only in a session where recall showed it"
+        return {"op": "INC_HELPFUL", "id": iid, "n": 1, "session": sid, "evidence": ev}, ""
     if any(o.get("passed") is False for o in mine):
-        return {"op": "INC_HARMFUL", "id": rec.get("item"), "n": 1, "session": sid, "evidence": ev}
-    return {"op": "INC_HELPFUL", "id": rec.get("item"), "n": 0, "session": sid, "evidence": []}
+        if not votes:
+            return {**neutral, "failed": True}, ""  # listed for the owner in the digest, not voted on
+        return {"op": "INC_HARMFUL", "id": iid, "n": 1, "session": sid, "evidence": ev}, ""
+    return neutral, ""
+
+
+def _shape_problem(rec: dict) -> str:
+    """Why a record cannot be read at all; empty when its fields have the
+    types the rest of the consolidation relies on (learning-08)."""
+    if not isinstance(rec.get("kind"), str) or not rec["kind"]:
+        return "kind must be a string"
+    for k in ("session", "at", "id", "text", "item", "confirms", "signal", "source", "scope", "trust"):
+        if k in rec and not isinstance(rec[k], str):
+            return f"{k} must be a string"
+    for k in ("evidence", "class"):
+        if k in rec and not (isinstance(rec[k], list) and all(isinstance(x, str) for x in rec[k])):
+            return f"{k} must be a list of strings"
+    if "id" in rec and not rec["id"]:
+        return "id must not be empty"
+    return ""
 
 
 def _record_problem(rec: dict) -> str:
@@ -1040,31 +1701,46 @@ def _record_problem(rec: dict) -> str:
     return ""
 
 
-def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -> tuple[dict | None, list[str]]:
+def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2,
+                        budget: int = DEFAULT_BUDGET) -> tuple[dict | None, list[str]]:
     """One delta for every pending inbox file, plus a list of rejections.
 
-    Returns (None, [reason]) when the new records cannot be folded into the
-    learning statistics: consuming them without folding would lose them."""
+    One bad record costs that record: it is rejected with its file and line
+    and the rest is applied. A record delivered twice counts once. A lesson
+    that does not fit in a full file is rejected alone. Returns (None,
+    [reason]) only when the new records cannot be folded into the learning
+    statistics: consuming them without folding would lose them."""
     root = Path(brain_root or c.BRAIN_ROOT)
     files = pending_inbox(root)
     if not files:
         return None, []
     at = c.now_iso()
-    ws = Workspace(root)
+    ws = Workspace(root, owner_ok=True)  # this process checks every owner claim itself, below
     ops: list[dict] = []
     rejected: list[str] = []
     ids = known_project_ids(root)
 
     def take(candidates: list[dict], label: str) -> None:
         for op in candidates:
+            rel = op.get("file", "")
+            if op["op"] == "ADD" and ws.live_count(rel) >= budget:
+                rejected.append(f"{label}: not added, memory is full: {rel} holds {ws.live_count(rel)} items "
+                                f"(limit {budget}); run: brain learn decay")
+                return
             err = ws.apply_op(op, at)
             if err:
                 rejected.append(f"{label}: {err}")
-            else:
-                ops.append(op)
+                return  # the ops of one record stand or fall in order
+            ops.append(op)
 
+    state = ws.ml_state() or {}
+    folded = {str(x) for x in state.get("seen") or []} if isinstance(state.get("seen"), list) else set()
+    ledger_ids: dict[str, set[str]] = {}
     batch = []
     expected: dict[Path, int] = {}
+    done: dict[Path, int] = {}
+    seen: set[str] = set()
+    twice = 0
     for f in files:
         try:
             recs, _bad = c.read_jsonl_counted(f)
@@ -1072,8 +1748,19 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
             rejected.append(f"{f.name}: cannot be read; left pending")
             continue
         expected[f] = len(recs)
-        batch += [(f, n, with_id(rec)) for n, rec in enumerate(recs, 1)]
-    done: dict[Path, int] = {}
+        for n, rec in enumerate(recs, 1):
+            problem = _shape_problem(rec)
+            if problem:
+                rejected.append(f"{f.name}:{n}: {problem}")
+                done[f] = done.get(f, 0) + 1
+                continue
+            rec = with_id(rec)
+            if rec["id"] in seen or (rec["kind"] in FOLD_KINDS and rec["id"] in folded):
+                twice += 1
+                done[f] = done.get(f, 0) + 1
+                continue
+            seen.add(rec["id"])
+            batch.append((f, n, rec))
     fold: list[dict] = []
     for f, n, rec in batch:
         if rec.get("kind") not in FOLD_KINDS:
@@ -1093,34 +1780,59 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
         if err:
             return None, [err]
         ops.append(op)
-    pairs = _fail_pass_pairs(outcomes)
+    fixed = _fixed_in_session(outcomes)
     models: dict[str, str] = {}  # session -> main model; the ledger row says it best
     for kind in ("outcome", "ledger"):
         models.update({str(r.get("session", "")): str(r["model"]) for _f, _n, r in batch
                        if r.get("kind") == kind and r.get("model")})
     good_ids = {r["id"] for r in fold}
 
-    for f, n, rec in batch:
-        label = f"{f.name}:{n}"
+    def handle(label: str, rec: dict) -> None:
+        nonlocal twice
         kind = rec.get("kind")
-        done[f] = done.get(f, 0) + 1
         if kind == "ledger":
-            month = str(rec.get("at", at))[:7]
-            take([{"op": "APPEND_STAT", "file": f"stats/ledger/{month}.jsonl", "row": rec}], label)
+            rel = f"stats/ledger/{str(rec.get('at', at))[:7]}.jsonl"
+            if rel not in ledger_ids:
+                ledger_ids[rel] = {str(r.get("id")) for r in map(_loads, ws._get_text(rel).splitlines()) if r}
+            if rec["id"] in ledger_ids[rel]:
+                twice += 1
+                return
+            ledger_ids[rel].add(rec["id"])
+            take([{"op": "APPEND_STAT", "file": rel, "row": rec}], label)
         elif kind == "used" and rec["id"] in good_ids:
-            op = _used_op(rec, outcomes)
+            op, why = _used_op(ws, rec, outcomes)
+            if why:
+                rejected.append(f"{label}: {why}")
             if op:
                 take([op], label)
         elif kind == "correction" and rec["id"] in good_ids and isinstance(rec.get("item"), str):
-            take([{"op": "INC_HARMFUL", "id": rec["item"], "n": 1, "session": str(rec.get("session", "")),
-                   "evidence": list(rec["evidence"])}], label)
+            rel, row = ws.find(rec["item"])
+            if row is not None and owner_level(rel, row):
+                rejected.append(f"{label}: {rec['item']} is the owner's and takes no harm votes; if he withdrew it: "
+                                f"brain learn reject {rec['item']} --quote \"<his words>\"")
+                return
+            op = {"op": "INC_HARMFUL", "id": rec["item"], "n": 1, "session": str(rec.get("session", "")),
+                  "evidence": list(rec["evidence"])}
+            if reverify_owner(rec) is True:
+                op["correction"] = True  # his words, found again: this alone demotes
+            take([op], label)
         elif kind == "note":
-            note_ops, err = _note_ops(ws, rec, at, pairs, models.get(str(rec.get("session", "")), ""), ids)
+            note_ops, err = _note_ops(ws, rec, at, fixed, models.get(str(rec.get("session", "")), ""), ids)
             if err:
                 rejected.append(f"{label}: {err}")
             take(note_ops, label)
         elif kind not in KINDS:
             rejected.append(f"{label}: unknown kind {kind!r}")
+
+    for f, n, rec in batch:
+        label = f"{f.name}:{n}"
+        done[f] = done.get(f, 0) + 1
+        try:
+            handle(label, rec)
+        except Exception as e:  # one record must never stop the consolidation of the rest
+            rejected.append(f"{label}: could not be processed ({type(e).__name__}: {c.clip(str(e), 60)})")
+    if twice:
+        rejected.append(f"{twice} record(s) delivered twice, counted once")
     for f in files:
         # A file is handled only when every valid record in it was processed;
         # its unreadable lines are reported (inbox_unreadable), never silently dropped.
@@ -1130,7 +1842,7 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
         take([{"op": "MARK_INBOX", "file": rel}], rel)
     moves = _transitions(ws, at, min_sessions)
     promos = [{"kind": "promotion", "id": record_id("", "promotion", f"{o['id']}|{at}"), "session": "", "at": at,
-               "item": o["id"]} for o in moves if o["status"] == "active"]
+               "item": o["id"]} for o in moves if o.get("status") == "active"]
     fold_op = next((o for o in ops if o["op"] == "ML_FOLD"), None)
     if promos and (fold_op is not None or mlearn_module(optional=True) is not None):
         if ws.apply_op({"op": "ML_FOLD", "records": promos}, at) == "":
@@ -1138,17 +1850,23 @@ def build_consolidation(brain_root: Path | None = None, min_sessions: int = 2) -
                 ops.insert(0, {"op": "ML_FOLD", "records": promos})
             else:
                 fold_op["records"] = fold_op["records"] + promos
-    return make_delta(ops + moves, at), rejected
+    ops += moves
+    return (trusted_delta(ops, at) if any("owner" in o for o in ops) else make_delta(ops, at)), rejected
 
 
 # ---------------------------------------------------------------- decay
 def build_decay(brain_root: Path | None = None) -> tuple[dict | None, list[str]]:
-    """Demote items that have faded and retire long-demoted ones (within the
-    retire cap per file); return stale facts as lines to print.
+    """Demote learned lessons that have faded and retire long-demoted ones;
+    return lines to print (facts due a re-check, how many demotions wait).
 
-    Fading is ``mlearn.retention`` below the configured floor when that
-    module is present (a usage-based forgetting curve: an item followed often
-    fades slowly), else 90 days without use. Owner-stated items never fade (I-08)."""
+    Only what a session's note created fades (redteam-01, learning-06):
+    shipped knowledge, everything under owner/ and playbooks/, and what the
+    owner stated (I-08) are never touched, and a fact that is overdue is
+    reported as stale, not demoted. Fading is ``mlearn.retention`` below the
+    configured floor when that module is present (an item followed often
+    fades slowly), else 90 days without use. Per run at most a tenth of a
+    file's live items is demoted, the least retained first, and a demoted
+    lesson is retired 180 days after its demotion."""
     root = Path(brain_root or c.BRAIN_ROOT)
     at = c.now_iso()
     ws = Workspace(root)
@@ -1156,34 +1874,40 @@ def build_decay(brain_root: Path | None = None) -> tuple[dict | None, list[str]]
     floor = (ws.ml_cfg.get("retention") or {}).get("threshold", RETENTION_FLOOR)
     now = c.now()
     ops: list[dict] = []
-    stale: list[str] = []
+    lines: list[str] = []
+    waiting = 0
     for rel in sorted(ws.rows):
-        to_retire = []
+        fade, to_retire = [], []
         for row in ws.rows[rel]:
             it = I.normalise(row)
-            if it.get("verified_on") and not it.get("valid_to") and \
+            if it.get("verified_on") and not it.get("valid_to") and it["status"] != "demoted" and \
                     c.days_since(it["verified_on"]) > int(it.get("recheck_days", 90) or 90):
-                stale.append(f"stale fact {it['id']}: verified {it['verified_on']}, re-check every {it.get('recheck_days', 90)} days")
-            if it["trust"] == "owner-stated":  # what the owner said does not fade with disuse
+                lines.append(f"stale fact {it['id']}: verified {it['verified_on']}, re-check every "
+                             f"{it.get('recheck_days', 90)} days, then: brain learn reverify {it['id']} --source <url>")
+            if not learned(it) or owner_level(rel, it) or rel.startswith("playbooks/"):
                 continue
             unused = c.days_since(it["last_used"] or it["created"])
             if it["status"] in ("candidate", "probation", "active") and it["importance"] < 3:
-                faded = retention(it, now) < floor if retention else unused >= DEMOTE_AFTER_DAYS
-                if faded:
-                    ops.append({"op": "SET_STATUS", "id": it["id"], "status": "demoted"})
-            elif it["status"] == "demoted" and unused >= RETIRE_AFTER_DAYS:
-                to_retire.append((-unused, it["id"]))
+                if it["status"] == "candidate" and not it["uses"] and c.days_since(it["created"]) < CANDIDATE_GRACE_DAYS:
+                    continue  # nobody was ever shown it: too early to call it forgotten
+                kept = float(retention(it, now)) if retention else None
+                if (kept < floor) if kept is not None else unused >= DEMOTE_AFTER_DAYS:
+                    fade.append((kept if kept is not None else -unused, it["id"]))
+            elif it["status"] == "demoted":
+                since = c.days_since(it["demoted_on"]) if it.get("demoted_on") else unused - DEMOTE_AFTER_DAYS
+                if since >= RETIRE_FURTHER_DAYS:
+                    to_retire.append((-since, it["id"]))
+        cap = max(1, ws.live_count(rel) // 10)
+        ops += [{"op": "SET_STATUS", "id": iid, "status": "demoted"} for _, iid in sorted(fade)[:cap]]
+        waiting += max(0, len(fade) - cap)
         limit = max(1, len(ws.rows[rel]) // 10)
         ops += [{"op": "SET_STATUS", "id": iid, "status": "retired"} for _, iid in sorted(to_retire)[:limit]]
-    return (make_delta(ops, at) if ops else None), stale
+    if waiting:
+        lines.append(f"decay: {waiting} more faded item(s) wait for the next run (at most a tenth of a file is demoted per run)")
+    return (make_delta(ops, at) if ops else None), lines
 
 
 # ---------------------------------------------------------------- digest
-def _iso_week(d: _dt.datetime) -> str:
-    y, w, _ = d.isocalendar()
-    return f"{y}-W{w:02d}"
-
-
 def _row_tokens(row: dict) -> int:
     return sum(int(m.get(k, 0) or 0) for m in (row.get("models") or {}).values() if isinstance(m, dict)
                for k in ("in", "cache_write", "cache_read", "out"))
@@ -1203,25 +1927,72 @@ def _parse(at: str) -> _dt.datetime | None:
     return d if d.tzinfo else d.replace(tzinfo=_dt.timezone.utc)
 
 
+def awaiting_owner(brain_root: Path | None = None) -> list[dict]:
+    """Items that claim the owner's words and wait for his yes or no. A claim
+    nobody answered fades like any unused lesson and is then no longer asked."""
+    return [row for _rel, row in Workspace(Path(brain_root or c.BRAIN_ROOT)).all_items()
+            if row.get("awaiting_owner") and row.get("status", "active") == "candidate"]
+
+
 def build_digest(brain_root: Path | None = None, weeks: int = 1) -> tuple[str, str]:
-    """(relative path, text) of the weekly digest, at most 15 lines."""
+    """(relative path, text) of the weekly digest, at most 15 lines.
+
+    It opens with what only the owner can judge, in numbered plain sentences
+    he can answer with "no 2": what the brain now treats as his instruction,
+    what it stopped using, and what waits for his yes or no (redteam-17).
+    Nothing inside one container can prove a record came from him, so this
+    page is the outside check on owner-level memory."""
     root = Path(brain_root or c.BRAIN_ROOT)
     now = c.now()
     start = now - _dt.timedelta(days=7 * weeks)
     before = start - _dt.timedelta(days=28)
-    learned, retired = [], []
+    ws = Workspace(root)
+    day = c.today()
+    learned_lines, his, stopped, question = [], [], [], []
     for row in manifest_rows(root):
         d = _parse(row.get("at", ""))
         if not d or d < start or d > now:
             continue
         delta = c.read_json(root / "learning" / "deltas" / f"{row.get('id')}.json", {}) or {}
         for op in delta.get("ops", []):
-            if op.get("op") == "ADD":
-                learned.append(f"{op['item']['id']}: {c.clip(op['item'].get('text', ''), 80)}")
-            elif op.get("op") == "SET_STATUS" and op.get("status") == "active":
-                learned.append(f"{op['id']} is now active")
-            elif op.get("op") == "SET_STATUS" and op.get("status") in ("retired", "demoted"):
-                retired.append(f"{op['id']} ({op['status']})")
+            kind, iid = op.get("op"), str(op.get("id", ""))
+            if kind == "ADD" and isinstance(op.get("item"), dict):
+                it = op["item"]
+                if it.get("trust") == "owner-stated":
+                    his.append(str(it.get("id")))
+                elif not it.get("awaiting_owner"):
+                    learned_lines.append((str(it.get("id")), f"{it.get('id')}: {c.clip(str(it.get('text', '')), 80)}"))
+            elif kind == "OWNER_CONFIRM":
+                his.append(iid)
+            elif kind == "SET_STATUS" and op.get("status") == "active":
+                learned_lines.append((iid, f"{iid} is now active"))
+            elif kind == "SET_STATUS" and op.get("status") in ("retired", "demoted"):
+                stopped.append(iid)
+            elif kind == "SUPERSEDE":
+                stopped.append(str(op.get("old", "")))
+            elif kind == "INC_HARMFUL" or op.get("failed"):
+                _rel, target = ws.find(iid)
+                if target is not None and not learned(target):
+                    question.append(iid)
+
+    def in_use(iid: str) -> bool:
+        _rel, row = ws.find(iid)
+        return row is not None and _live(row, day)
+
+    def sentence(iid: str) -> str:
+        _rel, row = ws.find(iid)
+        row = row or ws.archived(iid) or {}
+        return f"{c.clip(str(row.get('text') or 'an item no longer on file'), 90)} [{iid}]"
+
+    def uniq(ids: list[str]) -> list[str]:
+        return list(dict.fromkeys(i for i in ids if i))
+
+    his = [i for i in uniq(his) if in_use(i) and (ws.find(i)[1] or {}).get("trust") == "owner-stated"]
+    stopped = [i for i in uniq(stopped) if not in_use(i) and not (ws.find(i)[1] or ws.archived(i) or {}).get("awaiting_owner")]
+    waiting = [str(r.get("id")) for r in awaiting_owner(root)]
+    question = [i for i in uniq(question) if in_use(i)]
+    learned_lines = [line for iid, line in learned_lines if in_use(iid)]
+
     now_t: dict[str, list[int]] = {}
     old_t: dict[str, list[int]] = {}
     for f in sorted((root / "stats" / "ledger").glob("*.jsonl")):
@@ -1242,19 +2013,41 @@ def build_digest(brain_root: Path | None = None, weeks: int = 1) -> tuple[str, s
             eff.append(f"- {cls}: median {ma / 1000:.0f}k tokens per task ({len(a)} tasks) vs {mb / 1000:.0f}k "
                        f"({len(b)} tasks), {100 * (ma - mb) / mb:+.0f}%")
     pairs = set()
-    for _rel, row in Workspace(root).all_items():
-        for other in row.get("conflicts") or []:
-            pairs.add(tuple(sorted((row["id"], other))))
+    for _rel, row in ws.all_items():
+        if _live(row, day):
+            for other in ws.live_conflicts(row, day):
+                pairs.add(tuple(sorted((row["id"], other))))
 
     def capped(lines: list[str], n: int) -> list[str]:
         return lines[:n] + ([f"- and {len(lines) - n} more"] if len(lines) > n else [])
 
     week = _iso_week(now)
     out = [f"# Learning digest {week}"]
-    out += ["Learned:"] + (capped([f"- {l}" for l in learned], 3) or ["- nothing new"])
-    out += ["Retired:"] + (capped([f"- {l}" for l in retired], 2) or ["- nothing"])
-    out += ["Efficiency (tokens per recorded task, this period vs previous four weeks):"] + (capped(eff, 3) or ["- no recorded tasks"])
-    out += ["Unsure:"] + (capped([f"- {a} conflicts with {b}" for a, b in sorted(pairs)], 2) or ["- nothing"])
+    number = 0
+
+    def numbered(title: str, ids: list[str], empty: str, cap: int = 2) -> None:
+        nonlocal number
+        if not ids:
+            if empty:
+                out.append(f"{title}: {empty}")
+            return
+        out.append(f"{title}:" if len(ids) <= cap else f"{title} ({len(ids)}, first {cap}):")
+        for iid in ids[:cap]:
+            number += 1
+            out.append(f"{number}. {sentence(iid)}")
+
+    numbered("What I now treat as your instruction", his, "nothing new")
+    numbered("What I stopped using", stopped, "nothing")
+    numbered("Did you say this? Answer yes or no", waiting, "")
+    if question:
+        out.append(c.clip("In question (followed in sessions that failed; nothing changed): " + ", ".join(question[:6]), 200))
+    for title, lines in (("Learned:", capped([f"- {l}" for l in learned_lines], 3) or ["- nothing new"]),
+                         ("Efficiency (tokens per recorded task, this period vs previous four weeks):",
+                          capped(eff, 3) or ["- no recorded tasks"]),
+                         ("Unsure:", capped([f"- {a} conflicts with {b}" for a, b in sorted(pairs)], 2) or ["- nothing"])):
+        room = 15 - len(out)
+        if room >= 2:
+            out += [title] + lines[:room - 1]
     return f"learning/digest/{week}.md", "\n".join(out[:15]) + "\n"
 
 
@@ -1280,14 +2073,17 @@ def _tree_files(root: Path) -> dict[str, bytes]:
         for p in sorted((root / d).rglob("*")) if (root / d).is_dir() else []:
             rel = p.relative_to(root).as_posix()
             # Kernel files are hand-written and state files are rewritten by their
-            # own script (the radar); neither is produced by deltas.
-            if p.is_file() and not p.name.startswith(".tmp-") and zone_of(rel) not in ("kernel", "state"):
+            # own script (the radar); neither is produced by deltas. The digest is
+            # a report regenerated from the manifest (learn digest --write), so
+            # writing it again in the same week is not a change to memory.
+            if p.is_file() and not p.name.startswith(".tmp-") and zone_of(rel) not in ("kernel", "state") \
+                    and not rel.startswith("learning/digest/"):
                 out[rel] = p.read_bytes()
     return out
 
 
 def _append_only(rel: str) -> bool:
-    return zone_of(rel) == "inbox" or rel.startswith("learning/digest/")
+    return zone_of(rel) == "inbox"
 
 
 def _one_session(data: bytes) -> str:
@@ -1338,15 +2134,20 @@ def verify(brain_root: Path | None = None, base: str | None = None) -> tuple[boo
         base_ids = {r.get("id") for r in manifest_rows(tmp)}
         new = [r.get("id") for r in manifest_rows(root) if r.get("id") not in base_ids]
         problems = []
+        broken = []      # deltas the promotion rules refuse: never legitimate, locked or not
+        owner_ops = 0
         for did in new:
             delta = c.read_json(root / "learning" / "deltas" / f"{did}.json")
             if not isinstance(delta, dict):
                 problems.append(f"learning/deltas/{did}.json: missing or unreadable")
                 break
-            ok, lines = apply_delta(delta, tmp)
+            ok, lines = apply_delta(delta, tmp, replay=True)
             if not ok:
                 problems.append(f"delta {did} is refused on replay: {lines[0]}")
+                if "promotion rules:" in lines[0]:
+                    broken.append(problems[-1])
                 break
+            owner_ops += sum(1 for op in delta.get("ops", []) if isinstance(op, dict) and "owner" in op)
         if not problems:
             head, replay = _tree_files(root), _tree_files(tmp)
             handled = consumed_inbox(root)
@@ -1361,7 +2162,10 @@ def verify(brain_root: Path | None = None, base: str | None = None) -> tuple[boo
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     if not problems:
-        return True, [f"learn verify: {len(new)} delta(s) replayed on {base}; learned zone matches"]
+        return True, [f"learn verify: {len(new)} delta(s) replayed on {base}; learned zone matches"
+                      + (f"; {owner_ops} owner-level change(s), listed in the digest for him" if owner_ops else "")]
+    if broken:
+        return False, ["learn verify: a recorded delta breaks the promotion rules; it was not made by brain learn"] + broken
     locked = bool((c.read_json(root / "VERSION.json", {}) or {}).get("learned_zone_locked"))
     if locked:
         return False, [f"learn verify: {len(problems)} learned-zone file(s) do not match the deltas"] + problems[:12]
@@ -1370,6 +2174,10 @@ def verify(brain_root: Path | None = None, base: str | None = None) -> tuple[boo
 
 
 # ---------------------------------------------------------------- cli
+def _root(args) -> Path:
+    return Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+
+
 def _managed_project(args, root: Path) -> Path | None:
     proj = c.resolve_project(getattr(args, "project", None), root)
     return proj if proj is not None and c.is_managed(proj) else None
@@ -1378,8 +2186,9 @@ def _managed_project(args, root: Path) -> Path | None:
 def build_note(args, root: Path) -> tuple[dict | None, Path | None, str]:
     """(record, project, "") for ``learn note``, or (None, None, reason). Every
     check runs before anything is written, so a refused text is never stored
-    anywhere in the brain: format, owner words (--quote), project names and
-    paths (I-05), and evidence that resolves to this session's own records."""
+    anywhere in the brain: format, the admission gate (it must say what to
+    do), owner words (--quote), project names and paths (I-05), and evidence
+    that resolves to this session's own records."""
     sid = c.session_id()
     rec = {"kind": "note", "session": sid, "at": c.now_iso(), "text": " ".join((args.text or "").split()),
            "class": list(args.cls or []), "scope": args.scope, "trust": args.trust,
@@ -1388,6 +2197,9 @@ def build_note(args, root: Path) -> tuple[dict | None, Path | None, str]:
         rec["signal"] = args.signal
     if args.source:
         rec["source"] = args.source
+    confirms = getattr(args, "confirms", None)
+    if confirms:
+        rec["confirms"] = confirms
     if any(e.startswith("owner:") for e in rec["evidence"]):
         return None, None, "owner evidence comes only from --quote, checked against the owner's typed turns"
     if args.trust == "owner-stated" and not getattr(args, "quote", None):
@@ -1396,6 +2208,8 @@ def build_note(args, root: Path) -> tuple[dict | None, Path | None, str]:
     errs = check_note(probe)
     if errs:
         return None, None, "; ".join(errs)
+    if args.trust != "external" and not actionable(rec["text"]):
+        return None, None, "not actionable: say what to do (start with a verb, or use should, must or never), then note it again"
     project = _managed_project(args, root)
     if args.scope != "project":
         names = known_project_ids(root) + project_words(project)
@@ -1403,14 +2217,19 @@ def build_note(args, root: Path) -> tuple[dict | None, Path | None, str]:
             return None, None, "names a path, file or project: record it with --scope project in that project's .brain/"
         if any(project_specific(e, names) for e in rec["evidence"] if not e.startswith("review:")):
             return None, None, "evidence names a path, file or project: name the gate, test or run instead"
+        if confirms:
+            _rel, row = Workspace(root).find(confirms)
+            if row is None or (row.get("type") == "fact") != (args.trust == "external"):
+                return None, None, f"--confirms {confirms}: no such {'fact' if args.trust == 'external' else 'lesson'} in memory"
     evidence, why = resolve_evidence(rec["evidence"], sid, project, root)
     if why:
         return None, None, why
     if getattr(args, "quote", None):
-        owner_ev, why = verify_owner_quote(args.quote, sid)
+        proof, why = owner_proof(args.quote, sid)
         if why:
             return None, None, why
-        evidence.append(owner_ev)
+        evidence.append(proof_evidence(proof))
+        rec["proof"] = proof
     rec["evidence"] = evidence
     errs = check_note(rec)
     if errs:
@@ -1419,7 +2238,7 @@ def build_note(args, root: Path) -> tuple[dict | None, Path | None, str]:
 
 
 def cmd_note(args) -> int:
-    root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+    root = _root(args)
     rec, project, why = build_note(args, root)
     if rec is None:
         print("note refused: " + why)
@@ -1428,7 +2247,13 @@ def cmd_note(args) -> int:
         if project is None:
             print("no managed project found (attach one, or run: brain init <path>)")
             return 1
+        # A project lesson never leaves the project and its evidence was just
+        # checked, so it is usable at once: on probation, or active when the
+        # owner's words back it (learning-03). The file is the project's own,
+        # so trust stays "observed" whoever said it.
         item = note_item(rec, c.today())
+        item["status"] = "active" if rec["trust"] == "owner-stated" else "probation"
+        item["trust"] = "external" if rec["trust"] == "external" else "observed"
         path = project / ".brain" / "memory" / "lessons.jsonl"
         if any(r.get("id") == item["id"] for r in c.read_jsonl(path)):
             print(f"already recorded as {item['id']}")
@@ -1438,11 +2263,47 @@ def cmd_note(args) -> int:
             print("note refused: " + bad[0])
             return 1
         c.append_jsonl(path, item)
-        print(f"project lesson {item['id']} recorded as a candidate in .brain/memory/lessons.jsonl")
+        print(f"project lesson {item['id']} recorded ({'active' if item['status'] == 'active' else 'on probation'}) "
+              "in .brain/memory/lessons.jsonl")
         return 0
     path = _writable_session_file(root, rec["session"])
-    c.append_jsonl(path, with_id(rec))
-    print(f"note recorded in the inbox ({path.name}); it is reviewed at the next consolidation")
+    rec = with_id(rec)
+    # The same text noted again in this session replaces the earlier note
+    # (same record id), so "note, see what is close, note again with
+    # --confirms" leaves one record, not a near-duplicate lesson.
+    earlier = c.read_jsonl(path)
+    if any(r.get("id") == rec["id"] for r in earlier):
+        c.write_jsonl(path, [r for r in earlier if r.get("id") != rec["id"]] + [rec])
+    else:
+        c.append_jsonl(path, rec)
+    fact = rec["trust"] == "external"
+    if rec.get("confirms"):
+        print(f"note recorded ({path.name}): it counts for {rec['confirms']} at the next consolidation")
+        return 0
+    ws = Workspace(root)
+    near = nearest_items(ws, rec["text"], fact, c.today())
+    hit = next((row for _sim, _rel, row in near if restates(rec["text"], str(row.get("text", "")))), None)
+    if hit is not None:
+        if says_the_same(rec["text"], str(hit.get("text", "")), fact):
+            what = f"it restates {hit['id']} and counts for it at the next consolidation"
+        elif fact:
+            what = f"it differs from {hit['id']} and replaces it at the next consolidation"
+        else:
+            what = (f"it says the opposite of {hit['id']}: neither moves up until the owner settles it "
+                    "(brain learn confirm <the one he means> --quote)")
+        print(f"note recorded ({path.name}): {what}")
+        return 0
+    future = note_item(rec, c.today())["id"]
+    if rec["trust"] == "owner-stated":
+        print(f"note recorded ({path.name}): it becomes {future}, his instruction if consolidated in this session; "
+              "later it waits for his yes (brain learn confirm)")
+    else:
+        pit = f"; pit-{future.split('-', 1)[1]} if its gate went red then green" if rec.get("signal") == "gate-failed" else ""
+        print(f"note recorded ({path.name}): it becomes {future} (a candidate{pit}) at the next consolidation")
+    for _sim, _rel, row in near:
+        print(f"close to {row['id']} ({row.get('status', 'active')}): {c.clip(str(row.get('text', '')), 100)}")
+    if near:
+        print("if it is the same lesson, note it again with --confirms <that id>")
     return 0
 
 
@@ -1470,7 +2331,7 @@ def hashed_words(text: str, salt: str) -> list[str]:
 def cmd_correction(args) -> int:
     """An owner correction: the strongest learning signal there is (I-07), so
     it needs the owner's own words, verified in the transcript like a note."""
-    root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+    root = _root(args)
     sid = c.session_id()
     if args.kind == "sizing":
         if args.from_tier is None or args.to_tier is None or args.from_tier == args.to_tier:
@@ -1482,11 +2343,12 @@ def cmd_correction(args) -> int:
     if args.item and not I.ID_RE.match(args.item):
         print(f"correction refused: {args.item!r} is not an item id")
         return 2
-    ev, why = verify_owner_quote(args.quote, sid)
+    proof, why = owner_proof(args.quote, sid)
     if why:
         print("correction refused: " + why)
         return 1
-    rec = {"kind": "correction", "session": sid, "at": c.now_iso(), "correction": args.kind, "evidence": [ev]}
+    rec = {"kind": "correction", "session": sid, "at": c.now_iso(), "correction": args.kind,
+           "evidence": [proof_evidence(proof)], "proof": proof}
     if args.item:
         rec["item"] = args.item
     if args.kind == "sizing":
@@ -1500,10 +2362,96 @@ def cmd_correction(args) -> int:
     return 0
 
 
+def _owner_command(args, name: str, ops_for) -> int:
+    """Shared body of confirm, reject and restore: find the item, check the
+    owner's words in this session's transcript when they are given or needed,
+    build the delta in this process and apply it. ``ops_for(ws, rel, row,
+    proof)`` returns (ops, refusal)."""
+    root = _root(args)
+    iid = str(args.id)
+    ws = Workspace(root)
+    rel, row = ws.find(iid)
+    if row is None:
+        row = ws.archived(iid) if name == "restore" else None
+        rel = (row or {}).get("retired_from")
+    if row is None:
+        print(f"{name} refused: no item {iid} in memory (brain learn status lists what waits for the owner)")
+        return 1
+    proof = None
+    quote = getattr(args, "quote", None)
+    if quote:
+        # A short answer ("no 2", "yes") counts when it is a whole line he typed.
+        proof, why = owner_proof(quote, c.session_id(), whole_line=True)
+        if why:
+            print(f"{name} refused: {why}")
+            return 1
+    ops, why = ops_for(ws, rel, row, proof)
+    if why:
+        print(f"{name} refused: {why}")
+        return 1
+    delta = trusted_delta(ops) if proof else make_delta(ops)
+    ok, lines = apply_delta(delta, root)
+    print(("" if ok else f"{name} refused, nothing changed: ") + "\n".join(lines[1:5] if ok and len(lines) > 1 else lines[:2]))
+    return 0 if ok else 1
+
+
+def cmd_confirm(args) -> int:
+    """The owner said yes: the item becomes his instruction, and whatever it
+    conflicted with is set aside (learning-01, learning-14)."""
+    def ops_for(ws, rel, row, proof):
+        if proof is None:
+            return [], "confirm needs --quote with the owner's own words from this session"
+        if row.get("trust") == "owner-stated" and row.get("status", "active") == "active":
+            return [], f"{row['id']} is already his instruction"
+        ops = [{"op": "OWNER_CONFIRM", "id": row["id"], "owner": proof}]
+        for other in ws.live_conflicts(row, c.today()):
+            ops += [{"op": "SET_STATUS", "id": other, "status": "demoted", "owner": proof},
+                    {"op": "UNLINK", "a": row["id"], "b": other, "owner": proof}]
+        return ops, ""
+    return _owner_command(args, "confirm", ops_for)
+
+
+def cmd_reject(args) -> int:
+    """The owner said no. A claim that was only waiting for him is retired
+    without more proof; anything else is his to withdraw, in his words."""
+    def ops_for(ws, rel, row, proof):
+        if row.get("awaiting_owner"):
+            return [{"op": "SET_STATUS", "id": row["id"], "status": "retired"}], ""
+        if proof is None:
+            return [], (f"{row['id']} is in use; withdrawing it needs --quote with the owner's own words "
+                        "(a short answer such as \"no 2\" counts when it is a whole line he typed)")
+        if row.get("status") == "demoted":
+            return [], f"{row['id']} is already out of use"
+        return [{"op": "SET_STATUS", "id": row["id"], "status": "demoted", "owner": proof}], ""
+    return _owner_command(args, "reject", ops_for)
+
+
+def cmd_restore(args) -> int:
+    """Bring back an item that was demoted or retired."""
+    def ops_for(ws, rel, row, proof):
+        op = {"op": "RESTORE", "id": str(args.id), "reason": " ".join(str(args.reason or "").split())}
+        if proof:
+            op["owner"] = proof
+        return [op], ""
+    return _owner_command(args, "restore", ops_for)
+
+
+def cmd_reverify(args) -> int:
+    """A fact was read again at its source: move its re-check date (learning-07)."""
+    root = _root(args)
+    if not str(args.source or "").startswith("https://"):
+        print("reverify refused: --source must be the https address where the fact was read again")
+        return 2
+    ok, lines = apply_delta(make_delta([{"op": "REVERIFY", "id": str(args.id), "session": c.session_id(),
+                                         "source": args.source}]), root)
+    print(lines[1] if ok and len(lines) > 1 else ("" if ok else "reverify refused: ") + lines[0])
+    return 0 if ok else 1
+
+
 def cmd_review(args) -> int:
     """Two independent review passes: record the counts, answer whether to run
     another round (capture-recapture, ``mlearn.review_stop``)."""
-    root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+    root = _root(args)
     sid = c.session_id()
     cls = args.cls or ""
     rnd = args.round
@@ -1522,12 +2470,16 @@ def cmd_review(args) -> int:
     return 0
 
 
+LEADS_SHOWN = 5
+
+
 def cmd_consolidate(args) -> int:
-    leads = official_leads(c.BRAIN_ROOT)
-    bad_lines, bad_files = inbox_unreadable(c.BRAIN_ROOT)
+    root = _root(args)
+    leads = official_leads(root)
+    bad_lines, bad_files = inbox_unreadable(root)
     if bad_lines:
         print(f"inbox: {bad_lines} unreadable line(s) in {bad_files} file(s) skipped; the valid records are used")
-    delta, rejected = build_consolidation(min_sessions=args.min_sessions)
+    delta, rejected = build_consolidation(root, min_sessions=args.min_sessions)
     if delta is None:
         if rejected:
             print("consolidation refused, nothing written: " + rejected[0])
@@ -1538,19 +2490,26 @@ def cmd_consolidate(args) -> int:
     for op in delta["ops"]:
         counts[op["op"]] = counts.get(op["op"], 0) + 1
     print(f"delta {delta['id']}: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
-    for r in rejected[:4]:
+    for r in rejected[:3]:
         print(f"rejected {r}")
-    if len(rejected) > 4:
-        print(f"rejected {len(rejected) - 4} more")
-    for lead in leads[:2]:
+    if len(rejected) > 3:
+        print(f"rejected {len(rejected) - 3} more")
+    # Every official lead is shown before its file is marked handled: a lead
+    # that scrolls away unseen is lost (learning-07).
+    for lead in leads[:LEADS_SHOWN]:
         print(f"lead to confirm at its source: {c.clip(str(lead.get('title', '')), 60)} {lead.get('url', '')}")
-    if len(leads) > 2:
-        print(f"and {len(leads) - 2} more official lead(s)")
+    if len(leads) > LEADS_SHOWN:
+        names = sorted({p.name for p in pending_inbox(root) for r in c.read_jsonl(p)
+                        if r.get("kind") == "lead" and r.get("trust") == "official"})
+        print(f"and {len(leads) - LEADS_SHOWN} more official lead(s): read {', '.join(names[:3])} in learning/inbox/")
     if args.dry_run:
         print("dry run: nothing written")
         return 0
-    ok, lines = apply_delta(delta)
-    print("\n".join(lines[:6]))
+    ok, lines = apply_delta(delta, root)
+    print("\n".join(lines[:4]))
+    waiting = len(awaiting_owner(root)) if ok else 0
+    if waiting:
+        print(f"{waiting} item(s) wait for the owner's yes or no: brain learn status")
     return 0 if ok else 1
 
 
@@ -1559,32 +2518,43 @@ def cmd_apply(args) -> int:
     if not isinstance(delta, dict):
         print(f"cannot read a delta from {args.delta}")
         return 1
-    ok, lines = apply_delta(delta, budget=args.budget)
+    ok, lines = apply_delta(delta, _root(args), budget=args.budget)
     print(("" if ok else "refused, nothing changed: ") + "\n".join(lines[:10]))
     return 0 if ok else 1
 
 
 def cmd_decay(args) -> int:
-    delta, stale = build_decay()
-    for s in stale[:8]:
-        print(s)
+    root = _root(args)
+    delta, lines = build_decay(root)
+    stale = [l.split(":", 1)[0][len("stale fact "):] for l in lines if l.startswith("stale fact ")]
+    if len(stale) > 1:  # one line however many are due
+        more = f" and {len(stale) - 6} more" if len(stale) > 6 else ""
+        print(f"{len(stale)} stale facts, re-check each at its source, then brain learn reverify <id> --source <url>: "
+              f"{', '.join(stale[:6])}{more}")
+        lines = [l for l in lines if not l.startswith("stale fact ")]
+    for line in lines[:4]:
+        print(line)
     if delta is None:
         print("decay: nothing to demote or retire")
         return 0
-    ok, lines = apply_delta(delta)
-    print("\n".join(lines[:6]))
+    ok, out = apply_delta(delta, root)
+    print("\n".join(out[:6]))
     return 0 if ok else 1
 
 
 def cmd_digest(args) -> int:
-    rel, text = build_digest(weeks=args.weeks)
-    c.write_text(c.BRAIN_ROOT / rel, text)
+    """Print the digest. It is a report, so it writes its file only with
+    --write: a reporting command must leave the brain clean (owner-docs-12)."""
+    root = _root(args)
+    rel, text = build_digest(root, weeks=args.weeks)
+    if getattr(args, "write", False):
+        c.write_text(root / rel, text)
     print(text, end="")
     return 0
 
 
 def cmd_verify(args) -> int:
-    ok, lines = verify(base=args.base)
+    ok, lines = verify(_root(args), base=args.base)
     print("\n".join(lines))
     return 0 if ok else 1
 
@@ -1593,17 +2563,24 @@ def status_lines(brain_root: Path | None = None) -> list[str]:
     root = Path(brain_root or c.BRAIN_ROOT)
     counts: dict[str, int] = {s: 0 for s in I.STATUS if s != "retired"}
     conflicts = 0
-    for _rel, row in Workspace(root).all_items():
+    ws = Workspace(root)
+    day = c.today()
+    live_ids = set()
+    waiting = []
+    for _rel, row in ws.all_items():
         it = I.normalise(row)
         counts[it["status"]] = counts.get(it["status"], 0) + 1
-        conflicts += bool(it["conflicts"])
-    archived = len(c.read_jsonl(root / ARCHIVE))
+        conflicts += bool(_live(row, day) and ws.live_conflicts(row, day))
+        live_ids.add(it["id"])
+        if it.get("awaiting_owner") and it["status"] == "candidate":
+            waiting.append(it["id"])
+    archived = len({r.get("id") for r in c.read_jsonl(root / ARCHIVE)} - live_ids)
     pend = pending_inbox(root)
     recs = sum(len(c.read_jsonl(p)) for p in pend)
     bad_lines, _bad_files = inbox_unreadable(root)
     rows = manifest_rows(root)
     last = rows[-1] if rows else None
-    return [
+    out = [
         "items: " + ", ".join(f"{v} {k}" for k, v in counts.items()) + f"; {archived} archived",
         f"items in a conflict: {conflicts}",
         f"inbox: {len(pend)} file(s) pending ({recs} record(s)"
@@ -1612,10 +2589,14 @@ def status_lines(brain_root: Path | None = None) -> list[str]:
         f"last delta: {last['id']} at {last['at']} ({last['ops_count']} op(s))" if last else "last delta: none yet",
         f"deltas applied: {len(rows)}",
     ]
+    if waiting:
+        out.append(c.clip(f"awaiting the owner: {len(waiting)} (not in use; brain learn confirm <id> --quote \"<his words>\", "
+                          f"or brain learn reject <id>): {', '.join(waiting[:4])}", 300))
+    return out
 
 
 def cmd_status(args) -> int:
-    print("\n".join(status_lines()))
+    print("\n".join(status_lines(_root(args))))
     return 0
 
 
@@ -1634,6 +2615,7 @@ def register(sub) -> None:
                    help="owner-stated needs --quote; external needs --source and must be a fact")
     n.add_argument("--signal", choices=SIGNALS)
     n.add_argument("--source", help="where an external fact comes from")
+    n.add_argument("--confirms", metavar="ID", help="this note is one more confirmation of that existing item, in other words")
     c.add_project_arg(n)
     n.set_defaults(func=cmd_note)
 
@@ -1646,6 +2628,27 @@ def register(sub) -> None:
     k.add_argument("--request", help="sizing: the request text; only salted word hashes are kept, in the project")
     c.add_project_arg(k)
     k.set_defaults(func=cmd_correction)
+
+    k = s.add_parser("confirm", help="the owner said yes: make an item his instruction (needs --quote of his words)")
+    k.add_argument("id")
+    k.add_argument("--quote", required=True, help="his own words from a turn he typed in this session")
+    k.set_defaults(func=cmd_confirm)
+
+    k = s.add_parser("reject", help="the owner said no: retire a waiting claim, or withdraw an item with --quote")
+    k.add_argument("id")
+    k.add_argument("--quote", help="his own words from this session; needed unless the item only waits for him")
+    k.set_defaults(func=cmd_reject)
+
+    k = s.add_parser("restore", help="bring back a demoted or retired item")
+    k.add_argument("id")
+    k.add_argument("--reason", required=True, help="why it applies again, in a few words")
+    k.add_argument("--quote", help="the owner's words; needed for an item that is his or that he withdrew")
+    k.set_defaults(func=cmd_restore)
+
+    k = s.add_parser("reverify", help="a fact was read again at its source: move its re-check date")
+    k.add_argument("id")
+    k.add_argument("--source", required=True, help="the https address where it was read again")
+    k.set_defaults(func=cmd_reverify)
 
     r = s.add_parser("review", help="record two review passes and say whether to run another round")
     r.add_argument("--found-a", type=int, required=True, help="defects found by reviewer A")
@@ -1660,15 +2663,16 @@ def register(sub) -> None:
     k.add_argument("--min-sessions", type=int, default=2)
     k.set_defaults(func=cmd_consolidate)
 
-    a = s.add_parser("apply", help="apply a delta file (all or nothing)")
+    a = s.add_parser("apply", help="apply a delta file (all or nothing; never owner-level changes)")
     a.add_argument("delta")
     a.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="items allowed per file")
     a.set_defaults(func=cmd_apply)
 
-    s.add_parser("decay", help="demote faded items and retire long-demoted ones; flag stale facts").set_defaults(func=cmd_decay)
+    s.add_parser("decay", help="demote faded lessons and retire long-demoted ones; flag stale facts").set_defaults(func=cmd_decay)
 
-    d = s.add_parser("digest", help="write the weekly digest (15 lines at most)")
+    d = s.add_parser("digest", help="print the weekly digest (15 lines at most)")
     d.add_argument("--weeks", type=int, default=1)
+    d.add_argument("--write", action="store_true", help="also keep it as learning/digest/<week>.md")
     d.set_defaults(func=cmd_digest)
 
     v = s.add_parser("verify", help="CI: replay recorded deltas on the base and compare")
