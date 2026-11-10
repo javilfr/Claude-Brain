@@ -1,0 +1,340 @@
+{
+ "summary": "The HR engine is sound where it is tested: the rack audit passes, 48 HR tests run green in 1.9 s, the held-out selection score reproduces exactly (top-1 78, top-3 86), and the wage correction is stable in a stationary simulation (18% over wage against a 20% target). Its weak points are at the edges the test set does not reach: the golden requests are 9 words long at the median, and with 30 extra words of ordinary lead text half of all hires get the wrong specialist while the fit floor never answers \"plain\"; on the real tickets file 7 of 21 file-owning tickets are given an agent that cannot edit. Settlement credits the wrong usage (first transcript only, any helper that names the contract id, planned model and effort instead of what ran), and helpers share the lead's session id, so two helper-made contracts are open under the real session right now and the lead's next close would record them. The cheapest tier is unreachable (no template resolves to Haiku; a pure find-and-list task is hired on Opus at $1.20 against $0.03). The most important change is to make selection robust and honest about doubt: choose on the head of the goal only, flag close calls with a five-line shortlist the lead can pick from (the right template is in the top five for 92 of 100), and stop tuning keywords, which measured as noise. All experiments ran in the copy at /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr/brain with scripts in /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr/scripts; nothing in /home/user/Claude-Brain was changed.",
+ "strengths": [
+  "Results come only from a check the script runs: a `passed` written into the contract is ignored and a changed check is not run (tests test_a_pass_written_into_the_contract_file_is_ignored and test_a_check_changed_after_hiring_is_not_run_and_counts_for_nothing pass); settling twice records once; the hire record carries no project name, path or task text.",
+  "The wage correction is stable when use is stationary: in a 50-hire lognormal simulation (median half the band, sigma 0.6) 9 of 50 hires went over the wage, close to the 20% the 80th percentile aims for, and the earlier swing-back defect stays fixed because ratios are taken against the band.",
+  "Rack hygiene is enforced by code, not by habit: `brain hr audit` prints 'rack is sound' on 100 templates, banned wording and absolute-rule-needs-a-reason are checked, and one malformed rack line does not stop hiring.",
+  "The brief design is cheap and careful: the delegation message is one line pointing at a file, the lead's own constraints are never dropped, no wage or token number reaches the brief, and no verification paragraph is added for Opus or Fable.",
+  "Selection is measured honestly and fails soft: the held-out floor test reproduces (78/86), templates under the floor are offered as 'closest' and not chosen, and the record multiplier is clamped so fit still decides (a template on probation at 0.56 still won the task only it fits)."
+ ],
+ "findings": [
+  {
+   "title": "A goal longer than one sentence gets the wrong specialist: 30 extra words take held-out top-1 from 78 to 50, and the fit floor never answers 'plain'",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/tests/test_hr.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "`python3 scripts/floor_exp.py <copy>` (held-out split, right/wrong/plain): 'today: coverage>=0.18 or 3 matches | short: right 78 wrong 19 plain 3 | +30 words: right 50 wrong 50 plain 0 | +60 words: right 34 wrong 66 plain 0'. The added words are ordinary lead text ('Each change gets a test that failed before it. Keep to the standard library. Report the files changed...'). `scripts/long_exp.py`: 'golden request length in words: median 9.0 max 19'; 'winner below the 0.18 coverage floor (let in by 3 matches): 86' (+30) and 98 (+60); 'unrelated 44-word task -> [(routine-builder, 0.1, 3), (build-failure-diagnoser, 0.1, 3)]' for a telescope-firmware task. Cause: engine/hr.py:372 `passing = [x for x in out if x[\"coverage\"] >= hc[\"fit_floor\"] or x[\"matched\"] >= 3]`: any long text shares three words with some template. On the real tickets (`brain hr staff docs/plan/tickets.json` in the copy): 'CB-212: session-handover-writer · writer on opus · wage 20,000', 'CB-214: owner-computer-guide · writer on opus', 'CB-215: requirement-verifier · reviewer on opus'; 17 of the 19 templated picks have coverage under 0.18 and 7 of the 21 file-owning tickets get an agent with no Edit tool. Fixes tried: keeping only the query's rarest known words is worse (held+30 right 41, held+60 right 10); a coverage-only floor turns 80 and 98 of 100 into plain; choosing on the first sentence capped at 16 words keeps 78/19/3 for both tails and returns nothing for three unrelated long tasks.",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; python3 $S/scripts/long_exp.py $S/brain; python3 $S/scripts/floor_exp.py $S/brain",
+   "proposed_fix": "In engine/hr.py add `_head(task, n=16)` (first sentence, at most n words) and make `hire()` and `cmd_staff` pass `_head(...)` to `select`; the full text still goes into the brief. In `select`, apply the `matched >= 3` escape only when coverage is at least half the floor, so unrelated long text falls to the plain helper. In `cmd_staff` choose on the ticket title first, then on the first sentence of the goal, and when a ticket has `files` consider only templates whose base agent can edit (builder, writer). Add one sentence to brain-build: the goal's first sentence is the outcome in about 16 words; reasons and constraints go in --why and --also.",
+   "acceptance": "New test tests.test_hr.RealRack.test_selection_survives_a_long_goal: for every held-out row, selection on `task + '. ' + <fixed 60-word tail>` scores top-1 >= 0.74 and top-3 >= 0.82 (same floors as today), and three fixed unrelated 40-word tasks return []. New test that `hr staff` on a ticket with `files` never names a reviewer, researcher, scout or redteam template.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "hr-01"
+  },
+  {
+   "title": "Settle credits the wrong usage: only the first matching transcript counts, any helper that names the contract id matches, and the record stores the planned model and effort instead of what ran",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/tests/test_hr.py",
+    "/home/user/Claude-Brain/docs/ENGINE_SPEC.md"
+   ],
+   "evidence": "`python3 scripts/settle_exp.py <scratch>`: case B (the same brief delegated twice, 30,000 and 50,000 output tokens): \"{'template': 'pwa-offline-engineer', 'status': 'settled', 'passed': True, 'actual_tokens': 30000, 'wage_tokens': 60000, 'overrun': 0.5} expected real use 80000\". Case C (a reviewer whose prompt says 'Review the work delivered under contract <id>' sorts before the builder's transcript): \"{'template': 'phone-first-ui-builder', 'model': 'sonnet', 'actual_tokens': 7000} expected 44000 (the builder), got the reviewer's\". Cause: engine/hr.py:614-630 tests `if cid not in head` over the first rows and returns inside the loop on the first hit. `scripts/check_exp.py` case 3: 'record model/effort: opus medium | transcript model/effort: claude-opus-5-5 high | fields in record naming what ran: []' (hr.py:677 writes contract.get('model') and contract.get('effort')). Real helper transcripts on this machine carry both: 466 of 466 sampled assistant rows have an `effort` key ('xhigh' 464, 'low' 2) and the real model id. The four role-switched templates are hired as sonnet/medium on the reviewer agent whose file says opus/high, so a lead that passes only the agent name runs a different arm than the one recorded. `brain hr report` then prints 'passes first time' (hr.py:731) for a result taken from the tree as it is whenever settle runs, which at close is after the lead's own repairs.",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; python3 $S/scripts/settle_exp.py $S; python3 $S/scripts/check_exp.py $S",
+   "proposed_fix": "`find_helper_usage`: match only the delegation marker in the first user message (regex `\\(contract <id>\\)` with the id followed by a non-id character, so `<id>-2` does not match `<id>`), go through every transcript, sum cost and tokens over all matches, and return `runs`, `ran_model` (last model id) and `ran_effort` (most common row effort). `settle`: store runs, ran_model, ran_effort in the contract and the hire record; print 'ran on opus/high, hired as sonnet/medium' when they differ; set `late: true` when settle runs more than 30 minutes after the transcript's last timestamp. `fold_hire`: keep the wage ratio from the summed usage; count a first-time pass only when runs == 1 and late is false; pass ran_model and ran_effort to the arm learner (this joins ml-planning finding 2). Change the report wording to 'passed when settled' until first-time is really measured.",
+   "acceptance": "New tests in tests/test_hr.py: test_settle_sums_every_run_of_the_helper (actual_tokens 80000, runs 2), test_a_reviewer_naming_the_contract_is_not_the_helper (actual_tokens 44000), test_record_names_the_model_and_effort_that_ran (ran_model and ran_effort in the inbox record), test_suffixed_contract_id_does_not_match_its_base.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "hr-02"
+  },
+  {
+   "title": "Helpers share the lead's session id and dead sessions' contracts never expire: two helper-made contracts are open under the real session now, and the lead's close would settle them into the real brain",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "Read-only against the real brain: `python3 -c \"...; print(c.session_id()); print([p.name for p in hr.open_contracts(None, mine_only=True)])\"` from a helper's shell printed 'c34b258b-1734-5756-8764-15f4f3352652' (the lead's id) and \"['h-20261110-770474.json', 'h-20261110-a880b7.json']\". Their contracts: template cli-script-builder, check 'python3 -m unittest tests.test_export', workdir .../scratchpad/research-models/proj; template dependency-upgrader, check 'true', workdir .../scratchpad/heldout2/proj. The lead decided (D-15) to hire nobody through HR this session, so both come from helpers' experiments; they already use two of the lead's four slots, and `brain close` with no project attached would run both checks and write two hire records (the second a certain pass) into learning/inbox. Dead sessions: `scripts/settle_exp.py` case F: 'open (mine_only) in next session: 0 | open (all): 2', 'settle_open: \\'\\'', and an explicit settle gives 'sealed': False because engine/hr.py:514 builds the seal path from the settling session, not the hiring one. engine/contract.py:139 writes .brain/.gitignore as 'cache/\\nlog/run/\\n', so .brain/log/hr is tracked and open contracts of ended sessions travel in git with no expiry.",
+   "repro": "python3 -c \"import sys; sys.path.insert(0,'/home/user/Claude-Brain'); from engine import hr, common as c; print(c.session_id(), [p.name for p in hr.open_contracts(None, mine_only=True)])\"",
+   "proposed_fix": "Now, by the lead, before `brain close`: `brain hr settle h-20261110-770474 --abandon` and `brain hr settle h-20261110-a880b7 --abandon`. Engine: `open_contracts(mine_only=True)` also requires the contract's `workdir` to equal the caller's resolved project or current folder, so a helper working in another folder neither fills the lead's cap nor is settled by the lead's close. `seal_path(cid, session)` takes the contract's own session. `settle_open` sweeps open contracts of other sessions: older than 24 hours becomes status 'expired' with nothing recorded, and prints 'hr: N contract(s) of an earlier session expired'.",
+   "acceptance": "New tests: test_a_contract_hired_from_another_folder_is_not_mine (cap and settle_open ignore it), test_a_dead_sessions_contract_expires_and_records_nothing, test_seal_is_found_when_another_session_settles. After the lead's two abandon commands the repro prints an empty list.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "hr-03"
+  },
+  {
+   "title": "The cheapest tier is unreachable through HR: no template resolves to Haiku, a find-and-list task is hired on Opus at 40 times the price, and a plain scout brief asks for things the scout has no tools for",
+   "severity": "should-fix",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/hr/rack/discovery.jsonl",
+    "/home/user/Claude-Brain/hr/rack/review.jsonl",
+    "/home/user/Claude-Brain/hr/rack/support.jsonl",
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/.claude/agents/scout.md"
+   ],
+   "evidence": "`python3 bin/brain hr audit` -> 'by agent: scout 0, researcher 17, builder 48, writer 19, reviewer 15, redteam 1'; rack count of `role`: researcher 4, scout 0. In the copy: `brain hr hire \"Find every place a price is formatted in the codebase and list file and line\" --check \"test -s .brain/log/prices.md\" --material-tokens 90000 --dry-run` -> 'template rubric-mapper ... agent: reviewer · model opus · effort high ... wage: 60,000 (about $1.20)'. The same with `--agent scout` -> 'template none fits: plain helper / agent: scout · model haiku · effort low / wage: 60,000 (about $0.03)', and its brief holds '<done_when>`test -s .brain/log/prices.md` exits 0.</done_when>' and 'Longer notes go in ...-notes.md' although .claude/agents/scout.md:4 is 'tools: Read, Grep, Glob': it can neither run the check nor write either file. 'Scan the repository and its history for leaked API keys before we push' -> 'secret-scanner ... reviewer · model opus · effort high ... about $0.40'. docs/research/round3/02-archetypes.md lines 49, 55, 58, 133 and 145 assign scout to repo-cartographer, history-digger, source-harvester, secret-scanner and token-cost-auditor; the rack runs four of them on Sonnet and secret-scanner on Opus at high effort. memory/models.json output prices: haiku 0.5, sonnet 10, opus 20 dollars per million.",
+   "repro": "cd <copy>; python3 bin/brain hr hire \"Find every place a price is formatted in the codebase and list file and line\" --check \"test -s .brain/log/prices.md\" --material-tokens 90000 --dry-run",
+   "proposed_fix": "Rack (reviewed change, each trialled with `brain eval`): set `role: scout` (Haiku, low) and keep the base agent for its tools on history-digger (base reviewer for `brain recall` and read-only git; pure locate-and-date, size S, risk trivial), repo-cartographer (base reviewer; a pointer table with path:line), source-harvester (base researcher for fetch and write; verbatim copying, its scope says analysis belongs to the lead) and clean-clone-verifier (base builder; follows written steps literally and records output). Trial before moving: secret-scanner to role researcher first (the scan is a tool run, the model reports locations), token-cost-auditor, backlog-prioritiser, and transcript-cleaner from Opus to Sonnet. Engine: read each base agent's `tools:` line from .claude/agents/<name>.md once and make `compose_brief` follow it: with no Bash, done-when says 'your return lists every finding as path:line; the lead runs the check'; with no Write, no notes path is given. Add 'find every place', 'list all uses', 'where is it used' to repo-cartographer's keywords so the scout's defining job has a template.",
+   "acceptance": "New tests: test_some_templates_resolve_to_the_cheapest_tier (at least three rack templates resolve to model haiku through role or base agent); test_a_scout_brief_asks_for_nothing_it_cannot_do (a brief composed for base scout contains no 'Run `' and no 'notes go in'); a dry-run hire of the find-and-list task above reports model haiku.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "hr-04"
+  },
+  {
+   "title": "Selection gives no sign when it is guessing: 15 of the 19 wrong picks on the held-out set are close calls, the right template is in the top five for 92 of 100, and keyword tuning measures as noise",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/hr/GUIDELINES.md",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "`python3 scripts/heldout.py /home/user/Claude-Brain heldout` -> 'N 100 top1 78 top3 86 none 3' (matches the test docstring). The 22 misses by cause: no content word shared with the right template 8 (for 'could someone steal accounts through the sign up' security-reviewer is not ranked at all); a generic word inside a multi-word keyword decided it 7 (`scripts/why.py`: 'could mean two things, tell me which and ask -> ml-experiment-runner via tell apart, which method wins'; 'need a catchy line -> rubric-mapper via cover every line'; 'new Next app -> session-handover-writer via new chat, next session'; a request containing 'glossary' lost to blueprint-extractor via 'same app'); two templates share the cue 4 (split, every night, tests, production); right template first but under the floor 2; stemmer 1 ('decide' does not meet 'decider' -> 'decid'). Spanish 0 of 3 and typos 0, because the set has 6 Spanish rows in 200 and no typos. Confidence signal (`scripts/sel_exp.py`): 'margin top1-top2: hits n=78 median 0.408 | misses n=19 median 0.084'; with the rule margin < 0.15 or one matched word, flagged picks are 9 right and 15 wrong, unflagged 69 right and 4 wrong. `scripts/recall_k.py`: right template within the top 1/3/5/8/10 by wording = 80/88/92/96/98. Tuning tried (`sel_exp.py`, `phrase_exp2.py`), held-out top-1: 40 more stop words 72, final-e stem fix 78, phrase tokens 79, idf-weighted coverage 77, floor 0.14 80: all inside the noise of 78 on 100 rows. `scripts/overfit.py`: 37 dev rows and 15 held-out rows have a multi-word keyword copied word for word from the request ('get my head around', 'I want', 'and also', 'can you', 'which one'); engine/hr.py:332 triples every keyword token, so 'I want' makes 'want' a strong term.",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; for f in heldout.py sel_exp.py recall_k.py why.py overfit.py phrase_exp2.py; do python3 $S/scripts/$f $S/brain heldout; done",
+   "proposed_fix": "Stop tuning words and use the lead, which is a model, as the second stage. In `hire()` compute margin = first score minus second; when margin < `hc['close_call']` (0.15) or the winner matched one word, `cmd_hire` prints 'close call: if another fits better, hire again with --template <id>' followed by up to four lines '<id> [agent]: <when, clipped to 90 characters>' (about 100 words, only on close calls), and the contract stores `margin` and `close_call`; `cmd_staff` marks such rows with '?'. Add an audit rule in `validate_template`: every keyword holds at least one term outside a short generic list (I, want, can, you, which, one, also, new, my, me, go, with, what, how). State in GUIDELINES that keyword changes are judged on the blind set only.",
+   "acceptance": "New test tests.test_hr.RealRack.test_close_calls_are_flagged: on the held-out rows the share of wrong picks among flagged hires is at least 0.5 and among unflagged at most 0.10 (measured 15/24 and 4/73). CLI test: the output for 'split this huge file without breaking anything' (margin 0.031) contains 'close call' and lists refactor-engineer; the output for 'Review this branch for bugs before we release' (margin 0.458) does not.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "hr-05"
+  },
+  {
+   "title": "Two shards of the same goal cannot both be hired: the second hire supersedes the first because only the task text is compared",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "`python3 scripts/settle_exp.py <scratch>` case D: two hires of 'Rewrite the articles in this folder to about nine hundred words each' with owns=['articles/a/'] and owns=['articles/b/'] -> 'shard 1 status: superseded | shard 2: open'. Cause: engine/hr.py:586 `if prev.get(\"session\") == c.session_id() and prev.get(\"task_sha\") == c.sha256_text(task)[:16]` and hr.py:595 `\"task_sha\": c.sha256_text(task)[:16]`. A superseded contract is not open, so its helper's usage and check are never settled; sharded work is what the rack's two XL templates (batch-article-rewriter, long-form-drafter) exist for.",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; python3 $S/scripts/settle_exp.py $S | grep -A1 'D:'",
+   "proposed_fix": "In `hire()` compute the supersede key from the task, the sorted `owns`, the sorted `inputs` and the check (`c.sha256_text(json.dumps([task, sorted(owns), sorted(inputs), check]))[:16]`), store it as `task_sha`, and print 'replaces <old id>' when a contract is superseded so the lead sees it. The pick-a-template flow (same task, same owns, same check, new --template) still supersedes.",
+   "acceptance": "New test test_two_shards_of_one_goal_stay_open: same task with different --owns leaves two open contracts; the existing test_same_task_hired_twice_in_one_second_gets_two_contracts still passes unchanged.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "hr-06"
+  },
+  {
+   "title": "The hire-or-not rule hires when it knows nothing about size, lets --parallel skip the size test, refuses bulky read-only work, and accepts any text as a check, which is then recorded as a failure",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "In the copy: `brain hr hire \"Fix the typo in the README title\" --check \"grep -q Title README.md\" --dry-run` -> 'hire (dry run): template name-and-copy-options ... agent: writer · model opus · effort medium ... wage: 20,000 (about $0.40)'; engine/hr.py:423 `if material_tokens is not None and material_tokens < rule[\"min_material_tokens\"]` tests size only when the lead volunteers it, and the reason printed is 'bulky enough to keep out of the lead's context'. With `--material-tokens 300 --parallel` it still hires. `brain hr hire \"Research which database suits offline sync ... with sources\" --material-tokens 120000 --dry-run` -> 'do not hire: no check was given: do it yourself', which sends 120,000 tokens of reading into the lead. `--check \"looks good to me\"` hires; `scripts/check_exp.py` case 2 then settles it as \"{'template': 'es-en-translator', 'check_exit': 127, 'passed': False, 'sealed': True}\" and 'template record after fold: {es-en-translator: [0.0, 1.0, 1]}', while HR's own brief text (hr.py:70-71) says 'A check that failed to start does not count.' `--material-tokens -5` is accepted ('about -5 tokens of material'). docs/research/round3/03-selection-and-wages.md:137-153 specified a cost comparison using material, the helper's 80th-percentile cost and its pass probability; the code uses one fixed threshold.",
+   "repro": "cd <copy project>; python3 <copy>/bin/brain hr hire \"Fix the typo in the README title\" --check \"grep -q Title README.md\" --dry-run",
+   "proposed_fix": "`cmd_hire`: when --material-tokens is absent, estimate it from the sizes of the --input and --owns paths that exist (bytes through `c.est_tokens`, folders summed) and print 'about N tokens, measured from the named files'; when nothing can be measured, the reason says 'size unknown', not 'bulky'. `hire_or_not`: --parallel lowers the threshold to `startup_tokens` instead of removing it; with no check, a read-only base agent and material at least three times the threshold, hire with a structural check HR writes itself (`test -s <notes> && grep -q 'END OF' <notes>`), stored as `check_kind: structural`, which never moves a pass record. At hire time the check's first word must resolve with `shutil.which` (after leading VAR=value words), else 'that check is not a command' and exit 1. `settle`: exit 126 or 127 gives passed None and `check_unstartable: true`. The argparse type for --material-tokens refuses negatives.",
+   "acceptance": "New tests: test_size_is_measured_from_named_files_when_not_given, test_parallel_does_not_waive_a_tiny_task, test_bulky_read_only_work_is_hired_with_a_structural_check_that_moves_no_record, test_a_check_that_cannot_start_is_not_a_failure (passed is None and h['t'] stays empty), test_text_that_is_not_a_command_is_refused_as_a_check. The existing test_hire_or_not keeps its four assertions.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "hr-07"
+  },
+  {
+   "title": "`brain close` re-runs every open contract's check one after another: the same command once per contract, up to an hour each, side effects included",
+   "severity": "should-fix",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "`python3 scripts/check_exp.py <scratch>` case 1 (three contracts, check 'sleep 2 && echo run >> runs.txt'): 'hr: 3 of 3 contract(s) settled | seconds: 6.0 | times the same command ran: 3'. Case 4 (check 'echo deployed >> deploys.txt', already run once by the helper): 'deploys recorded: 2'. engine/gate.py:37 `def run_filtered(command, cwd, project, tail=6, timeout=3600)` and engine/hr.py:661 calls it with no timeout, so four open contracts can hold `close` for four hours. In docs/plan/tickets.json 8 of the 21 open tickets share one acceptance command ('python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint'), which is the normal shape of parallel builders.",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; python3 $S/scripts/check_exp.py $S",
+   "proposed_fix": "`settle_open`: keep a dict keyed by (check, folder) for the pass and hand `settle` a `results` argument, so one run serves every contract that shares the command and folder. Give `settle` a timeout from `hc['settle_timeout']` (default 600 seconds) and print one line naming a check that timed out, recorded as passed None. A contract whose risk is one-way-door, or that was hired with a new `--check-once` flag, is never re-run by `close`: it stays open with 'settle it yourself: brain hr settle <id>' printed. Say in brain-build that the check must be safe to run twice.",
+   "acceptance": "New tests: test_close_runs_a_shared_check_once (three contracts, the command's counter file holds one line, all three settled with the same exit), test_a_slow_check_times_out_at_settle_and_records_no_result, test_a_one_way_door_check_is_not_rerun_by_close.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "hr-08"
+  },
+  {
+   "title": "Spanish wording, missing accents and one swapped letter each cost selection heavily, and the test set cannot see it",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "`python3 scripts/es_typo.py <copy>` on 20 Spanish requests I wrote for this audit (probes, not a calibrated set): 'Spanish, with accents: top-1 11/20, top-3 14/20, nothing 4'; 'Spanish, accents removed: top-1 8/20, top-3 10/20, nothing 5'. Examples that return nothing: 'sube los cambios a main cuando pasen las pruebas', 'revisa esta rama antes de publicarla, busca fallos' (the rack has 'revisar'; engine/hr.py:319-323 strips English suffixes only). One swapped letter pair in the longest word: 'dev ... top-1 84/100' on three seeds (100 unperturbed) and 'heldout ... top-1 62/100' (78 unperturbed). evals/hr_golden.jsonl has 6 Spanish rows in 200 and no misspelt word. Prototype in memory (`scripts/fuzzy_exp.py`: fold accents on both sides and map a query word of five or more letters that is not in the index to its nearest index word with difflib, cutoff 0.84): typos dev 90 and held-out 70, Spanish 12/20 with or without accents and nothing 2, clean held-out 77/85 (one below today, inside noise), 8.0 s for 440 selections.",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; python3 $S/scripts/es_typo.py $S/brain; python3 $S/scripts/fuzzy_exp.py $S/brain",
+   "proposed_fix": "engine/hr.py `_terms`: fold accents with unicodedata before stemming (queries and documents alike). `select`: a query term of five or more letters absent from the index is replaced by `difflib.get_close_matches(term, vocabulary, n=1, cutoff=0.84)` when there is one; build the vocabulary once per call. `_stem`: add a few Spanish endings after the English ones (ar, er, ir, ado, ada, ción to cion, es, s) guarded by the same length rule. `cmd_hire`: when nothing passes the floor and the goal holds two or more Spanish stop words, print 'the rack is indexed mainly in English: hire again with the goal in English'. One line in brain-build: write the goal in English, whatever language the owner used. Judge all of it on the blind set the other auditor is writing, which should carry Spanish and misspelt rows.",
+   "acceptance": "New tests: test_accents_do_not_matter (select on a request and on its accent-stripped form returns the same first id for five Spanish rows), test_one_swapped_letter_rarely_changes_the_pick (dev rows with a seeded swap score top-1 >= 0.88), and the existing held-out floor test still passes.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "hr-09"
+  },
+  {
+   "title": "`brain hr report` hides a template on probation unless it is among the five most used, and reports use against the band as 'the wage'",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/hr/GUIDELINES.md",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "In the copy, with a learning state of six templates at nine passed hires each and game-builder at six failed checked hires using 3.5 times its band: the script printed 'game-builder on probation: True', then `brain hr report` printed five healthy templates and 'wages: 80% of 30 settled hire(s) stayed within the wage; median use 0.50x the wage'; `brain hr report | grep -c PROBATION` -> 0. Cause: engine/hr.py:727 `used = sorted(h[\"t\"].items(), key=lambda kv: -kv[1][2])[:5]`. hr/GUIDELINES.md:69 promises 'put on probation by the learner and listed in `brain hr report`'. The wage line (hr.py:733-735) is computed from ratios of use to the size band, not to the wage, over the last 30 hires only, and takes the upper middle value as the median; the docstring at hr.py:397 still says 'ratio of real use to wage'. A template whose use sits at the 3x clamp is never named: `scripts/wage_exp.py` case C (size S, real use 200,000 every time) -> wage 60,000 for ever, 'over-wage 50/50'.",
+   "repro": "cd <copy>; write the state as in the evidence into stats/ml.json of the copy; python3 bin/brain hr report | grep -c PROBATION",
+   "proposed_fix": "`report_lines`: list every template on probation first (no cap), then the five most used; say 'x the size band' and compute the within-wage share from each record's own wage where the record has one; add one line per template whose 80th-percentile ratio is at a clamp with five or more hires: '<id>: real use is about N times size S; its size band should be L (a reviewed rack change)'. Raise the line cap from 10 so the probation lines cannot be cut. Correct the docstring of `wage`.",
+   "acceptance": "New test test_report_lists_every_template_on_probation (the state above yields a line containing 'game-builder' and 'ON PROBATION') and test_report_names_a_template_whose_size_band_is_wrong.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "hr-10"
+  },
+  {
+   "title": "A rewritten template inherits the old wording's record: the version is never read, so version 2 starts on probation",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/docs/ENGINE_SPEC.md",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "`grep -n version engine/hr.py` prints nothing: the contract (hr.py:589-602) and the hire record (hr.py:674-681) carry the template id only, and engine/hr.py:236 keys the statistics by `str(r.get(\"template\") or \"_plain\")`. Simulation in the copy: after six failed checked hires 'probation True multiplier 0.7 x0.8 on probation'; after the same template is changed and given version 2: \"[('game-builder', 0.56, 6), ('cli-script-builder', 1.0, 0)] | still on probation: True\"; 'consecutive passes needed to leave probation: 6'. hr/GUIDELINES.md:69 says a bad template is rewritten and the new variant trialled against the old one, which needs the two to have separate records. The schema's `status` values 'probation' and 'retired' are not connected to the learner either: `select` reads only 'retired'.",
+   "repro": "",
+   "proposed_fix": "Put `template_version` in the contract and in the hire record. In `fold_hire` key the pass table and the template's ratio list by '<id>@<version>' when a version is present (old records without one stay under the bare id). `pass_posterior` and `wage` look up '<id>@<current version>'; the previous version's totals are shown by `hr report` as history ('v1: 6 checked hires, 0 passed') and no longer change rank. Add the field to the record list in docs/ENGINE_SPEC.md.",
+   "acceptance": "New test test_a_rewritten_template_starts_with_a_clean_record: six failed sealed hires on version 1, then select with the rack entry at version 2 gives multiplier 1.0 and trials 0, and report still shows the version 1 line. The fold tests for idempotence and order-freedom pass unchanged.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "hr-11"
+  },
+  {
+   "title": "Briefs contradict the agent file that carries them in ten templates, miss the outside-content line where it is needed, and repeat text the agent already has",
+   "severity": "minor",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/.claude/agents/reviewer.md",
+    "/home/user/Claude-Brain/.claude/agents/researcher.md",
+    "/home/user/Claude-Brain/.claude/agents/builder.md",
+    "/home/user/Claude-Brain/hr/rack/discovery.jsonl",
+    "/home/user/Claude-Brain/hr/rack/planning.jsonl"
+   ],
+   "evidence": "Five real briefs written in the copy (files in .../scratchpad/hr/proj1/.brain/log/hr/). (1) repo-cartographer, history-digger, api-live-prober and token-cost-auditor run on the reviewer agent, whose body says 'You review work you did not write' (.claude/agents/reviewer.md:10) and 'Return ... one line per requirement (pass or fail, evidence), then the other findings, then the keep list' (reviewer.md:20), while the history-digger brief says 'First line: found or not found, and the best hit. Then hits newest first'. Six planning templates that use no web source (requirements-extractor, ambiguity-resolver, ticket-slicer, backlog-prioritiser, migration-planner, feasibility-reframer) run under 'You answer one research question ... write the full memo ... ending with the line END OF MEMO' (researcher.md:10, 19). (2) engine/hr.py:39 `READS_OUTSIDE = {\"researcher\"}`: the api-live-prober brief tells the helper to use `curl -i` and copy 'the provider's current pages', and `grep -c \"not addressed to you\" h-20261110-a7307e.md` -> 0. (3) Every builder brief at the default arm adds the 73-word verify-and-finish block (48 templates), and builder.md:18 already ends 'run a real check and report its actual result'. (4) 23 return contracts name 'the notes file' and HR then appends 'Longer notes go in <path>'; the working folder appears twice as an absolute path. (5) 'the brief assumes you supplied: ...' is printed after the brief is written. (6) With a 9-word task and a 7-word reason, 41 of 100 briefs are already over the 350-word note line (median 340.5, largest 381). The 2,000-token cap in the agent files against the briefs' word caps is already reported as instructions finding 13.",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; cat $S/proj1/.brain/log/hr/h-20261110-f6c27e.md $S/proj1/.brain/log/hr/h-20261110-a7307e.md",
+   "proposed_fix": "`compose_brief`: add the outside-content line when the template sets a new optional field `reads_outside: true` (set it on api-live-prober and deploy-doctor) as well as for the researcher base; skip the verify paragraph when the base agent is builder (its file already has it) and keep the 25-word finish line; when the return contract already mentions the notes file, append only 'Notes file: <path relative to the working folder>'; give the notes path relative to the working folder. When a template's `role` differs from its base agent, add one line after the role line: 'The brief's own task and return shape apply where they differ from your standing instructions.' Longer term the agent bodies should say only what holds for every template they carry (see the capability idea). `cmd_hire --dry-run` prints the `needs` line so the lead reads it before a contract exists.",
+   "acceptance": "New tests: test_a_template_that_reads_outside_content_gets_the_hygiene_line_on_any_base, test_builder_brief_does_not_repeat_the_agents_own_check_paragraph, test_notes_file_is_named_once; after the change fewer than 15 of 100 templates render above 350 words in the existing every-template rendering test (assert the count).",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "hr-12"
+  },
+  {
+   "title": "Wage details: a plain helper's own ratios are stored under one key and looked up under another, and with five to eight samples the '80th percentile' is the maximum",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/tests/test_hr.py"
+   ],
+   "evidence": "`python3 scripts/wage_exp.py <copy>` case D: six plain L helpers at 60,000 and six templated L helpers at 500,000 give 'keys: [_all, s:L, t:_plain, t:x]' and 'wage for the next plain L helper: {tokens: 500000, band: 200000, cost: 5.0, basis: size band L x 2.50 from 12 settled hire(s) of size L}': engine/hr.py:236 stores under 't:_plain' and hr.py:404 looks up `f\"t:{tid}\"`, which is 't:None'. Quantile positions printed by the same script: '{5: 5 of 5, 6: 6 of 6, 7: 7 of 7, 8: 8 of 8, 9: 8 of 9, 10: 9 of 10, ...}'; case A (steady use 24,000 on a 60,000 band with one 400,000 run at hire 3): 'wages at hire 1,5,6,9,10,...: [60000, 60000, 180000, 180000, 24000, ...]', a threefold wage for hires 6 to 9 from one run. Only two real ratios exist (stats/ml.json hr.ratios._all: [0.2712, 0.41], both size L), so every band is still a guess; this session's 25 workflow helpers measured a median of 221,822 output-equivalent tokens each with the same pricing code, far above band M's 60,000 (they are Fable workflow agents, not HR hires, so this is context, not a calibration).",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; python3 $S/scripts/wage_exp.py $S/brain",
+   "proposed_fix": "`wage`: look up `f\"t:{tid or '_plain'}\"`. `_quantile` as used for wages: with fewer than nine samples take the second largest (and with five or more never more than twice the median), so one runaway does not set the wage; from nine samples keep today's rank. Keep the 0.4 to 3 clamp and report clamp hits (see the report finding).",
+   "acceptance": "New tests: test_plain_helpers_use_their_own_ratios (the case D state gives a wage of 80,000 for the next plain L helper, from 't:_plain'), test_one_runaway_does_not_triple_the_wage (case A wage at hire 6 is at most 60,000). test_wage_does_not_swing_back_when_real_use_is_steady and test_band_then_calibration_from_settled_hires pass unchanged.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "hr-13"
+  },
+  {
+   "title": "The seal is an unkeyed hash at a predictable temp path, so whoever can read the contract can forge it; the tests also leave seals in the real temp folder",
+   "severity": "minor",
+   "kind": "risk",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/tests/test_hr.py",
+    "/home/user/Claude-Brain/docs/ENGINE_SPEC.md"
+   ],
+   "evidence": "`python3 scripts/settle_exp.py <scratch>` case E: hire with check 'false', rewrite the contract's check to 'true', write sha256(json([id, check, template, session])) into the seal path -> 'seal_of == sha256(json) ? True' and \"{'passed': True, 'sealed': True, 'tampered': None}\". engine/hr.py:514 places the seal at <tmp>/brain-hr-seals/<session>/<id>.seal and hr.py:517-518 hashes only values that are in the contract file; a builder helper has Bash under the same user. I did not see a helper do this; the point is that invariant I-17 and the spec describe the seal as proof. Test hygiene: on this machine `ls /tmp/brain-hr-seals/sess-hr | wc -l` -> 296 and another-session -> 46, left by tests/test_hr.py (Base.setUp does not redirect the temp folder); seals are never deleted after settle.",
+   "repro": "S=/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/hr; python3 $S/scripts/settle_exp.py $S | grep -A2 'E:'",
+   "proposed_fix": "No file under the same user is out of a helper's reach, so say what the seal is: in docs/ENGINE_SPEC.md and the comment at hr.py:510 call it a guard against accidental or careless change, not against a helper that sets out to cheat. Make the cheat visible at no cost: also write the check's hash into the hire line `cmd_hire` prints (it is then in the lead's transcript), and have `settle` print it again so the two can be compared. Delete the seal file when a contract is settled or abandoned. tests/test_hr.py Base.setUp sets TMPDIR to the test's temporary folder and resets tempfile.tempdir, restoring both in tearDown.",
+   "acceptance": "New test test_running_the_hr_tests_leaves_nothing_in_the_shared_temp_folder (the real temp folder's brain-hr-seals listing is the same before and after a hire and settle inside the test) and test_seal_is_removed_after_settle. ENGINE_SPEC.md no longer calls the seal proof.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "hr-14"
+  },
+  {
+   "title": "Idea: test whether a template beats the plain helper at all, by hiring plain in its place on a small logged share of low-risk work",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/memory/ml_config.json"
+   ],
+   "evidence": "docs/BUILD_STATUS.md:47: 'Template wording has not been tested against real tasks yet.' Each template costs about 230 words in every brief (median brief 340.5 words) plus the selection errors measured above, and nothing compares its pass rate or token use with a plain helper on the same class of task. The records for the comparison already exist: plain hires are folded under 't:_plain' (engine/hr.py:236) and the arm learner already logs `explored` and `propensity` (hr.py:592). docs/research/round3/03-selection-and-wages.md:119-121 asks for the null template to accumulate outcomes as the baseline a template must beat, and for one exploration factor per hire.",
+   "repro": "",
+   "proposed_fix": "In `hire()`, for risk trivial or standard with a check, replace the chosen template by the plain brief with probability `hc['plain_trial_rate']` (default 0.1, zero when the arm is being explored in the same hire), storing `template_withheld: <id>` and the propensity in the contract and record. `fold_hire` keeps a second table per template of sealed plain results for tasks where it was withheld. `hr report` prints, for each template with five or more hires on each side, pass rate and median use with and without it, and names templates that do not beat plain as candidates for rewriting.",
+   "acceptance": "New tests: with a seeded generator about one hire in ten is plain with `template_withheld` set and a logged propensity; never on high or one-way-door risk; never together with an explored arm; report prints the with and without line once both sides have five sealed hires.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "hr-15"
+  },
+  {
+   "title": "Idea: one capability table read from the agent files, used by selection, the brief and lint, so HR cannot hire an agent for work its tools cannot do",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/lint.py",
+    "/home/user/Claude-Brain/.claude/agents/scout.md",
+    "/home/user/Claude-Brain/.claude/agents/reviewer.md",
+    "/home/user/Claude-Brain/.claude/agents/researcher.md"
+   ],
+   "evidence": "engine/hr.py:38-39 hard-codes two facts about tools (`WRITES`, `READS_OUTSIDE`) while the truth is the `tools:` line of each agent file. Effects seen in this audit: a scout brief with a command check and a notes file it cannot run or write; 7 of 21 file-owning tickets staffed with agents that have no Edit tool; a reviewer-base template that reads outside pages without the outside-content line; agent bodies written for one job (review, research memo) carrying ten templates with a different return shape. The end-to-end auditor's finding 5 reports the same class from the other side (a researcher hired for a code task).",
+   "repro": "",
+   "proposed_fix": "`hr.agent_caps(root)` parses `tools:` from .claude/agents/*.md into {agent: {edit, shell, web, write}}. `select` gets `require=` (edit when --owns is given, shell when the check is a command the helper must run, web when the task is research), `compose_brief` words done-when and return from the capabilities, `validate_template` refuses a template whose method needs a tool its base agent lacks (a short word list per capability), and `brain lint` fails when an agent file's tools line and the table disagree. Trim each agent body to what holds for every template it carries, moving job-specific return shapes into the templates.",
+   "acceptance": "Tests: every rack template passes the capability check; a template with `curl` in its method on a base agent without shell fails the audit; a hire with --owns never returns an agent without edit; a brief for an agent without shell contains no instruction to run a command.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "hr-16"
+  },
+  {
+   "title": "Idea: record what kind of check produced a pass, so 'test -s file' and a real test suite stop counting the same",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/docs/ENGINE_SPEC.md"
+   ],
+   "evidence": "A template's pass record moves on any exit code 0. Checks seen in this audit include 'true' (the open contract h-20261110-a880b7 under the real session), 'test -s research/api.md' and full unittest runs; all three count as one pass. The hire-or-not rule pushes leads toward trivial checks, because without one it refuses outright ('do not hire: no check was given'), so the easiest way to hire a researcher is a check that cannot fail. Probation (five checked hires, lower bound under 0.35) and the rank multiplier are then driven by how strict each lead's checks happened to be.",
+   "repro": "",
+   "proposed_fix": "At hire time classify the check with a small pure function: `none`, `structural` (only test, ls, grep -q, wc on files, true) or `behavioural` (anything else). Store `check_kind` in the contract and record. `fold_hire` moves the pass tables only for behavioural checks; structural results are kept and shown in the report as 'delivered' counts. This lets HR write a structural check itself for read-only and research hires without polluting pass rates.",
+   "acceptance": "Tests: classification of ten sample commands; a structural pass leaves h['t'] unchanged and still records the wage ratio; report shows 'delivered N of M' for templates with only structural checks.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "hr-17"
+  },
+  {
+   "title": "Idea: make hire-or-not and `hr staff` a cost comparison with measured inputs, and let staff use each ticket's own estimate and files",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/route.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-plan/SKILL.md"
+   ],
+   "evidence": "`brain hr staff docs/plan/tickets.json` in the copy: 'payroll: 1,120,000 output-equivalent tokens (about $15.80) for 21 helper(s)'. Every wage is the chosen template's size band: a 120-minute package (CB-212, est 120, 3 files) gets 'wage 20,000 ($0.40)' because the mis-chosen template is size S; `est`, `files` and `deps` are not read (hr.py:894-899), `parallel` defaults to true for every ticket (hr.py:900) so the size test never applies, and only the first 12 rows are printed ('… 9 more ticket(s)'). For scale, the 25 workflow helpers of this session measured a median of 221,822 output-equivalent tokens each. docs/research/round3/03-selection-and-wages.md:137-153 and 267-299 specify the comparison (material, the helper's 80th-percentile cost, pass probability, cold start) and a multiple-choice knapsack with 'lead does it' and 'defer' options that `route.assign` already implements.",
+   "repro": "cd <copy>; python3 bin/brain hr staff docs/plan/tickets.json --budget 500000",
+   "proposed_fix": "`cmd_staff`: size from the ticket (`size`, else from `est` minutes through the settled ratio of tokens to minutes once five hires exist, else the template's band); read `files` for the capability filter and `deps` for waves of at most four; show every row with `--all`; for each ticket build the options (best template, plain, lead does it, defer) with cost and expected pass rate and call `route.assign` under --budget, printing which tickets the lead should keep. `hire_or_not` uses the same comparison once the template has five settled hires, and the fixed threshold before that.",
+   "acceptance": "Tests: a ticket with est 120 and no size is never staffed at band S; with a budget below the payroll the output names the tickets moved to 'lead does it' or 'defer' and exits 0 when the reduced plan fits; --all prints every row.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "hr-18"
+  },
+  {
+   "title": "Idea: learn selection from the lead's own corrections, so the shortlist gets better with use without storing task text",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/docs/ENGINE_SPEC.md"
+   ],
+   "evidence": "When the lead rejects HR's pick and hires again with --template, the first contract is marked superseded (engine/hr.py:584-588) and the information is thrown away: which template was auto-picked, which one the lead chose, and how close the call was. On the held-out set 19 of 97 picks are wrong and 15 of them are close calls, so these corrections are frequent and are exactly the labels the keyword tuning lacked (dev is 100% by construction, and 37 dev rows had their phrasing copied into keywords). The research memo asked for this: 'After launch every lead override ... is a label' (docs/research/round3/03-selection-and-wages.md:117).",
+   "repro": "",
+   "proposed_fix": "When a hire supersedes one with a different template, store `auto_pick`, `chosen`, `margin` and the ranks of both in the new contract and in the settled record (ids and numbers only, no task text). `fold_hire` keeps a small confusion table (auto_pick, chosen) -> count with the usual discount. `select` adds a bounded bonus (at most +0.05) to a template that leads have chosen over the current winner three or more times, and `hr report` lists the top confusion pairs as candidates for a keyword or `when` rewrite and prints the override rate, which is the live measure of selection accuracy.",
+   "acceptance": "Tests: a superseding hire with another template writes auto_pick and chosen into the record and no task text; three folded overrides of A by B flip a tie between A and B and never move a template by more than 0.05; report prints the pair and the override rate.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "hr-19"
+  }
+ ]
+}

@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 305 from 16 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, radar-map-evals, redteam, research-models, research-platform, templates-a, templates-b). Decisions: 255 do, 3 do in part, 1 reproduce first, 46 later.
+Findings in: 337 from 18 analyst report(s) (core, e2e-trial, heldout2, hr, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, radar-map-evals, redteam, research-models, research-platform, templates-a, templates-b). Decisions: 283 do, 3 do in part, 1 reproduce first, 50 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -249,7 +249,6 @@ Owns: `engine/learn.py`, `learning/`, `tests/test_rehearsal.py`. New tests go in
 | learning-13 | should-fix | S | do | The pitfall rule cannot fire for a fail-then-fix inside one session and can fire across unrelated sessions |  |
 | learning-14 | should-fix | M | do | Conflicts are detected by keyword, can never be cleared, and harm votes lower an owner item's rank |  |
 | performance-06 | should-fix | S | do | Consolidation re-tokenises both texts four times for every note-item pair: 0.8 s becomes 9.9 s at 2,000 items |  |
-| radar-map-evals-08 | should-fix | M | do | Official leads are marked handled without being shown, and leads written after the day's file was consolidated are never counted |  |
 | redteam-09 | should-fix | S | do | The brain's own test suite goes red after the first real lesson is consolidated, and again after the first decay |  |
 | redteam-11 | should-fix | M | do | Three red sessions in a row demote the rules that were followed, including facts and the release rule |  |
 | redteam-14 | should-fix | L | do | Learning dead ends: lessons noted once are never shown again, the routing learner can never start, and one item over 400 stops every later consolidation |  |
@@ -324,6 +323,7 @@ Owns: `engine/radar.py`, `engine/repomap.py`, `engine/evals.py`, `evals/`, `memo
 | radar-map-evals-05 | should-fix | M | do | The held-out split is neither hidden nor usable: answers sit in the same files, `ablate` includes it by default, and 4 tasks can never reach the 8-pair floor |  |
 | radar-map-evals-06 | should-fix | S | do | The I-16 floor counts pairs that were never measured: a token claim shipped on 5 measured tasks, and the cost guard is skipped when tokens are missing |  |
 | radar-map-evals-07 | should-fix | S | do | At boot a platform release note about a new model lost both news lines to a changelog entry and a marketing page |  |
+| radar-map-evals-08 | should-fix | M | do | Official leads are marked handled without being shown, and leads written after the day's file was consolidated are never counted |  |
 | radar-map-evals-09 | should-fix | S | do | Radar and boot never exit behind a slow connection, and every boot pays 4 s while the network is down (M15 measured, with a tested fix) |  |
 | radar-map-evals-10 | should-fix | M | do | Two sessions that each ran the radar conflict on merge in two files (M20, with the concrete fix and its cost measured) |  |
 | radar-map-evals-11 | should-fix | S | do | A source that changes format, is blocked or disappears goes silent: nothing at boot, nothing in doctor |  |
@@ -347,8 +347,25 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
+| heldout2-01 | blocking | S | do | Selection accuracy on blind, owner-style requests is 25% first and 30% top three, not 78% and 86% |  |
+| heldout2-02 | blocking | M | do | The misses are recall failures: in 68 of 70 the right template is not a candidate at all, and 36 requests return nothing |  |
 | e2e-trial-05 | should-fix | M | do | HR assigns agents that cannot do the work: a researcher with no shell for a code task with a test command, a read-only reviewer for a build ticket, and Opus at ten times the wage when the task is worded in Spa… |  |
 | e2e-trial-07 | should-fix | M | do | Settling a hire nobody worked records a pass or fail for the template, and a failed settle is final but prints as if it had been run again |  |
+| heldout2-03 | should-fix | S | do | The score does not tell a right pick from a wrong one, and a wrong pick usually changes the agent |  |
+| heldout2-04 | should-fix | M | do | Spanish requests: 7 of 31 right, against 15 of 31 for the same requests in English |  |
+| heldout2-05 | should-fix | S | do | The stemmer does not bring English word families together, so singular and plural can pick different templates |  |
+| heldout2-06 | should-fix | M | do | Requests that describe the symptom instead of the job: 0 of 10 first, 1 of 10 in the top three |  |
+| heldout2-08 | should-fix | S | do | The lead's fallback views are broken: `hr rack` cuts ids off every group line and `hr rack --search` can print nothing |  |
+| hr-01 | should-fix | M | do | A goal longer than one sentence gets the wrong specialist: 30 extra words take held-out top-1 from 78 to 50, and the fit floor never answers 'plain' |  |
+| hr-02 | should-fix | M | do | Settle credits the wrong usage: only the first matching transcript counts, any helper that names the contract id matches, and the record stores the planned model and effort instead of what ran |  |
+| hr-03 | should-fix | M | do | Helpers share the lead's session id and dead sessions' contracts never expire: two helper-made contracts are open under the real session now, and the lead's close would settle them into the real brain |  |
+| hr-05 | should-fix | M | do | Selection gives no sign when it is guessing: 15 of the 19 wrong picks on the held-out set are close calls, the right template is in the top five for 92 of 100, and keyword tuning measures as noise |  |
+| hr-06 | should-fix | S | do | Two shards of the same goal cannot both be hired: the second hire supersedes the first because only the task text is compared |  |
+| hr-07 | should-fix | M | do | The hire-or-not rule hires when it knows nothing about size, lets --parallel skip the size test, refuses bulky read-only work, and accepts any text as a check, which is then recorded as a failure |  |
+| hr-08 | should-fix | S | do | `brain close` re-runs every open contract's check one after another: the same command once per contract, up to an hour each, side effects included |  |
+| hr-09 | should-fix | M | do | Spanish wording, missing accents and one swapped letter each cost selection heavily, and the test set cannot see it |  |
+| hr-10 | should-fix | S | do | `brain hr report` hides a template on probation unless it is among the five most used, and reports use against the band as 'the wage' |  |
+| hr-11 | should-fix | S | do | A rewritten template inherits the old wording's record: the version is never read, so version 2 starts on probation |  |
 | instructions-09 | should-fix | S | do | A brief that is written but never delegated is settled by `close` as a failed hire against its template |  |
 | ml-planning-07 | should-fix | S | do | Running the test suite beside a managed project writes fake hire contracts into that project and fails from the second run on |  |
 | templates-a-02 | should-fix | S | do | Selection set has 6 Spanish requests in 200, so the floor test cannot see that Spanish requests select much worse (all 50 templates' keywords) |  |
@@ -359,6 +376,10 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 | templates-b-06 | should-fix | S | do | Write-capable templates that fetch pages or read outside material never get the outside-content line |  |
 | templates-b-07 | should-fix | S | do | With no check command the brief throws away the template's own done check |  |
 | e2e-trial-12 | minor | S | do | The tickets file has two undocumented shapes: `hr staff` ignores `check` and reports "no acceptance command" |  |
+| heldout2-09 | minor | S | do | Typos and dictation splits defeat exact word matching: 2 of 10 right, 4 of 10 once spelling is corrected |  |
+| hr-12 | minor | M | do | Briefs contradict the agent file that carries them in ten templates, miss the outside-content line where it is needed, and repeat text the agent already has |  |
+| hr-13 | minor | S | do | Wage details: a plain helper's own ratios are stored under one key and looked up under another, and with five to eight samples the '80th percentile' is the maximum |  |
+| hr-14 | minor | S | do | The seal is an unkeyed hash at a predictable temp path, so whoever can read the contract can forge it; the tests also leave seals in the real temp folder |  |
 | owner-docs-13 | minor | S | do | "HR report" tells him to say "Consolidate" for hires that are already folded in |  |
 | research-models-12 | minor | S | do | Brief by pointer saves about 4 to 7 cents per hire by derivation; the guideline claims a ledger measurement that does not exist |  |
 | research-models-13 | minor | S | do | The prompt audit has no pattern for asking a model to show its reasoning, which current models may refuse and bill |  |
@@ -366,6 +387,15 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 | templates-b-20 | minor | S | do | Nine planning templates carry a third pitfall that no helper ever sees |  |
 | templates-b-21 | minor | S | do | 38 of 200 method lines carry no reason, and the audit does not look |  |
 | e2e-trial-19 | idea | S | do | Idea: show what a template adds to the done condition before the lead delegates |  |
+| heldout2-10 | idea | S | do | Idea: let the lead pick from a role-line menu and keep word matching as the shortlist |  |
+| heldout2-11 | idea | S | do | Idea: record what the selector picked beside what was used, so real misses are measured |  |
+| heldout2-12 | idea | S | do | Idea: protect the blind set from wearing out |  |
+| heldout2-13 | idea | S | do | Idea: scratch copies of the brain write hire contracts into the live session's folder |  |
+| hr-15 | idea | M | later | Idea: test whether a template beats the plain helper at all, by hiring plain in its place on a small logged share of low-risk work | a plain-brief trial share is the paired evaluation CB-203 in production form; it waits for the harness (radar-map-evals-03) |
+| hr-16 | idea | L | do | Idea: one capability table read from the agent files, used by selection, the brief and lint, so HR cannot hire an agent for work its tools cannot do |  |
+| hr-17 | idea | S | do | Idea: record what kind of check produced a pass, so 'test -s file' and a real test suite stop counting the same |  |
+| hr-18 | idea | L | later | Idea: make hire-or-not and `hr staff` a cost comparison with measured inputs, and let staff use each ticket's own estimate and files | staff as a cost comparison needs settled hires to price from |
+| hr-19 | idea | M | later | Idea: learn selection from the lead's own corrections, so the shortlist gets better with use without storing task text | needs real hires and overrides to learn from; the record of each override is added now (heldout2-11) |
 | ml-planning-15 | idea | L | later | Idea: make the HR contract the unit of learning for model choice, calibration and drift | a redesign of what the learners learn from; the first step (sealed hires feed the model choice) is done under ml-planning-02 |
 | research-models-14 | idea | S | later | Idea: show elapsed time to long-running research helpers | needs a pre-registered comparison first |
 | research-models-17 | idea | S | later | Idea: let a template raise effort for its kind of work, starting with bug fixing | needs evidence from settled hires first |
@@ -382,6 +412,7 @@ Owns: `hr/rack`. New tests go in `tests/test_r4_j.py`.
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
 | templates-b-01 | blocking | S | do | release-to-main-engineer: the template has a helper push to main by hand, outside `brain release` |  |
+| hr-04 | should-fix | M | later | The cheapest tier is unreachable through HR: no template resolves to Haiku, a find-and-list task is hired on Opus at 40 times the price, and a plain scout brief asks for things the scout has no tools for | moving templates to the cheapest tier needs a paired trial first (I-16); the scout stays available to the lead directly |
 | templates-a-01 | should-fix | S | do | Rack-wide (44 templates, 28 of them in these five groups): keyword tuning copied words out of the tuning requests, and those words now take other requests |  |
 | templates-a-04 | should-fix | S | do | deep-researcher: the memo has three possible homes, the link check needs a shell, and 'Investiga a fondo …' selects nothing |  |
 | templates-a-05 | should-fix | S | do | dataset-source-finder: asks a researcher to profile a sample (date range, missing values), which its tools cannot do |  |
@@ -436,6 +467,7 @@ Owns: `CLAUDE.md`, `.claude/skills`, `.claude/agents`, `method/`, `.claude-plugi
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
 | instructions-01 | blocking | S | do | With the brain alone, the core rules name commands that cannot run, and brain-start sends the lead to an earlier session's tickets instead of the owner's message |  |
+| heldout2-07 | should-fix | S | do | Eleven templates are missed on both independent sets, five of them planning roles, and no skill names a template by id |  |
 | instructions-03 | should-fix | S | do | `close` leaves both repositories uncommitted, the core rules run it after the last push, and two skills prescribe hand commits the engine already makes |  |
 | instructions-06 | should-fix | M | do | Research hires: the skill and rule 4 disagree, and `hr hire` either refuses or puts a research question on a builder with no web tools and no date |  |
 | instructions-07 | should-fix | S | do | "Continue on your own at most three times in a row" has no reason, no unit, and refers to a re-prompt mechanism that does not exist |  |

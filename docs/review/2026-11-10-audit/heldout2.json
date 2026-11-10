@@ -1,0 +1,223 @@
+{
+ "summary": "I wrote and froze /home/user/Claude-Brain/evals/hr_golden_2.jsonl (100 rows, one per template, 31 Spanish, 10 typo, 10 symptom) and measured the current selector on it without changing anything else. Result: right template first for 25 of 100 and in the top three for 30 of 100, against the published 78% and 86%. The same harness reproduces 78/86 on the old held-out half, so the gap is real and comes from the requests, not the measurement.\n\n- **Where the misses are:** 36 requests get no template at all, and in 68 of 70 misses the right template is not among the candidates. This is a recall problem, so reweighting fields cannot fix it.\n- **Spanish:** 7 of 31 first; the same requests in my English translation score 15 of 31.\n- **Symptom-style:** 0 of 10 first.\n- **Typos:** 2 of 10 first.\n- **No confidence signal:** the score is right 39% of the time above the gate and would be right 33% of the time below it, and `hire` shows the lead no role line to catch a wrong pick.\n- **Two concrete defects found on the way:** the stemmer does not bring word families together (\"slide\"/\"slides\", \"library\"/\"libraries\"), and `brain hr rack` cuts ids off each group line while `--search` can print nothing.\n\nThe cheapest reliable fix is to let the lead, which already understands Spanish, typos and symptoms, confirm the pick from role lines; the selector fixes (accent folding, consistent stemming, Spanish forms, fuzzy fallback) should be tuned on dev only and kept only if this set's top-three rises.\n\nBlindness: I did not read the scoring code or any keywords field. After the set was frozen (sha256 d111714c…fff5, committed by the lead as 8dabade), `hr rack --search` output showed me the `when` text of six templates; the set was not edited after any measurement.",
+ "strengths": [
+  "The measurement is reproducible: my harness, written from the test's own loop, prints top-1 78 and top-3 86 on the old held-out half and 100/100 on dev, exactly the published figures, and tests/test_hr.py states plainly that dev proves nothing. Keep the floor-style test and the honest docstring.",
+  "When nothing matches, hire says so and writes a plain brief (\"template none fits: plain helper\") instead of forcing a role. On this set the 36 rejected requests would have been right first only 12 times, so refusing is the safer default and must stay until something better than word overlap confirms the pick.",
+  "The override path already exists and costs nothing: `--template <id>`, `--dry-run`, and a near mode (`select(..., near=True)`) that lifts top-three from 30 to 56 and top-ten to 77 on this set without any code change.",
+  "The rack's roles are distinct enough to label cleanly: I could write one request per template for all 100 and never needed a second accepted id. The role lines are short and plain, which is what makes lead confirmation cheap (all 100 ids with role lines are 10,277 characters).",
+  "Selection is deterministic, standard library only and fast (rack load 2 ms, 100 selections 1,168 ms measured), and `python3 -m unittest tests.test_hr` passes (48 tests). Any fuzzy fallback should stay within that budget."
+ ],
+ "findings": [
+  {
+   "title": "Selection accuracy on blind, owner-style requests is 25% first and 30% top three, not 78% and 86%",
+   "severity": "blocking",
+   "kind": "stale-fact",
+   "files": [
+    "docs/BUILD_STATUS.md",
+    "hr/GUIDELINES.md",
+    "tests/test_hr.py",
+    "docs/plan/tickets.json",
+    "evals/hr_golden_2.jsonl"
+   ],
+   "evidence": "Ran from /home/user/Claude-Brain: python3 -B -c \"import sys;sys.path.insert(0,'.');from engine import hr,common as c;from pathlib import Path;rack=hr.load_rack(Path('.'));rows=c.read_jsonl(Path('evals/hr_golden_2.jsonl'));p=[[h['id'] for h in hr.select(r['task'],rack)] for r in rows];print(len(rows),sum(bool(i and i[0] in r['expect']) for i,r in zip(p,rows)),sum(any(x in r['expect'] for x in i) for i,r in zip(p,rows)),sum(not i for i in p))\" -> `100 25 30 36` (rows, first, top three, no template). The same loop on the old held-out half prints 78 and 86, matching docs/BUILD_STATUS.md:34 (\"held-out: right template first 78%, in top three 86%\") and hr/GUIDELINES.md (\"right template first for 78% of held-out requests, in the top three for 86%\"). The two sets differ in shape: old held-out median 9 words, 3 Spanish rows in 100, 3 requests with no template; new set median 26 words, 31 Spanish, 36 with no template. CB-204's reason reads \"one in seven misses\"; on this set seven in ten miss.",
+   "proposed_fix": "1) docs/BUILD_STATUS.md row \"Selection accuracy\": \"300 labelled requests: 200 written alongside the rack (half never used for tuning) and 100 written blind in the owner's style, 31 of them in Spanish (`evals/hr_golden_2.jsonl`) | first set, held-out half: first 78%, top three 86%. Blind set: first 25%, top three 30%, and 36 requests get no template\". 2) hr/GUIDELINES.md, \"Changing the rack\": give both figures and add \"The blind set is never used for tuning, because a set that has been tuned on stops measuring anything.\" 3) tests/test_hr.py: add `test_selection_on_the_blind_owner_style_set_does_not_get_worse` with floors top-1 >= 0.22 and top-3 >= 0.27 (measured minus a small margin), and assert the file's sha256 equals d111714c21ab2cc5f88d8fc6171427ea919721c131471fd0b9e62c975b47fff5 so later scores stay comparable. 4) docs/plan/tickets.json CB-204: replace the reason with the measured figures.",
+   "acceptance": "`python3 -m unittest tests.test_hr` passes with the new test; `grep -c hr_golden_2 docs/BUILD_STATUS.md hr/GUIDELINES.md` prints at least 1 for each; `sha256sum evals/hr_golden_2.jsonl` still prints d111714c…fff5.",
+   "effort": "S",
+   "confidence": "high",
+   "repro": "cd /home/user/Claude-Brain && python3 -B /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/measure.py",
+   "id": "heldout2-01"
+  },
+  {
+   "title": "The misses are recall failures: in 68 of 70 the right template is not a candidate at all, and 36 requests return nothing",
+   "severity": "blocking",
+   "kind": "gap",
+   "files": [
+    "engine/hr.py",
+    ".claude/skills/brain-build/SKILL.md",
+    "docs/plan/tickets.json"
+   ],
+   "evidence": "Classifying the 70 top-three misses with `hr.select(task, rack, k=100)`: 36 return an empty list, 32 return candidates that do not include the expected id, 2 have it ranked fourth (rows 17 and 41). Median number of candidates per request is 1 (old held-out: 5). So ranking changes such as the \"field weights\" candidate in CB-204 can move at most 2 rows. The existing near mode recovers much of it with no code change: `select(..., near=True)` gives first 37, top three 56, top five 65, top eight 72, top ten 77, top twenty 83, never ranked 14. What the lead sees today for row 62 (expects deploy-doctor): `brain hr hire \"Abro el enlace y sigue saliendo la versión de ayer, y eso que me dijiste que ya estaba subido\" --check true --dry-run` -> \"template none fits: plain helper / closest by wording: security-reviewer, history-digger, bilingual-site-publisher\"; three bare ids, none right, although deploy-doctor is seventh in near mode.",
+   "proposed_fix": "Treat word matching as a shortlist and let the lead choose, since the lead is a model that already understands the request. engine/hr.py `cmd_hire`: when no template fits, or only one candidate matched, print the eight nearest as `id — role line` (eight covers 72 of 100 here, three covers 56). .claude/skills/brain-build/SKILL.md, after the `--also` paragraph: \"Read the template and role line HR prints before you delegate. Word matching picks the wrong template for many requests in the owner's words (first pick right for 25 of 100 on the blind set), and the role line shows it at a glance. If it does not describe the task, hire again with `--template <id>` from the list HR shows.\" CB-204: drop \"field weights\" and add \"report top-eight recall in near mode\".",
+   "acceptance": "The dry run above lists eight candidates with role lines and deploy-doctor is one of them; a test in tests/test_hr.py asserts a no-fit hire prints eight `id — role line` lines; near-mode top-eight on evals/hr_golden_2.jsonl is reported and is at least 72.",
+   "effort": "M",
+   "confidence": "high",
+   "repro": "python3 -B /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/probes2.py",
+   "id": "heldout2-02"
+  },
+  {
+   "title": "The score does not tell a right pick from a wrong one, and a wrong pick usually changes the agent",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "engine/hr.py",
+    ".claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "Of the 64 requests that get a template, 25 are right (39%); of the 36 that are refused, near mode's first pick would be right for 12 (33%). So the gate barely separates. First-pick `fit` when right: min 0.65, median 0.69, max 1.00; when wrong: min 0.49, median 0.67, max 0.73. At fit >= 0.68 it keeps 21 right and 19 wrong. In 13 rows the only candidate returned is wrong (rows 4, 10, 18, 44, 46, 48, 52, 53, 67, 69, 78, 87, 98). Of 39 wrong first picks only 18 share the expected base agent and 7 the group. Example, row 69 (a dependency upgrade): `brain hr hire \"bring the libraries up to date, one at a time, so we can step back if one of them breaks something\" --check true --dry-run` -> \"hire (dry run): template needs-you-composer / agent: writer · model opus · effort medium\" with no role line and no hint of doubt. Telling the selector the right base agent hardly helps: first 28, top three 32.",
+   "proposed_fix": "engine/hr.py `cmd_hire`: always print the chosen template's role line on the line after its id (`role: Writes one owner action as numbered phone click steps…`), so a mismatch is visible in the one place the lead already reads; print `matched N of M words` beside it. Do not add a numeric threshold: no value of fit separates the two groups on this set. The skill sentence proposed in the previous finding is the confirmation step.",
+   "acceptance": "`brain hr hire \"bring the libraries up to date, one at a time\" --check true --dry-run` prints a `role:` line; a test asserts every non-plain hire output contains the template's role line; no change to selection numbers.",
+   "effort": "S",
+   "confidence": "high",
+   "repro": "python3 -B /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/probes.py   (lines P4 to P7)",
+   "id": "heldout2-03"
+  },
+  {
+   "title": "Spanish requests: 7 of 31 right, against 15 of 31 for the same requests in English",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/hr.py",
+    ".claude/skills/brain-build/SKILL.md",
+    "evals/hr_golden.jsonl"
+   ],
+   "evidence": "Spanish slice: first 7, top three 7, no template 19 of 31. My faithful English versions of the same 31 rows: first 15, top three 19, no template 7 (written after seeing results, so indicative). The old set cannot show this: it has 3 Spanish rows in the held-out half and 4 in dev. Tokeniser behaviour, observed by calling it: `hr._terms('gráfica grafica móvil movil')` -> ['gráfica','grafica','móvil','movil'] (accents are not folded); `hr._terms('La lista tarda una eternidad en abrirse en mi móvil')` keeps 'mi' as a term; 0 of 16 Spanish word families reduce to one term (traduce / traducir / traducción / tradúceme are four terms; botón / botones -> 'botón' / 'boton'). Removing accents from the Spanish rows changes 7 pick lists and raises empty results from 19 to 24 (row 74, security-reviewer: right with accents, nothing without). Example misses: row 62 deploy-doctor \"Abro el enlace y sigue saliendo la versión de ayer…\" -> none; row 95 document-producer \"Necesito el informe en PDF para descargar…\" -> none; row 64 rollback-restorer -> pwa-offline-engineer.",
+   "proposed_fix": "1) engine/hr.py `_terms`: fold accents on both the request and the template text (NFD, drop combining marks) so 'movil' and 'móvil' meet. 2) `_stem`: add light Spanish rules after folding: plural -s/-es, -cion/-ciones, verb endings -ar/-er/-ir/-a/-e/-ando/-iendo/-ado/-ido, and attached pronouns -me/-lo/-la/-los/-las; complete the Spanish stopword list. 3) .claude/skills/brain-build/SKILL.md: \"Write the goal for `hr hire` in English even when he wrote in Spanish, and keep his own words in `--why`: templates are matched by words, and the same requests find the right template twice as often in English (15 of 31 against 7).\" 4) Add about 30 new Spanish rows to the dev split so Spanish can be tuned without touching either held-out set.",
+   "acceptance": "`python3 -c \"import sys;sys.path.insert(0,'.');from engine import hr;print(hr._terms('móvil')==hr._terms('movil'), hr._terms('botón')==hr._terms('botones'))\"` prints `True True`; on evals/hr_golden_2.jsonl the lang=es top-three count rises above 7 with no keyword taken from that file; the old held-out test still passes.",
+   "effort": "M",
+   "confidence": "high",
+   "repro": "python3 -B /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/probes.py   (lines P1 and P3)",
+   "id": "heldout2-04"
+  },
+  {
+   "title": "The stemmer does not bring English word families together, so singular and plural can pick different templates",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "engine/hr.py",
+    "tests/test_hr.py"
+   ],
+   "evidence": "Calling `hr._terms` on 28 common families: only 8 reduce to one term. Observed: slide -> 'slide' but slides -> 'slid'; library -> 'library', libraries -> 'librari'; image / images -> 'image' / 'imag'; release / released -> 'release' / 'releas'; change / changes -> 'change' / 'chang'; translate / translation / translating -> 'translate' / 'transl' / 'translat'; migrate / migration -> 'migrate' / 'migr'; compare / comparing -> 'compare' / 'compar'. Effect on picks: `select('make ten slides about the budget')` -> deck-builder first, `select('make a ten slide deck about the budget')` -> []; `select('upgrade the libraries')` -> dependency-upgrader first, `select('upgrade the library')` -> docs-snapshotter first; `select('compare the three options')` -> option-comparer first, `select('a comparison of the three options')` -> visual-option-generator first, option-comparer absent.",
+   "proposed_fix": "engine/hr.py `_stem`: make the base form and its inflections end at the same stem: after removing -s/-es/-ed/-ing, also drop a final 'e' from the base form ('slide' and 'slides' both -> 'slid'); map -ies and final -y to the same ending ('library', 'libraries' -> 'librari'); reduce -ation/-ion and -ate to one stem ('translat'); keep a minimum stem length of three. Because templates and requests go through the same function, no rack text needs to change. Add `test_word_families_reduce_to_one_term` with the 28 families (irregular forms such as broke/break excluded).",
+   "acceptance": "The new test passes for at least 24 of the 28 families listed; `select('upgrade the library')` and `select('upgrade the libraries')` return the same first pick; both held-out floors still pass and the blind set's top three is not lower than 30.",
+   "effort": "S",
+   "confidence": "high",
+   "repro": "cd /home/user/Claude-Brain && python3 -B -c \"import sys;sys.path.insert(0,'.');from engine import hr;print(hr._terms('slide slides library libraries image images release released translate translation'))\"",
+   "id": "heldout2-05"
+  },
+  {
+   "title": "Requests that describe the symptom instead of the job: 0 of 10 first, 1 of 10 in the top three",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "hr/GUIDELINES.md",
+    "hr/template.schema.json",
+    "hr/rack",
+    ".claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "note=symptom slice: first 0, top three 1, no template 7 of 10. Examples: row 23 (visual-polish-measurer) \"the logo sits a hair too low next to the title, it bugs me every time I open the page\" -> none, and not ranked even in near mode; row 94 (canonical-facts-keeper) \"the price says 49 in the brochure, 59 on the website and 45 in the slides, this keeps happening\" -> none; row 67 (performance-profiler) \"La lista tarda una eternidad en abrirse en mi móvil\" -> feasibility-reframer; row 46 (ui-string-localiser) -> es-en-translator. Half of them are lost only to the gate: in near mode the slice is first 2, top three 5, top ten 8 (rows 26, 61 and 86 rank first or second there but return nothing by default). Role lines describe what the helper does (\"Finds why the live address is wrong or stale\"), while the owner says what he sees.",
+   "proposed_fix": "1) hr/GUIDELINES.md, in the section on writing a template: \"A template for repair, diagnosis or polish carries the symptom as well as the job, in English and Spanish, because he reports what he sees ('it still shows yesterday's version'), not what the helper will do.\" Add an optional `symptoms` list to hr/template.schema.json (up to four short lines), indexed with the other matching text, and fill it from the dev split and his real past messages, never from evals/hr_golden_2.jsonl. 2) brain-build skill: \"When he describes a symptom, write the hire goal as the job that removes it ('find why the live site is stale and fix it'), because templates are matched by the words of the job.\"",
+   "acceptance": "`python3 bin/brain hr audit` reports the rack sound with the new field; on evals/hr_golden_2.jsonl the note=symptom top-three count rises from 1 without any edit to that file and without keywords copied from it; the old held-out test still passes.",
+   "effort": "M",
+   "confidence": "medium",
+   "repro": "python3 -B /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/measure.py   (rows with note symptom)",
+   "id": "heldout2-06"
+  },
+  {
+   "title": "Eleven templates are missed on both independent sets, five of them planning roles, and no skill names a template by id",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    ".claude/skills/brain-build/SKILL.md",
+    ".claude/skills/brain-plan/SKILL.md",
+    ".claude/skills/brain-verify/SKILL.md",
+    "hr/rack"
+   ],
+   "evidence": "Templates outside the top three both on the old held-out half and on the new set: acceptance-test-designer, ambiguity-resolver, architecture-decider, bug-reproducer, coverage-analyst, data-reconciler, diagram-maker, feasibility-reframer, injection-auditor, phone-first-ui-builder, ticket-slicer. Group view on the new set: planning 3 of 10, quality-ops 1 of 10, build 0 of 10 first. Example rows: 55 (ticket-slicer) \"chop the plan into small jobs, say which can run at the same time, which files each one owns…\" -> acceptance-test-designer, batch-article-rewriter, claude-product-answerer; 53 (ambiguity-resolver) -> repo-cartographer; 71 (requirement-verifier) -> acceptance-test-designer. Several of these are steps of the brain's own method, which the lead reaches because a skill told it to, not because the owner phrased a request. `grep -rnoE \"requirements-extractor|ticket-slicer|acceptance-test-designer|ambiguity-resolver|session-handover-writer|requirement-verifier|code-reviewer|premortem-redteam|lesson-distiller|needs-you-composer\" .claude/skills method playbooks` prints nothing.",
+   "proposed_fix": "Where a skill already knows the role, name it and skip matching. .claude/skills/brain-build/SKILL.md: \"For a role the method itself calls for, pass the template: `--template requirements-extractor` (ledger lines), `acceptance-test-designer` (one check per requirement), `ticket-slicer` (tickets), `requirement-verifier` and `code-reviewer` (before reporting done), `session-handover-writer` (handover), `lesson-distiller` (after close). These are steps of the method, so there is no wording to match, and word matching misses them.\" Add the same one-line pointer where brain-plan, brain-verify, brain-handover and brain-learn mention helpers. For the six owner-facing templates in the list, review their matching text against dev rows only.",
+   "acceptance": "`grep -c -- \"--template\" .claude/skills/brain-build/SKILL.md` is at least 2; `python3 bin/brain lint` passes; a test asserts every id named in a skill exists in the rack.",
+   "effort": "S",
+   "confidence": "medium",
+   "repro": "python3 -B /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/probes2.py   (line \"missed in both\")",
+   "id": "heldout2-07"
+  },
+  {
+   "title": "The lead's fallback views are broken: `hr rack` cuts ids off every group line and `hr rack --search` can print nothing",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "engine/hr.py"
+   ],
+   "evidence": "`python3 -B bin/brain hr rack` prints ten group lines, each cut at 163 to 170 characters with an ellipsis: \"build (10): api-integration-builder, cli-script-builder, content-site-builder, game-builder, learning-app-builder, minecraft-structure-builder, phone-first-ui-bu…\" so pwa-offline-engineer, refactor-engineer and web-app-scaffolder are not shown, and the same happens in all ten groups. The full list is only 1,954 characters. `python3 -B bin/brain hr rack --search \"Abro el enlace y sigue saliendo la versión de ayer, y eso que me dijiste que ya estaba subido\"` prints nothing and exits 0, while `hr hire --dry-run` for the same text lists three \"closest by wording\" ids; the skill (brain-build/SKILL.md:18) sends the lead to `hr rack --search` exactly when no template fits.",
+   "proposed_fix": "engine/hr.py `cmd_rack`: print every id, wrapping the group line instead of cutting it (the whole list is about 500 tokens). For `--search`, use the same near ranking that `hire` uses for \"closest by wording\", print eight lines of `id — role line`, and when nothing ranks print \"no template shares a word with this; `brain hr rack` lists every id by group\" so silence is never the answer.",
+   "acceptance": "`python3 bin/brain hr rack | grep -c '…'` prints 0 and `python3 bin/brain hr rack | grep -o '[a-z0-9-]*-[a-z0-9-]*' | sort -u | wc -l` is at least 100; `python3 bin/brain hr rack --search \"Abro el enlace y sigue saliendo la versión de ayer\"` prints at least one line; a test covers both.",
+   "effort": "S",
+   "confidence": "high",
+   "repro": "cd /home/user/Claude-Brain && python3 -B bin/brain hr rack | awk '{print length($0)\": \"$0}' | head -3",
+   "id": "heldout2-08"
+  },
+  {
+   "title": "Typos and dictation splits defeat exact word matching: 2 of 10 right, 4 of 10 once spelling is corrected",
+   "severity": "minor",
+   "kind": "gap",
+   "files": [
+    "engine/hr.py",
+    "tests/test_hr.py"
+   ],
+   "evidence": "note=typo slice: first 2, top three 2, no template 6 of 10. With only the spelling corrected (my corrections, same words): first 4, top three 4, no template 3. Rows that recover: 9 (\"mine craft\" -> minecraft-structure-builder first) and 15 (\"exel … formulars\" -> spreadsheet-engineer first). Rows that stay missed after correction: 14, 29, 37, 60, 70, 78, so for those spelling is not the cause. Selection takes about 12 ms per request today (100 selections in 1,168 ms), which leaves room for a fallback.",
+   "proposed_fix": "engine/hr.py `_terms` (request side only): for a term of five letters or more that appears in no template, try the closest template term with `difflib.get_close_matches(term, vocabulary, n=1, cutoff=0.84)`, and try joining it with the next term when the joined word is in the vocabulary (\"mine craft\"). Apply only when the exact term has no match, so correct requests are unaffected. Build any test words from the dev split, not from evals/hr_golden_2.jsonl.",
+   "acceptance": "A new test with misspelt dev-derived requests passes; on evals/hr_golden_2.jsonl the note=typo top-three count is at least 4 and the overall top three is not below 30; 100 selections still run in under 3 seconds.",
+   "effort": "S",
+   "confidence": "medium",
+   "repro": "python3 -B /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/probes.py   (lines P2)",
+   "id": "heldout2-09"
+  },
+  {
+   "title": "Idea: let the lead pick from a role-line menu and keep word matching as the shortlist",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/hr.py",
+    ".claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "All 100 ids with their role lines are 10,277 characters (about 2,600 tokens); ids alone are 1,954 characters; one group of ten is about 1,000 characters. Near-mode recall on the blind set is 72 at eight and 77 at ten, so even a perfect choice from a ten-item shortlist tops out at 77, while a choice from the group menu has no such ceiling. The lead already understands Spanish, typos and symptoms, which are the three slices where matching fails (7 of 31, 2 of 10, 0 of 10).",
+   "proposed_fix": "Add `brain hr rack --menu [group]` printing `id — role line` uncut, and say in the brain-build skill: \"If you already know which role the work needs, pass `--template <id>`; `BRAIN hr rack --menu <group>` shows ten roles in about 250 tokens. Matching by wording is the fallback for when you do not.\"",
+   "acceptance": "`python3 bin/brain hr rack --menu planning | wc -l` prints 10 and each line holds a full role line; a paired check on 20 requests shows the lead's `--template` choice from the menu is right more often than the first pick by wording.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "heldout2-10"
+  },
+  {
+   "title": "Idea: record what the selector picked beside what was used, so real misses are measured",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/hr.py"
+   ],
+   "evidence": "A hire made in my scratch copy with `--template dependency-upgrader` wrote a contract whose keys are: at, band_tokens, base_agent, brief, check, closest, effort, explored, family, group, has_check, id, lint, model, model_basis, needs, notes, propensity, risk, runners_up, session, size, status, task_class, task_sha, template, tier, wage_basis, wage_cost, wage_tokens, words, workdir. `closest` and `runners_up` were empty and nothing says the template was forced or what matching would have chosen. Both golden sets are written in the owner's words, while `hire` receives the lead's goal (\"the goal, as an outcome\"), and stats/ledger holds no hires to compare against, so accuracy on the real input is unknown.",
+   "proposed_fix": "In `hire`, always run the selector and store `selector_pick` and `template_forced` in the contract and the ledger row; have `brain hr report` print how often the lead overrode the pick. Each override is a labelled miss on real wording, which the learning pipeline can add to the dev split.",
+   "acceptance": "A hire with `--template X` writes `template_forced: true` and a `selector_pick`; `brain hr report` prints an override rate; a test covers both.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "heldout2-11"
+  },
+  {
+   "title": "Idea: protect the blind set from wearing out",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "evals/README.md",
+    "tests/test_hr.py"
+   ],
+   "evidence": "The first held-out half moved from 73/83 to 78/86 during tuning (docs/BUILD_STATUS.md:34), and the new blind set then scored 25/30: a held-out figure drifts upward with every decision taken on it. CB-204 already says to keep a change only if the blind set's top three rises by three points, which means the set will be consulted several times.",
+   "proposed_fix": "evals/README.md: \"`hr_golden_2.jsonl` is looked at only to accept or reject a finished change, and each look is logged here with date, change and score, because every decision taken on a held-out set leaks a little of it. After ten looks, write a third set before tuning further.\" Report the lang and note slices with every look, so a gain in English cannot hide a loss in Spanish.",
+   "acceptance": "evals/README.md holds the rule and a first log line \"2026-11-10 baseline: first 25, top three 30, none 36\"; the test added for the blind set prints the slices on failure.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "heldout2-12"
+  },
+  {
+   "title": "Idea: scratch copies of the brain write hire contracts into the live session's folder",
+   "severity": "idea",
+   "kind": "risk",
+   "files": [
+    "engine/hr.py"
+   ],
+   "evidence": "engine/hr.py:507 `return Path(tempfile.gettempdir()) / \"brain-hr\" / re.sub(r\"[^A-Za-z0-9_-]\", \"_\", c.session_id())[:40]`. A hire I ran from my scratch copy in a scratch project wrote /tmp/brain-hr/c34b258b-1734-5756-8764-15f4f3352652/h-20261110-a880b7.json (I removed it and its seal). The same folder holds h-20261110-770474.json, status open, workdir …/scratchpad/research-models/proj, from another auditor's scratch copy. I did not test whether the lead's `brain close` settles these, so the effect on the ledger is unverified.",
+   "proposed_fix": "Key the temporary contract folder by the working folder as well as the session (for example a short hash of `workdir`), or have `settle_open` skip contracts whose `workdir` is not the current project, so an experiment in a copy cannot appear as an open hire of the real session.",
+   "acceptance": "A test hires from two different work folders in one session and asserts each sees only its own open contract.",
+   "effort": "S",
+   "confidence": "low",
+   "id": "heldout2-13"
+  }
+ ],
+ "data": "FILE WRITTEN: /home/user/Claude-Brain/evals/hr_golden_2.jsonl — 100 rows, 100 distinct expected templates (10 per group), every expected id exists in the rack, sha256 d111714c21ab2cc5f88d8fc6171427ea919721c131471fd0b9e62c975b47fff5, already committed by the lead as 8dabade. lang: en 69, es 31. note: typo 10, symptom 10, none 80. Words per request: min 4, median 26, max 63.\nHonesty notes: scoring code and keywords never read. Before any measurement, an automatic overlap check against the 200 old rows led me to rewrite 19 rows that had independently landed on the same scenario as an old row; final maximum word-set overlap (Jaccard) with any old row is 0.17. The set was not edited after the first measurement. After freezing, `hr rack --search` output showed me the `when` text of six templates.\nScripts (read-only against the brain): /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/make_set.py, /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/measure.py, /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/probes.py, /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/heldout2/probes2.py\n\nBASELINE (hr.select(task, rack), default k=3, no state; same loop as tests/test_hr.py)\nslice | n | first | top three | no template\nall | 100 | 25 | 30 | 36\nen | 69 | 18 | 23 | 17\nes | 31 | 7 | 7 | 19\nnote none | 80 | 23 | 27 | 23\nnote symptom | 10 | 0 | 1 | 7\nnote typo | 10 | 2 | 2 | 6\nen plain | 55 | 16 | 20 | 8\nes plain | 25 | 7 | 7 | 15\ngroup build | 10 | 0 | 2\ngroup data | 10 | 2 | 2\ngroup design | 10 | 2 | 2\ngroup discovery | 10 | 3 | 4\ngroup language | 10 | 4 | 5\ngroup planning | 10 | 3 | 3\ngroup quality-ops | 10 | 1 | 1\ngroup review | 10 | 2 | 2\ngroup support | 10 | 5 | 6\ngroup writing | 10 | 3 | 3\nHarness check on the old set: held-out half 78 / 86 (no template 3), dev 100 / 100.\nMiss anatomy (70): 36 no template, 32 candidates without the expected id, 2 expected ranked fourth.\nIn top three but not first (5): rows 3, 7, 39, 45, 89.\n\nEXISTING NEAR MODE (select(..., near=True)), no code change\nnew set: first 37, top three 56, top five 65, top eight 72, top ten 77, top twenty 83, never ranked 14. Old held-out: 80, 88, 92, 96, 98, 99.\nby group (first / top three of 10): build 3/7, data 3/4, design 4/4, discovery 5/7, language 4/6, planning 3/3, quality-ops 2/4, review 2/6, support 6/8, writing 5/7. es: first 15, top three 18 of 31. symptom: 2 / 5 of 10. typo: 3 / 5 of 10.\nOf the 36 no-template rows, near mode ranks the right template first for 12, in the top three for 18, in the top eight for 24.\n\nPROBES (diagnosis only, selector unchanged)\nSpanish rows in my English translation: first 15, top three 19, none 7 (as written 7 / 7 / 19).\nTypo rows with spelling corrected: first 4, top three 4, none 3 (as written 2 / 2 / 6).\nSpanish rows with accents removed: first 6, top three 6, none 24; 7 of 31 pick lists change.\nSelector told the right base agent: first 28, top three 32.\nFirst-pick fit: right n=25 min 0.65 median 0.69 max 1.00; wrong n=39 min 0.49 median 0.67 max 0.73. Wrong first picks: same base agent 18 of 39, same group 7 of 39.\nWord families reducing to one term: English 8 of 28, Spanish 0 of 16.\nSpeed: rack load 2 ms, 100 selections 1,168 ms. tests.test_hr: 48 tests OK.\n\nFULL TOP-THREE MISS LIST (70). Format: row | lang | note | expected | chosen (up to three) | rank of expected in near mode | task (first 95 characters; row is the line number in evals/hr_golden_2.jsonl)\n1|en|-|web-app-scaffolder|ticket-slicer, rollback-restorer, deep-researcher|38|ok so the idea is a bird diary, my daughter and I go out on Sundays and we want to note down wh…\n2|es|-|phone-first-ui-builder|(none)|1|Hazme la pantalla de ajustes tal como viene en el documento, pensada para el móvil, y enséñame …\n4|en|-|api-integration-builder|history-digger|3|hook the app up to the tide times service so it shows today's high and low water, and if their …\n5|es|-|game-builder|(none)|1|Quiero un juego de emparejar cartas para mis hijos, hazlo por partes y que cada parte ya se pue…\n6|en|-|learning-app-builder|deep-researcher, option-comparer, source-harvester|23|turn my civil procedure notes into something I can drill on the bus, questions and answers, and…\n8|es|-|content-site-builder|(none)|9|Convierte la carpeta de apuntes en una web sencilla solo para leer, con su menú, y que al gener…\n9|en|typo|minecraft-structure-builder|(none)|1|can you make a castle with a mote and a draw bridge for my sons mine craft world, he plays on t…\n10|en|-|refactor-engineer|design-system-builder|3|move the code around so each screen lives in its own place instead of one giant heap, nothing t…\n11|en|-|data-pipeline-builder|performance-profiler, data-reconciler, deep-researcher|-|pull all the rulings from that open court portal page by page, clean them up and load them into…\n12|es|-|exploratory-analyst|(none)|1|Échale un vistazo a este fichero de ventas y cuéntame qué ves, qué hay raro, qué columnas viene…\n14|es|typo|chart-maker|(none)|-|aver si me aces una grafica de barras con los gastos de cada mes y que se lea bien en el movil\n15|en|typo|spreadsheet-engineer|(none)|3|build me an exel for the house budget with the formulars working, the totals have to add up by …\n16|es|symptom|data-reconciler|(none)|13|El banco dice que hay 412 movimientos y en mi lista salen 398, no sé cuáles faltan ni si sobra …\n17|en|-|schema-migration-engineer|dataset-source-finder, data-pipeline-builder, repo-cartographer|12|we need a second address on every customer record, try the change on a copy first, the real dat…\n18|en|-|biodiversity-data-integrator|ambiguity-resolver|7|bring in the butterfly sightings from the two nature sites for our valley, careful because the …\n20|en|-|rag-index-builder|acceptance-test-designer, deep-researcher|33|I want to ask questions to my three hundred documents and have it pull up the right paragraph, …\n21|en|-|design-brief-author|ticket-slicer, batch-article-rewriter, blueprint-extractor|8|before anyone draws anything, put down on one page how this app should look and feel, who it's …\n23|en|symptom|visual-polish-measurer|(none)|-|the logo sits a hair too low next to the title, it bugs me every time I open the page\n24|en|-|design-critic|requirement-verifier, phone-first-ui-builder|10|look at the finished screens with a cold eye and grade them against what we said we wanted, don…\n25|es|-|design-system-builder|(none)|-|Que todos los colores, tamaños de letra y botones salgan de un único sitio y que salte un aviso…\n26|en|symptom|image-pipeline-engineer|(none)|1|the little pictures in the list look blurry, opening the big one eats my mobile data, and some …\n27|en|-|motion-builder|(none)|-|when a card is answered right I want it to flip and glide away like in the video I sent you, no…\n28|es|-|audio-lesson-producer|(none)|1|Pásame los temas del temario a audio para escucharlos en el coche, pero antes mándame una muest…\n29|en|typo|diagram-maker|chart-maker, needs-you-composer, ticket-slicer|4|I need a picture with boxes and arows showing who aproves what in the asociation, it has to be …\n31|es|-|repo-cartographer|(none)|1|Hace un año que no toco este repositorio y ya no me acuerdo de nada, hazme un mapa de una págin…\n33|en|-|api-live-prober|(none)|-|there are three address lookup services on my list, don't just read about them, actually try ea…\n34|es|-|option-comparer|(none)|5|Tengo tres sitios donde alojar la web, el gratuito, el barato de pago y el de la empresa grande…\n35|en|-|deep-researcher|legal-research-analyst, option-comparer|7|one question, properly researched: how long should the gap between review sessions be for an ad…\n37|en|typo|history-digger|(none)|2|wear did we leave the invoice numbering thing, I no we sorted it out weeks ago but I cant remem…\n38|es|-|claude-product-answerer|(none)|1|¿Puede Claude desde el móvil leer lo que tengo en Google Drive? Míralo en la documentación ofic…\n41|en|-|es-en-translator|copy-editor, content-site-builder, web-app-scaffolder|4|put the welcome email into Spanish\n44|en|-|glossary-builder|batch-article-rewriter|5|sometimes you put fianza as deposit and sometimes as bond, settle once and for all how we say e…\n46|es|symptom|ui-string-localiser|es-en-translator|9|He puesto la app en inglés y la mitad de los botones siguen saliendo en español\n48|es|-|legal-terms-translator|ambiguity-resolver|2|Pásame la sentencia al inglés para el abogado de Londres, respetando los términos jurídicos, y …\n49|en|-|voice-matcher|long-form-drafter, needs-you-composer|-|here are ten of my old newsletters, write the next one so nobody can tell it wasn't me\n51|en|-|requirements-extractor|(none)|-|right, I've been talking for a while and I've probably asked for ten things without noticing, t…\n52|es|-|acceptance-test-designer|coverage-analyst|13|Para cada cosa que he pedido, dime cómo vamos a comprobar que está hecha y qué prueba me vas a …\n53|en|-|ambiguity-resolver|repo-cartographer|14|there's a pile of loose ends in what I asked, pick sensible defaults yourself and only come bac…\n54|en|-|architecture-decider|api-live-prober, name-and-copy-options|10|should the data live on the phone or on a server, make the call and write down why, what else y…\n55|en|-|ticket-slicer|acceptance-test-designer, batch-article-rewriter, claude-product-answerer|4|chop the plan into small jobs, say which can run at the same time, which files each one owns an…\n58|en|-|migration-planner|deep-researcher, back-translation-checker, requirement-verifier|5|we're moving everything off the old hosting, lay out the steps in order, how to back out of eac…\n60|es|typo|feasibility-reframer|(none)|4|kiero que la app adivine que nota voi a sacar en el examen, no se si eso se puede acer aqui o a…\n61|en|symptom|build-failure-diagnoser|(none)|1|the checks went red after the last change and there's a wall of error text, I can't tell what a…\n62|es|symptom|deploy-doctor|(none)|7|Abro el enlace y sigue saliendo la versión de ayer, y eso que me dijiste que ya estaba subido\n64|es|-|rollback-restorer|pwa-offline-engineer, history-digger|-|Lo de hoy ha roto la app, déjala como estaba el viernes sin borrar el historial\n65|en|-|e2e-test-author|(none)|7|write automatic tests that tap through signing up and paying the way a person would on a phone,…\n66|en|-|coverage-analyst|claude-product-answerer, acceptance-test-designer|8|if someone broke the payment code tomorrow, would any of our automatic checks notice? measure h…\n67|es|symptom|performance-profiler|feasibility-reframer|2|La lista tarda una eternidad en abrirse en mi móvil\n68|en|-|accessibility-auditor|backlog-prioritiser, injection-auditor|3|my father uses a screen reader and very large text, go through the app and tell me what would t…\n69|en|-|dependency-upgrader|needs-you-composer|-|bring the libraries up to date, one at a time, so we can step back if one of them breaks someth…\n70|en|typo|bug-reproducer|(none)|-|some times the save buton does nothing, I cant say when, find out how to make it hapen every ti…\n71|en|-|requirement-verifier|acceptance-test-designer, batch-article-rewriter|3|the helpers say it's all done and I don't buy it, take my original list and prove each point ag…\n73|en|-|code-reviewer|eval-regression-runner, history-digger, repo-cartographer|-|get a second pair of eyes on today's changes before they go in, did they do what they were mean…\n75|en|-|secret-scanner|repo-cartographer, deploy-doctor|3|I think I pasted a password into the project at some point, look everywhere including old versi…\n76|en|-|premortem-redteam|(none)|2|imagine it's six months from now and the launch flopped, tell me why it happened, what warning …\n77|es|-|injection-auditor|(none)|16|La app lee los correos de los clientes y se los pasa al asistente, ¿puede un correo con mala id…\n78|en|typo|legal-citation-verifier|batch-article-rewriter|11|the breif cites nine judgements and four articles of the civil code, open each one and make sur…\n79|en|-|privacy-licence-reviewer|(none)|10|we use photos taken off the internet and we store the students' names and phone numbers, check …\n80|en|-|clean-clone-verifier|(none)|2|pretend you're a stranger, download the project fresh and follow the instructions word for word…\n83|es|-|owner-computer-guide|(none)|1|Esto me toca hacerlo en mi portátil y yo de terminales no sé nada, guíame paso a paso, un recua…\n85|es|-|routine-builder|(none)|5|Quiero que cada lunes a las ocho se genere solo el resumen de la semana, que si falla no pase n…\n86|en|symptom|setup-repairer|(none)|2|since yesterday Claude doesn't pick up my skills, the session starts as if the brain wasn't the…\n87|en|-|token-cost-auditor|dataset-source-finder|-|which helpers burned the most last week and where could we spend less, real numbers not guesses\n91|en|-|long-form-drafter|(none)|1|the outline for the handbook is approved, now write it all out, part after part, about three th…\n92|es|-|batch-article-rewriter|(none)|-|Tengo ochenta fichas de producto, acórtame cada una a dos frases y dime ficha por ficha cómo ha…\n94|en|symptom|canonical-facts-keeper|(none)|8|the price says 49 in the brochure, 59 on the website and 45 in the slides, this keeps happening\n95|es|-|document-producer|(none)|1|Necesito el informe en PDF para descargar, con portada e índice, y mira cómo queda cada página …\n97|es|-|strategy-memo-writer|(none)|2|Escríbeme una nota corta para decidir si abrimos la segunda tienda, con tu recomendación arriba…\n98|en|-|legal-research-analyst|dataset-source-finder|3|if a customer sends back an opened product after twenty days do we have to return the money, lo…\n100|en|-|agent-spec-writer|canonical-facts-keeper, acceptance-test-designer|4|write the instruction file for a new helper that checks invoices, keep it short, only what it w…"
+}
