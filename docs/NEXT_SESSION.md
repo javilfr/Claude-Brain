@@ -1,5 +1,7 @@
 # Handover: working on the brain itself
 
+> **Update 2026-11-10 (second session):** tickets CB-200 to CB-209 are all done; see the dated section "Improvement session, 2026-11-10" at the end of `docs/BUILD_STATUS.md`, whose last part lists what is still unproven. There are no open brain tickets. Good next work, in order: a supersede path for sourced facts (the pricing fact still carries wrong wording); a paired run where the lead names templates, on larger tasks; the live two-repository and Project-thread checks, which need a project attached. The text below is the original handover, kept for its rules.
+
 For the Claude session that opens this repository on its own. The owner's instruction for it, verbatim (2026-11-10): "Test, analyze, research and improve heavily in a new chat we will start right now with renewed context, prepare everything for new chat with only the brain repo in order to work on it until fully done."
 
 ## Where things stand

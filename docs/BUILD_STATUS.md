@@ -225,3 +225,24 @@ What changed: per the verdict, `hr hire` no longer uses an automatically chosen 
 - Fixed, each with a test: inbox files no longer conflict when two session branches merge (radar leads per session, union merge for inbox files; the conflict was reproduced first); an owner-stated rule needs at least five of his words or his whole message, not any 12 characters; `req verify --all` re-runs done lines and reopens a stale one; `req verify` output is capped; a project folder that does not exist is reported, not guessed; the know-memo-facts grader rejects "6 hours and 9 crossings" and still accepts "6 winter ferry crossings"; a test that could write contracts into a real sibling project is hermetic; `hr hire --model` re-hires on another model when one is at its limit.
 - Blocking B1 (Project threads load only `CLAUDE.md`, confirmed on the official page by the lead): `CLAUDE.md` now says to read the skill files directly and delegate to a general-purpose agent when no brain skill is listed; R-02 marked partly met. B2 (R-29 overstated): R-29 rewritten to the measured numbers.
 - Open, with reasons: learning needs the session branch to reach `main` (one pull request per session unless the owner chooses automatic merging, `NEEDS_YOU.md` item 4); owner-stated items cannot be demoted by outcomes by design (I-08) and a correction only adds an opposite record; enforcement on GitHub waits for its checks to run (item 7); sessions that end without `close` in a container that is then discarded leave no ledger record (survivorship bias in what is learned); the cost of the brain's process against working without it is still unmeasured (CB-109).
+
+### CB-209 Close-out: where the brain stands after this session
+
+All ten tickets CB-200 to CB-209 are done; each acceptance command was run at the end and exited 0, as did `doctor`, `lint`, `hr audit`, `eval audit`, `items check` and `learn verify` (431 tests).
+
+What this session changed, in one line each:
+- A real end-to-end trial found seven defects in the normal flow, all fixed with tests (CB-202).
+- Template selection was measured on a fresh held-out set: 46% first, 63% in the top three, not the 78/86 claimed before (CB-204).
+- The first paired evaluation said automatic template choice does not help (verdict revert); templates are now used only when named (CB-203).
+- The rack was reviewed and corrected: 81 method lines given reasons, two templates moved to agents that can do their method, five data templates sourced (CB-205).
+- Nine open review items fixed or closed with a reason (CB-206); research round four checked 18 facts and the platform behaviour (CB-207); a red team and an independent review found 3 blocking and 13 should-fix items, all fixed or listed below (CB-208).
+- Hooks, helper model, effort and handbook skipping were observed live in a one-repository session (CB-201).
+
+Still unproven, and why:
+- Whether a correctly named template beats a plain brief: needs a paired run on larger tasks where the lead names templates.
+- Whether the brain saves tokens or time against working without it (CB-109): needs paired live sessions on real projects.
+- The two-repository flow and Project threads in live use (CB-101 to CB-108, CB-110): need chats with a project repository attached, which this session did not have.
+- The wrong cache-read wording in the pricing fact remains: the corrected note merged as a vote on the old item, because external facts have no path to supersede one. A supersede path for sourced facts is the next fix.
+- Sessions that end without `close` in a discarded container leave no record, so failures may be under-counted in what the brain learns.
+
+Cost of this session (`brain ledger`): about 59 minutes, 43 helpers, 113 million tokens, about $38 at list prices, helpers 37%; the main conversation read 99% of its input from cache; one tool result in the main conversation exceeded 5,000 tokens (an official documentation page read in full).
