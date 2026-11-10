@@ -1,0 +1,146 @@
+{
+ "summary": "Second pass by the quality-path auditor, re-run in a private copy with local remotes only. Only the points its first report did not already carry are listed here; the rest repeat quality-path-01 to -14.",
+ "strengths": [],
+ "findings": [
+  {
+   "id": "quality2-01",
+   "title": "The recommended release path never runs the 'tests switched off' detectors, and the detectors are advisory and miss common markers",
+   "severity": "blocking",
+   "kind": "bug",
+   "files": [
+    "engine/gate.py",
+    ".claude/skills/brain-verify/SKILL.md"
+   ],
+   "evidence": "Scratch project: broke a test, added @unittest.skip, committed, ran `brain release --run-gates --push` -> `released ... (fast-forward, gates green)`, no warning. A commit adding @unittest.expectedFailure, skipIf(True), self.skipTest, deleting two tests and changing the gate command to `... | tail -3` -> `brain gate --all` exit 0 with one advisory line; release pushed. Gate command `... || true` printed FAILED (errors=1) and was released. /bin/sh is dash: no pipefail, so a pipe hides a failing exit code.",
+   "repro": "",
+   "proposed_fix": "(1) cmd_release: after green_at_head call diff_detectors(project); a skip-class finding refuses the release unless `--accept-skips \"<reason>\"` is given, and that reason is written to STATUS.md. (2) Extend SKIP_RE: pytest.mark.xfail, pytest.skip(, self.skipTest(, unittest.SkipTest, @unittest.expectedFailure, t.Skip(, #[ignore], @Disabled, @Ignore, xtest(, --passWithNoTests. (3) New detector 'tests removed': removed versus added test definitions and deleted test files in the diff. (4) New detector 'gate changed': compare gates in `git show <base>:.brain/project.json` with the current manifest; flag `|| true`, `|| :`, trailing `; true`, `exit 0`, and a pipe after the test command. (5) run_filtered: run through `bash -o pipefail -c` when bash exists; when exit is 0 but the tail matches a strong failure signature add one note line.",
+   "acceptance": "Tests: test_release_refuses_a_newly_skipped_test_until_accepted, test_detectors_see_expected_failure_skiptest_and_deleted_tests, test_changed_or_masked_gate_command_is_reported, test_pipeline_failure_is_not_hidden.",
+   "effort": "M",
+   "confidence": "high"
+  },
+  {
+   "id": "quality2-02",
+   "title": "Dropping requirements is invisible to the owner: a ledger with every line dropped passes, and STATUS.md shows a count at best",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/req.py",
+    "engine/state.py"
+   ],
+   "evidence": "Tier 2, stage build: three lines added, all dropped with reason 'later'; `brain req check` -> all 3 line(s) done with evidence or dropped with a reason, exit 0. STATUS.md had only a count; the sentences and reasons are only in .brain/REQUIREMENTS.md.",
+   "repro": "",
+   "proposed_fix": "state.write_status lists up to five dropped lines with their reasons. req.save calls state.write_status. req check prints the dropped lines every time and fails when every line of a tier 2 or 3 ledger is dropped. req drop on a line that is not implied adds a NEEDS_YOU.md item 'Confirm dropping ...' unless --quote carries his verified words. boot's line shows the dropped count.",
+   "acceptance": "Tests: test_dropped_lines_and_reasons_reach_the_status_page, test_a_ledger_with_every_line_dropped_does_not_pass_at_project_size.",
+   "effort": "M",
+   "confidence": "high"
+  },
+  {
+   "id": "quality2-03",
+   "title": "What the ledger feeds the learners is in units that do not mean work: tokens is 93% cache reads and minutes counts idle time",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/ledger.py",
+    "engine/mlearn.py"
+   ],
+   "evidence": "Real session snapshot: 11,179,189 tokens, $12.91; cache reads 92.9% of tokens and 16.1% of cost. Same usage in the unit HR wages use (cost / output price) is 322,694: a factor of 35. Two bursts of 4 and 3 minutes 12 hours apart give wall_minutes 723.",
+   "repro": "",
+   "proposed_fix": "ledger.summarise adds tokens_oe (cost divided by the main model's output price, as hr does) and active_minutes (sum of gaps between consecutive timestamps, each capped at a tunable five minutes). Outcomes carry both; mlearn prefers them for calibration and drift when present, so old records still fold. The --est-tokens help names the unit.",
+   "acceptance": "Tests: test_active_minutes_ignore_idle_gaps (two-burst transcript gives 7), test_outcome_carries_output_equivalent_tokens, test_calibration_prefers_output_equivalent_tokens_and_active_minutes.",
+   "effort": "M",
+   "confidence": "medium"
+  },
+  {
+   "id": "quality2-04",
+   "title": "Ledger pricing blind spots: an unknown model is silently priced at the fallback rate; fast mode is ignored",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "engine/ledger.py",
+    "memory/models.json"
+   ],
+   "evidence": "Synthetic transcript: model claude-fable-6-0 with 1M output tokens -> cost 20.0, nothing says a fallback was used. usage.speed 'fast' priced as standard.",
+   "repro": "",
+   "proposed_fix": "summarise returns unpriced_models; the summary line and close print 'priced at the fallback rate: <model>; add it to memory/models.json'. Keep usage.speed; apply a fast multiplier only if models.json carries one (a kernel data change the owner approves; do not invent the number).",
+   "acceptance": "Test: test_unknown_model_is_flagged_not_silently_priced.",
+   "effort": "S",
+   "confidence": "high"
+  },
+  {
+   "id": "quality2-05",
+   "title": "Every project manifest carries paths.never_touch and paths.evidence, and no code reads either",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/gate.py",
+    "engine/contract.py"
+   ],
+   "evidence": "grep -rn never_touch over engine/, skills, method/, playbooks/, contract/template: one hit, the template line in engine/contract.py.",
+   "repro": "",
+   "proposed_fix": "gate.diff_detectors gains a never-touch detector: files changed against the release branch (and uncommitted ones) that match an entry (prefix or fnmatch) are listed; release refuses while any is present unless accepted with a reason. req evidence resolves a bare relative path against paths.evidence as well as the project root.",
+   "acceptance": "Tests: test_release_refuses_changes_under_never_touch, test_gate_names_never_touch_files_changed_but_not_committed.",
+   "effort": "M",
+   "confidence": "high"
+  },
+  {
+   "id": "quality2-06",
+   "title": "Idea: clean-room gates for release (run the gates in a detached worktree at HEAD and use that run's exit codes)",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/gate.py"
+   ],
+   "evidence": "A hand-appended green line in .brain/log/gates.jsonl for a gate whose command is `false` -> `brain release --push` released. A staged rename out of .brain/ and files under .brain/ other than project.json and ext/ count as bookkeeping.",
+   "repro": "",
+   "proposed_fix": "Release runs every command gate itself at HEAD (in a detached git worktree after commands.setup when the tree has ignored or untracked files) and pushes only on those exit codes.",
+   "acceptance": "Test: a hand-written green record exists and the gate command fails: release exits 1.",
+   "effort": "M",
+   "confidence": "high"
+  },
+  {
+   "id": "quality2-07",
+   "title": "Idea: prove once that each gate can fail",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/gate.py"
+   ],
+   "evidence": "`|| true`, a pipe, or a test folder that matches nothing passes forever; eval audit already demands that a grader fails its null solution.",
+   "repro": "",
+   "proposed_fix": "Record per gate-command hash one observed non-zero exit; release says 'gate checks has never been seen to fail' until one exists.",
+   "acceptance": "Test: a gate whose command is `true` is reported as never seen to fail; after one recorded red run the line disappears.",
+   "effort": "S",
+   "confidence": "medium"
+  },
+  {
+   "id": "quality2-08",
+   "title": "Idea: evidence that goes stale",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/req.py"
+   ],
+   "evidence": "A line marked done stays done whatever changes afterwards.",
+   "repro": "",
+   "proposed_fix": "Stamp each verified evidence item with the commit it was seen on; req check marks a done line stale when the files its check or evidence names changed since; req verify re-runs only those.",
+   "acceptance": "Test: line done at commit A, its file changes in commit B, req check reports it stale until req verify passes.",
+   "effort": "M",
+   "confidence": "medium"
+  },
+  {
+   "id": "quality2-09",
+   "title": "Idea: incremental session ledger with cache-break detection",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/ledger.py"
+   ],
+   "evidence": "The Stop hook re-reads every transcript after every turn (0.085 s for 4.5 MB today; grows linearly; 20-second limit).",
+   "repro": "",
+   "proposed_fix": "Keep a byte offset and running totals per transcript file; name the turn where the cache-read share fell.",
+   "acceptance": "Test: capture after appending rows parses only the new bytes and gives the same totals as a full parse.",
+   "effort": "M",
+   "confidence": "medium"
+  }
+ ]
+}

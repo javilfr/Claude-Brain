@@ -1,0 +1,370 @@
+{
+ "summary": "The core is fast (boot 0.13-0.16 s, 400-1,000 bytes), atomic and idempotent, and its 64 area tests pass, but driving it through 15 scratch worlds (local bare remotes, broken files, two projects, brain-only, new-chat clones) showed that continuity and release safety break outside the tested path. The most important change: make a new chat able to find the last checkpoint. Sessions work on their own claude/... branch, so after a handover that prints 'ready' a fresh clone of main boots as 'item: none · last done: none' while the newer STATE.md sits unread on origin/<old branch>. Second: a release can go out with a failing gate (two gates sharing one id; validate calls the manifest valid), and checkpoint --push pushes ungated commits to main under the 'pr' rule. Third: the documented order 'checkpoint --push, then close' leaves the open-session marker on the remote, so the next boot reports a closed session as unclosed and replaces its real token ledger with an 'unrecorded' stub. Fourth: damaged or oddly typed contract files either crash boot with a traceback (manifest with a null section) or are silently treated as a fresh project and then overwritten (STATE.md with one bad byte). All reproductions ran in copies under the scratchpad; /home/user/Claude-Brain was not modified.",
+ "strengths": [
+  "Writes are atomic (temp file + os.replace in common.write_text): 12 simultaneous checkpoints and every crash path tried never produced a corrupt or half-written STATE.md, and no temp file was left behind.",
+  "The main-on-green guard is sound and fails closed: checkpoint --push refused to push unreleased work to main ('use brain release'), is_bookkeeping is shared with gate.same_work, and a changed manifest or .brain/ext tool makes a green gate stale.",
+  "init/adopt/migrate are idempotent and conservative: a second init reports 'already complete, nothing changed', adopt keeps existing content, migrate keeps a manifest backup, refuses a newer contract with exit 3, and the frozen schema is pinned by hash with fixtures.",
+  "Boot is cheap and resilient: 0.13-0.16 s without network, typically 400-1,000 bytes, every optional part is guarded (a broken scheduler module did not stop boot), and a manifest that is not valid JSON is said out loud as a PROBLEM line instead of being treated as empty.",
+  "Paths with spaces and non-ASCII characters work end to end (brain and project under 'w10 con espacios ñ/Mi Tienda Ñ': init, detect, checkpoint, resume, boot, run all correct)."
+ ],
+ "findings": [
+  {
+   "title": "A new chat never sees the last checkpoint: after a 'ready' handover on the session branch, boot from main resumes as if nothing had happened",
+   "severity": "blocking",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-start/SKILL.md",
+    "/home/user/Claude-Brain/.claude/skills/brain-handover/SKILL.md",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "Scratch world w7. Session one on branch claude/session-one: `brain checkpoint --stage build --done 'CB-1 cart totals' --item 'CB-2 checkout page' --note '...half built in checkout.py' --push` -> 'checkpoint pushed to claude/session-one'; `brain handover` -> 'ready: both repositories are committed and pushed; .brain/HANDOVER.md is written' rc=0. New chat = `git clone -b main <remote>; git switch -c claude/session-two`: `brain boot Continue` -> 'project: shop · Shop · family software · contract v1 · stage intake' / 'item: none · last done: none'; `brain resume` -> 'stage intake · size 2 · item: none · last done: none'. The newer state is already in that clone, offline: `git branch -r` -> origin/claude/session-one, origin/main; `git show origin/claude/session-one:.brain/STATE.md` -> 'item: CB-2 checkout page', 'updated: 2026-11-08T10:00:00Z'. Nothing in boot, resume, handover or the skills looks at other branches (grep -i branch over skills/method finds no such step). Platform evidence that new chats branch from main: this session has CLAUDE_CODE_BASE_REF=main, is on claude/optimistic-newton-sh6lcx created from origin/main (19fb016), and docs/NEXT_SESSION.md says 'push the session's branch. Do not push to main; the owner merges.'",
+   "repro": "W=<scratch>; B=\"python3 $W/Claude-Brain/bin/brain\"; mkdir shop; git -C shop init -q -b main; $B init shop --release main-on-green; git init -q --bare .shop.git; git -C shop remote add origin $W/.shop.git; git -C shop add -A; git -C shop commit -qm contract; git -C shop push -q -u origin main; git -C shop switch -q -c claude/session-one; echo x > shop/cart.py; git -C shop add cart.py; git -C shop commit -qm feat; $B checkpoint --project shop --item 'CB-2 checkout page' --push; $B handover --project shop; mkdir next; cp -a Claude-Brain next/; git clone -q -b main .shop.git next/shop; git -C next/shop switch -q -c claude/session-two; cd next; python3 Claude-Brain/bin/brain boot Continue",
+   "proposed_fix": "Add state.newer_checkpoints(project, limit=10): `git for-each-ref --sort=-committerdate --format=%(refname:short) refs/remotes` (local refs only, so I-01's no-network-at-boot holds), skip refs that are ancestors of HEAD, read `git show <ref>:.brain/STATE.md` through read_state's parser and return those whose `updated` is newer than the working tree's. detect.boot_lines (work/choose) prints, directly under the project line and exempt from the byte-cap drop: 'WARNING: newer checkpoint on origin/claude/session-one (2026-11-08 10:00, item CB-2 checkout page): run `brain catchup`'. Add `brain catchup` in state.py: `git merge --ff-only <ref>` when HEAD is an ancestor of the ref (always true for a fresh session branch), otherwise print the one merge command. resume_lines prints the same warning. handover() writes the branch into HANDOVER.md and into the paste line ('Continue — work is on claude/session-one'). brain-start: run catchup before resuming.",
+   "acceptance": "New tests tests/test_hygiene.py::test_boot_names_a_newer_checkpoint_on_another_remote_branch (fresh clone of main on a new branch: boot_lines contains 'newer checkpoint' and 'origin/claude/one') and ::test_catchup_fast_forwards_to_it (after `brain catchup` read_state(clone)['item'] equals the pushed item and the warning is gone); the repro above ends with boot showing 'item: CB-2 checkout page'.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "core-01"
+  },
+  {
+   "title": "Release reports 'gates green' while a declared gate failed: two gates sharing one id mask each other, validate accepts the manifest, and owner/checklist gates never hold a release",
+   "severity": "blocking",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "Scratch world w8, manifest gates = [{id:'checks',command:'echo tests FAILED; exit 1'},{id:'checks',command:'echo lint ok'}] (a copy-paste slip). `brain validate` -> 'app: contract v1 valid' rc=0. `brain gate` -> 'gate checks: FAILED (exit 1)... tests FAILED' / 'gate checks: ok ...' rc=1. `brain release` -> 'ready to release bdaa3d4 to main: gates are green on this commit and it fast-forwards' rc=0; `brain release --push` -> 'released bdaa3d4 to main (fast-forward, gates green)' rc=0, and the bare remote's main holds the commit. Cause: gate.py:158 `latest[rec.get(\"gate\")] = rec` keys the last record by id, so the second gate's exit 0 answers for both. This contradicts I-12. Second case, same world: gates = [checks (command 'echo ok'), {id:'owner-approval',kind:'owner'}, {id:'launch-list',kind:'checklist',file:'docs/launch.md'}]: `brain gate` -> 'gate owner-approval: manual gate: needs a person' / 'gate launch-list: manual gate: needs a person'; `brain release` -> 'ready to release f37ecb6 to main: gates are green' rc=0 (gate.py:160 only considers kind == 'command'; no command records a manual gate as met).",
+   "repro": "B=\"python3 <copy>/bin/brain\"; mkdir app; git -C app init -q -b work; $B init app --release main-on-green; git init -q --bare .app.git; git -C app remote add origin $PWD/.app.git; edit app/.brain/project.json gates to the two entries above; $B validate --project app; git -C app add -A; git -C app commit -qm work; $B gate --project app; git -C app add -A; git -C app commit -qm log; $B release --project app --push",
+   "proposed_fix": "contract.validate(): after the existing gate loop add 'gate id X is used twice' and 'gate with an empty id' errors (code check, the frozen schema file is untouched). gate.green_at_head(): refuse with 'two gates share the id X; give each gate its own id' when ids are not unique, and match a record to its gate by (id, command) so an edited command cannot inherit an old pass. For manual gates: green_at_head adds 'gate X (owner) has not been passed' unless gates.jsonl holds a pass for the current work written by a new `brain gate pass <id> --quote \"<owner's words>\"` (verified against the transcript exactly like `learn note --quote`); for kind checklist, pass when every item in `file` is ticked.",
+   "acceptance": "New tests tests/test_core.py::GateTests::test_two_gates_with_one_id_cannot_release_on_one_pass (cmd_release returns 1, remote main unchanged), ::ContractTests::test_validate_rejects_duplicate_gate_ids, ::GateTests::test_release_waits_for_owner_and_checklist_gates; existing GateTests and tests/test_fixtures.py stay green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "core-02"
+  },
+  {
+   "title": "A session that ran 'checkpoint --push' then 'close' is reported as unclosed by the next boot, and its real token ledger is replaced by an 'unrecorded' stub; close never pushes what it writes",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/ledger.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_ledger.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "Scratch world w11, session sess-X with the fixture transcript: `brain boot`; `brain checkpoint --done CB-1 --push` -> 'checkpoint pushed to work'; `brain close --class software.feature --tier 2 --outcome ok` -> 'tokens: 10.4k ...' rc=0. Inbox ledger for X: {'unrecorded': None, 'wall_minutes': 30.0} models ['claude-opus-5-5','claude-sonnet-5-5','mystery-model']. Project tree after close: ' D .brain/log/open-session.json', ' M STATUS.md', '?? .brain/log/2026-11-10-sess-X.json' (all unpushed); the remote still has the marker: `git show work:.brain/log/open-session.json` -> {\"session\":\"sess-X\",...}. Next session sess-Y on the project as the remote holds it: `brain boot Continue` -> 'earlier session was not closed: earlier session sess-X was not closed and its transcript is gone; recorded the gap'; X's ledger is now {'unrecorded': True, 'wall_minutes': None} models []. Cause: ledger.py:455 `learn.replace_session_records(root, sid, [rec], kinds=(\"ledger\",))` overwrites any pending real record. Second route (world w13, two projects): boot marks the most recently active project (detect.py:188) while the session works and closes on the other; the stale marker gives the same false line and the same overwrite.",
+   "repro": "In a scratch copy with a project that has a local bare remote: export CLAUDE_CODE_SESSION_ID=sess-X BRAIN_TRANSCRIPT=<copy>/tests/fixtures/ledger/sess-1.jsonl; brain boot Continue; brain checkpoint --done CB-1 --push; brain close --class software.feature --tier 2 --outcome ok; git -C app checkout -q -- .brain   # what a new container clones; unset BRAIN_TRANSCRIPT; CLAUDE_CODE_SESSION_ID=sess-Y brain boot Continue; then read learning/inbox/*sess-X*.jsonl",
+   "proposed_fix": "ledger.repair_unclosed: first look at learn.pending_session_records(root, sid); if a ledger record without `unrecorded` exists the session was closed, so return '' and only take over the marker (never replace a real record with a stub). cmd_close: after capture, call state.push_bookkeeping(project) and state.push_brain_records(root) and print their one-line results, so the marker removal, the run record, STATUS.md and the inbox file reach the remotes (rule 7 applies to close's own output). detect.session_start_lines: do not call mark_open in mode 'choose' unless --name selected the project.",
+   "acceptance": "New tests tests/test_ledger.py::test_stale_marker_of_a_closed_session_keeps_its_real_ledger (after repair the inbox ledger still has models and no `unrecorded`), tests/test_hygiene.py::test_close_leaves_nothing_unpushed (after cmd_close: `git status --porcelain` shows no .brain/STATUS.md change and `git show work:.brain/log/open-session.json` fails on the remote); the repro prints no 'earlier session' line.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "core-03"
+  },
+  {
+   "title": "checkpoint --push commits and pushes more than bookkeeping: ungated work goes straight to main under the 'pr' rule, a changed manifest and .brain/ext tools ride along as 'chore(brain): checkpoint', and the new CLAUDE.md stub is left out",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "World w6. (a) Rule 'pr', branch main, one local commit 'feat: ungated work': `brain checkpoint --item x --push` -> 'checkpoint pushed to main' rc=0; `git -C .p5.git log --oneline main` -> '436f735 chore(brain): checkpoint / 08873ab feat: ungated work / 0515ce2 init'. state.py:127 `if rel.get(\"rule\") != \"main-on-green\" ...: return \"\"` guards one rule only (the final review's blocking item 'a checkpoint could push ungated work to the release branch' is still open for 'pr'). (b) Gate command changed to 'true' in project.json, a new .brain/ext/tool.sh and an app.py: `brain checkpoint --item x --push` -> 'checkpoint pushed to work; 3 other uncommitted change(s) left for their author'; `git show --stat HEAD` -> '.brain/ext/tool.sh | 1 +', '.brain/project.json | 4 ++--' inside 'chore(brain): checkpoint'; `git status --short` afterwards shows only '?? app.py'. state.py:166 adds the whole '.brain' pathspec although is_bookkeeping's docstring says the manifest and project tools 'must not ride along as bookkeeping'; the printed count is wrong. (c) World w1 after `brain init` + `checkpoint --push`: '?? CLAUDE.md' stays untracked and `brain handover` fails with ' - project: 1 uncommitted change(s)' without naming the file.",
+   "repro": "(a) mkdir p5; git -C p5 init -q -b main; brain init p5 --release pr; add a bare remote, commit, push main; echo x > p5/feature.py; git -C p5 add feature.py; git -C p5 commit -qm 'feat: ungated work'; brain checkpoint --project p5 --item x --push; git -C <bare> log --oneline main. (b) on a pushed non-release branch edit .brain/project.json gate command, add .brain/ext/tool.sh, run brain checkpoint --project p1 --item x --push; git -C p1 show --stat HEAD",
+   "proposed_fix": "state.release_branch_block: apply to rule in ('main-on-green','pr'); for 'pr' return 'this is the release branch (main) and the rule is pr: move the work to a branch (git switch -c <name>) and open a pull request'. state.push_bookkeeping: build the pathspec from the changed bookkeeping files themselves (or '.brain' plus ':(exclude).brain/project.json' ':(exclude).brain/ext'), so a modified tracked manifest or ext file is left for its author and counted; exception: files that are still untracked right after init/adopt (.brain/project.json, CLAUDE.md with only the pointer block) are committed in the first checkpoint, or contract.cmd_init/cmd_adopt make that first commit ('chore(brain): contract v1') themselves. Name up to three of the 'other' files in the message and in repo_cleanliness.",
+   "acceptance": "New tests tests/test_hygiene.py::test_checkpoint_cannot_push_work_to_the_release_branch_under_the_pr_rule (remote main unchanged, message names a branch and a pull request), ::test_checkpoint_leaves_a_changed_manifest_and_project_tools_uncommitted (git status still lists .brain/project.json and .brain/ext/tool.sh; message count matches), ::test_first_checkpoint_after_init_makes_the_project_resumable_from_a_clone (fresh clone validates with no errors); existing test_checkpoint_may_push_bookkeeping_only_to_the_release_branch stays green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "core-04"
+  },
+  {
+   "title": "A damaged STATE.md is silently treated as a fresh project and then overwritten: one bad byte wipes stage, item, notes and log at the next checkpoint",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "World w4, state holding item 'CB-7 importer', last done 'CB-6 header', three notes and a log. `printf '\\xff' >> proj/.brain/STATE.md`; `brain boot` -> 'project: proj · Demo · ... stage intake' / 'item: none · last done: none' (no PROBLEM line); `brain validate` -> 'proj: contract v1 valid'; `brain checkpoint --note 'small note'` -> 'checkpoint: stage  · item: none · next: -' rc=0, and the file is rewritten as 'stage:' (blank) 'tier:' (blank) 'item:' ... '## Notes / - small note / ## Log' (empty): everything else is gone. Cause: common.py:73 read_text returns the default on UnicodeDecodeError and read_state cannot tell 'unreadable' from 'empty'. Same silence for other damage: git conflict markers in STATE.md -> boot shows the 'theirs' half ('item: CB-9 payments') and validate says valid; an empty file -> boot shows a fresh project, validate says valid, `brain resume` prints 'stage  · size  · item: none'; a missing file -> boot shows a fresh project with no PROBLEM line (only validate notices). The stub tells brain-less sessions to 'Checkpoint by editing .brain/STATE.md', so hand-edited and merged state files are expected.",
+   "repro": "brain init proj; brain checkpoint --project proj --item 'CB-7 importer' --done 'CB-6 header' --note n1; printf '\\xff' >> proj/.brain/STATE.md; brain boot | head -4; brain validate --project proj; brain checkpoint --project proj --note 'small note'; cat proj/.brain/STATE.md",
+   "proposed_fix": "Add state.state_problem(project) -> one line when the file is missing, not valid UTF-8, has no 'updated:' field, has an unknown stage, or contains '<<<<<<<'/'>>>>>>>' lines (mirrors common.manifest_problem). detect.boot_lines prints 'PROBLEM: .brain/STATE.md ...; restore it: git checkout HEAD -- .brain/STATE.md' right after the project line; contract.validate returns the same line; state.checkpoint refuses to overwrite (cmd_checkpoint exit 1, one line) unless --force; resume prints the problem instead of blank fields. read_state decodes with errors='replace' so one bad byte costs one character, not the file.",
+   "acceptance": "New test tests/test_core.py::StateTests::test_damaged_state_file_is_reported_and_never_overwritten: for each of (invalid byte, conflict markers, empty, missing) boot_lines contains 'PROBLEM', validate returns an error naming STATE.md, and cmd_checkpoint returns 1 leaving the file bytes unchanged.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "core-05"
+  },
+  {
+   "title": "Boot, status, checkpoint and handover crash with a Python traceback when a manifest section is null or the wrong type",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "World w4, valid JSON with an integer contract, one key changed. '\"release\": null' -> `brain boot Continue` rc=1: 'File .../engine/detect.py, line 98, in boot_lines / rel = m.get(\"release\", {}).get(\"rule\", \"none\") / AttributeError: 'NoneType' object has no attribute 'get''. '\"project\": null' or '\"project\": \"demo\"' -> boot, status, `checkpoint --item x --push` and handover all rc=1 with AttributeError (checkpoint has already rewritten STATE.md when write_status crashes, so STATUS.md and CHECKLIST.md are stale and nothing is pushed). '\"release\": \"main-on-green\"' -> boot AttributeError: 'str' object has no attribute 'get'. Only `brain validate` reports it ('manifest.release: expected object'). common.manifest_problem (common.py:280-293) checks JSON validity and the integer contract only; the brain-new skill tells the lead to 'Fill the rest of .brain/project.json' by hand. ENGINE_SPEC: 'No tracebacks for expected errors'.",
+   "repro": "brain init proj; python3 -c \"import json;p='proj/.brain/project.json';m=json.load(open(p));m['release']=None;json.dump(m,open(p,'w'))\"; brain boot Continue; brain status --project proj",
+   "proposed_fix": "common.manifest_problem: after the contract check, verify the shapes every command relies on: 'project', 'release', 'commands', 'paths' are objects and 'gates' is a list of objects when present; return '.brain/project.json: \"release\" must be an object (found null); fix it or restore it from git before anything else'. That one function already feeds boot's PROBLEM line and need_project's refusal. Also make common.load_manifest return a normalised copy (wrong-typed sections replaced by {} or []) for the few callers that do not go through need_project (detect, contract.init line 131).",
+   "acceptance": "New test tests/test_core.py::test_wrong_typed_manifest_sections_are_one_line_never_a_traceback: for project/release/commands/gates set to null, a string and a list, detect.boot_lines returns a line containing 'PROBLEM' and cmd_status, cmd_checkpoint, cmd_handover, gate.cmd_release return 1 without raising.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "core-06"
+  },
+  {
+   "title": "Boot's byte cap drops lines blindly from the end with no notice: in a realistic busy state the second-session WARNING, the size line and all recall lines disappear",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "World w5, Spanish state with every field inside its own clip limit, a 280-byte --done text, one unreadable ledger line and a checkpoint by another session: `brain boot Continue` prints 8 lines, 1,416 bytes, ending at 'requirements: 0/0 done, 0 open · needs owner: 0 · release: main-on-green'. A probe calling detect.boot_lines with the limit lifted: 'uncapped: 13 lines, 2084 bytes; capped: 8 lines, 1416 bytes' / 'DROPPED: WARNING: another session (other-se) checkpointed 0 min ago: two chats on one project cause conflicts; continue' / 'DROPPED: size: 2 project ...' / 'DROPPED: recall [...]' x3. Nothing in the output says lines were omitted. Cause: detect.py:137-143 stops at the first line that does not fit (`break`), and several fields are never clipped (title, project folder name, state.py:82 `st[\"last_done\"] = done`, the 'also attached' list). With a 1,600-byte title boot prints only 'brain: Claude-Brain · mode: work' (capped: 1 line, 34 bytes; state, PROBLEM and WARNING lines all dropped).",
+   "repro": "brain init proj --title 'Gestión de reservas del restaurante' --release main-on-green; CLAUDE_CODE_SESSION_ID=other brain checkpoint --project proj --item '<150 chars>' --next '<95>' --next '<95>' --next '<95>' --blockers '<130>' --note '<180>' --done '<280>'; echo '{\"id\":\"R1\"' >> proj/.brain/requirements.jsonl; brain boot Continue | grep -c WARNING   # prints 0",
+   "proposed_fix": "In detect.boot_lines build (priority, line) pairs and render with a budget: priority 0 = mode line, PROBLEM lines, WARNING lines, project line; 1 = item/next/blockers/newest note/requirements; 2 = size, recall, alarms, news. Clip every line by bytes (new common.clip_bytes), clip title to 60 and store last_done clipped to 160 in state.checkpoint. Fill by priority, skip (not break on) a line that does not fit, and when anything was skipped end with '… N more line(s): brain resume' (reserve 40 bytes). Keep BOOT_LIMIT = 1500.",
+   "acceptance": "New tests tests/test_core.py::DetectTests::test_boot_keeps_problem_and_warning_lines_when_state_is_full (the state above: 'WARNING: another session' and 'PROBLEM' in the output, len <= 1500) and ::test_boot_says_when_lines_were_left_out; existing test_boot_never_exceeds_its_byte_cap_whatever_the_state_holds and test_boot_is_short_and_shows_position stay green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "core-07"
+  },
+  {
+   "title": "checkpoint --push exits 0 when nothing reached the remote, turns a slow push into a traceback, and its failure lines give no next step; handover says 'ready' for a project that is not a git repository",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "Worlds w6/w9/w11, each `brain checkpoint --item x --push`: no git identity -> 'not pushed: could not commit the checkpoint (Author identity unknown *** Please tell me who you are...)' rc=0; NEEDS_YOU.md absent and never tracked -> 'not pushed: could not commit the checkpoint (error: pathspec '.brain' did not match any file(s) known to git error: pathspec 'STATUS.md' did not…)' rc=0 and no commit at all (git add with one unmatched pathspec adds nothing; push_brain_records already filters existing paths, push_bookkeeping does not); no remote -> rc=0; release branch never released -> 'checkpoint committed; not pushed: this is the release branch (main) and it has never been released: use `brain release`' rc=0 (on a new project release cannot pass either: no gate command yet); not a repo -> 'not pushed: the project is not a git repository' rc=0 (state.py:399 returns 1 only when the text contains 'FAILED'). Detached HEAD -> 'checkpoint committed; PUSH FAILED: error: The destination you provided is not a full refname (i.e., starting with \"refs/\"). We tried to guess…' and HANDOVER.md says '- Branch with the work: HEAD'. Remote moved on -> 'PUSH FAILED: To /tmp/.../.p4.git ! [rejected] work -> work (fetch f…' (the 140-character clip is spent on the URL). Push over the time limit (probe with the limit shortened, remote behind a sleeping ssh command) -> 'subprocess.TimeoutExpired: Command '['git', '-C', ..., 'push', '-q', '-u', 'origin', 'work']' timed out': state.py:176 and :203 pass timeout=120 with no except (only state.git() at :328 catches). `brain handover` on a project without .git -> 'ready: both repositories are committed and pushed; .brain/HANDOVER.md is written' rc=0 (state.py:334 returns no problems when .git is absent).",
+   "repro": "mkdir p7; brain init p7; brain checkpoint --project p7 --item x --push; echo rc=$?; brain handover --project p7; echo rc=$?   # both 0, handover prints 'ready'",
+   "proposed_fix": "state.push_bookkeeping returns (status, message) with status in pushed | saved-not-pushed | failed; cmd_checkpoint exits 1 on failed (could not commit, rejected, timeout) and 3 on saved-not-pushed, printing 'NOT PUSHED:' in capitals. Add only existing paths to the pathspec. Wrap both pushes in try/except subprocess.TimeoutExpired -> 'PUSH FAILED: no answer from the remote in 120 s; run the command again'. Map known stderr to one actionable line: rejected/fetch first -> 'the remote has commits this session lacks: git pull --rebase origin <branch>, then checkpoint --push again'; detached HEAD (branch == 'HEAD') -> 'not on a branch: git switch -c <name> first'; identity unknown -> the two git config commands; release branch never released -> add 'or work on a branch: git switch -c <name>'. Clip stderr after removing the 'To <url>' line. handover: a project without .git is a problem line ('project: not a git repository, nothing can be pushed').",
+   "acceptance": "New tests tests/test_hygiene.py::test_checkpoint_push_exit_code_says_whether_the_remote_has_it (cases above: codes 3/1 and 'NOT PUSHED' or 'PUSH FAILED'), ::test_push_timeout_is_one_line_not_a_traceback (subprocess.run patched to raise TimeoutExpired), ::test_missing_owner_file_does_not_block_the_checkpoint_commit, tests/test_core.py::StateTests::test_handover_is_not_ready_without_a_git_repository; existing test_push_without_remote_or_repo_says_so stays green (messages keep 'no remote' and 'not a git repository').",
+   "effort": "S",
+   "confidence": "high",
+   "id": "core-08"
+  },
+  {
+   "title": "Boot and the other commands disagree about the project: with two projects every command after boot says 'no managed project found', an exact --name loses to a substring, and in a brain-only session resume/checkpoint/handover do not work at all",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_core.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "World w2, managed siblings 'shop' and 'shop-admin', cwd = the brain (this session's primary directory). `brain boot Continue` -> 'mode: choose · several projects attached: use the one the owner named' / 'project: shop-admin ...' / 'also attached: shop (using the most recently active)'. Then `brain checkpoint --item x`, `brain resume`, `brain status` -> 'no managed project found (attach one, or run: brain init <path>)' rc=1; `brain validate` -> 'no project found'. common.resolve_project (common.py:269-272) accepts only a single managed sibling while detect picks the most recent. `brain detect --name shop` and `brain boot Continue --name shop` still give 'project: shop-admin': detect.py:34 treats exact and substring matches alike, so 'shop' matches both and is ignored; `--name nosuch` is ignored silently. World w13: `brain boot 'Continue alpha'` picks beta although the request names alpha. World w12, only the brain attached (the mode boot supports with 'brain work: 10 open ticket(s)…'): `brain resume`, `brain checkpoint --done CB-200 --push`, `brain status`, `brain handover` all print 'no managed project found (attach one, or run: brain init <path>)' rc=1, so CLAUDE.md rule 7 (checkpoint --push, resume after compaction) has no working command in the session type now in use, and the message advises init, which the brain refuses on itself.",
+   "repro": "for p in shop shop-admin; do mkdir $p; git -C $p init -q; brain init $p; done; brain checkpoint --project shop-admin --item new; cd Claude-Brain; brain boot Continue | head -3; brain resume; brain detect --name shop",
+   "proposed_fix": "One resolver: common.resolve_project falls back to detect.detect()'s choice and need_project prints the truth: with several managed siblings and no --project/BRAIN_PROJECT/cwd hit, either use boot's choice and say 'using shop-admin (most recently active; also attached: shop; pass --project)', or refuse with '2 projects attached (shop, shop-admin): pass --project <name>'; accept a bare sibling name for --project. detect(named): exact case-insensitive match first, substring only if unique, and a line 'no attached project matches \"nosuch\"' otherwise; in mode choose, if exactly one sibling name occurs as a word in the request, pick it. Brain-only: need_project's message becomes 'no project attached (brain-only session)'; cmd_resume prints detect.brain_work_lines plus the brain's branch and uncommitted/unpushed counts; `checkpoint --push` runs push_brain_records and repo_cleanliness on the brain; handover checks the brain alone.",
+   "acceptance": "New tests tests/test_core.py::DetectTests::test_exact_name_wins_over_a_longer_match and ::test_commands_after_boot_use_or_name_the_attached_projects (two managed siblings: cmd_resume output names both projects or resumes boot's choice, never 'attach one'), tests/test_hygiene.py::test_brain_only_resume_checkpoint_and_handover_work (resume prints the next open ticket; checkpoint --push returns 0 and pushes learning/inbox).",
+   "effort": "M",
+   "confidence": "high",
+   "id": "core-09"
+  },
+  {
+   "title": "Boot and resume show the oldest notes and hide the newest, and resume does not say which project, branch or unpushed commits it is talking about",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "World w4, three `brain checkpoint --note` calls, the last one 'NOTE-3 newest: STOPPED mid-migration, db/migrate_004.sql applied locally only; do NOT run release until it is committed'. `brain boot | grep notes` -> 'notes: - NOTE-1 oldest: the importer is half done ... - NOTE-2 middle: the css for the header was moved to styles/header.…'; `brain resume | grep notes` -> the same two, cut at 240 characters. NOTE-3 appears in neither. Cause: notes are appended at the end (state.py:102) and clipped from the front (detect.py:96 `c.clip(st[\"notes\"], 220)`, state.py:229 `c.clip(st[\"notes\"], 240)`); they also grow without bound unless --clear-notes is passed. resume's whole output for a project was 'stage intake · size 2 · item: scaffold · last done: none / next: a; b / uncommitted work: CLAUDE.md / no gate has run': after compaction the lead gets no project name or path, no branch and no count of unpushed commits. Non-ASCII file names are shown in git's escaped form ('uncommitted work: \"caf\\303\\251 men\\303\\272.py\", plain.py', world w10).",
+   "repro": "brain init proj; for n in 'NOTE-1 <120 chars>' 'NOTE-2 <120 chars>' 'NOTE-3 newest: do NOT run release'; do brain checkpoint --project proj --note \"$n\"; done; brain boot | grep -c NOTE-3; brain resume --project proj | grep -c NOTE-3   # both 0",
+   "proposed_fix": "state: add notes_tail(notes, limit) that takes whole notes from the end until the limit and prefixes '(+N older in .brain/STATE.md)'; use it in detect.boot_lines and state.resume_lines. In state.checkpoint keep the last 8 notes in the Notes section and move older ones to the log. resume_lines first line becomes 'project <name> at <path> · branch <b> · N commit(s) not pushed · stage …'. Run git status with `-c core.quotepath=off` in state.git callers that print paths.",
+   "acceptance": "New tests tests/test_hygiene.py::test_boot_and_resume_show_the_newest_note (three long notes: the third is in both outputs) and ::test_resume_names_project_branch_and_unpushed_commits; existing test_resume_is_short_and_names_open_work (<= 12 lines) stays green.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "core-10"
+  },
+  {
+   "title": "'stale-brain' mode says 'write nothing to .brain/' but checkpoint, status and boot itself write there",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "World w9, committed project with '\"contract\": 2'. `brain boot Continue` -> 'mode: stale-brain · project uses a newer contract than this brain: write nothing to .brain/; tell the owner the brain needs updating'; `brain validate` -> 'stale brain: ... nothing was written' rc=3. Then `brain checkpoint --item x --note 'written by an old brain'` -> 'checkpoint: stage intake · item: x · next: -' rc=0 and `brain status` rc=0. `git -C app status --short` -> ' M .brain/STATE.md', ' M STATUS.md', '?? .brain/CHECKLIST.md', '?? .brain/log/recall.jsonl' (the last one written by boot's own recall call, detect.py:131 passes the project whatever the mode). The existing test test_project_newer_than_brain_is_not_written covers validate and migrate only.",
+   "repro": "brain init app; git -C app add -A; git -C app commit -qm c; sed -i 's/\"contract\": 1/\"contract\": 2/' app/.brain/project.json; git -C app commit -qam v2; brain boot Continue; brain checkpoint --project app --item x; git -C app status --short",
+   "proposed_fix": "common.need_project: when the manifest's contract is greater than CONTRACT_VERSION print 'stale brain: project uses contract vN, this brain knows v1; nothing was written. Update the brain.' and return None; callers return 3 for that case (give need_project a way to signal it, e.g. raise SystemExit(3) or return a (project, code) pair). detect.boot_lines: in mode stale-brain pass project=None to recall.recall and skip every project write. Read-only commands may opt in with need_project(args, readonly=True) to print state without regenerating STATUS.md.",
+   "acceptance": "New test tests/test_core.py::ContractTests::test_stale_brain_commands_write_nothing: with contract+1, boot_lines, cmd_checkpoint, cmd_status and cmd_handover leave every file under the project byte-identical (compare a snapshot of all files) and the write commands return 3.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "core-11"
+  },
+  {
+   "title": "Boot misreports two recorded facts in the normal flow: it resumes 'at the recorded size 2' after a checkpoint set size 3, and it warns about 'another session' right after a clean handover",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/route.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "(a) World w14: `brain checkpoint --tier 3 --stage build --item 'Phase 2 stream B'`; `brain boot Continue` -> 'size: 2 project · software · resume · resume at the recorded size 2' while `brain resume` -> 'stage build · size 3 · …'; `brain route Continue` -> 'size 2 project | software | resume | lead: opus medium'. The manifest still says '\"stage\": \"intake\", \"tier\": 2' and STATE.md 'stage: build, tier: 3'. Cause: route.py:303 `recorded = manifest.get(\"tier\", manifest.get(\"size\", 2))` and detect.py:121 passes the manifest only; no command ever updates the manifest's tier or stage (state.py comment: 'The stage lives here only'), so a size-3 programme is always resumed as size 2 with the size-2 lead. (b) World w15: session chat-one runs checkpoint --push, close, `brain handover` -> 'ready: both repositories are committed and pushed' rc=0. The new chat five minutes later: `brain boot Continue` -> 'WARNING: another session (chat-one) checkpointed 5 min ago: two chats on one project cause conflicts; continue in one'. handover never releases the lease (STATE.md keeps 'session: chat-one'), so the flow the owner is told to use produces the warning every time, and brain-start tells the lead to 'continue only if his message makes clear this chat is the active one'.",
+   "repro": "(a) brain init p; brain checkpoint --project p --tier 3 --stage build; brain boot Continue | grep '^size'. (b) with a remote: CLAUDE_CODE_SESSION_ID=one brain checkpoint --project p --item x --push; CLAUDE_CODE_SESSION_ID=one brain close --project p --outcome ok; CLAUDE_CODE_SESSION_ID=one brain handover --project p; CLAUDE_CODE_SESSION_ID=two brain boot Continue | grep WARNING",
+   "proposed_fix": "(a) detect.boot_lines and route.cmd_route pass a view of the manifest with the checkpointed values: `{**m, 'tier': int(st['tier'])}` when STATE.md's tier is 1-3 (same for stage); validate warns when manifest and state disagree. (b) state.handover(): set st['session'] = 'none' and write the state before push_bookkeeping (a later checkpoint by the same chat simply takes the lease again); ledger capture at close does the same. lease_warning already returns '' for 'none'.",
+   "acceptance": "New tests tests/test_core.py::DetectTests::test_boot_resumes_at_the_checkpointed_size (after checkpoint(tier=3) the size line says 3) and ::test_no_second_session_warning_after_a_ready_handover; existing test_boot_warns_about_a_second_session_and_stale_model_facts stays green.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "core-12"
+  },
+  {
+   "title": "On 'Continue' half of boot's output is recall matched against the trigger word, not against the recorded work",
+   "severity": "should-fix",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "World w15, recorded item 'CB-7 payment form: card validation and Stripe checkout', next 'CB-8 deploy to Vercel and check the live address'. `brain boot <request>`: [Continue] total 1002 B, recall 479 B: own-trigger-words, rule-checkpoint-boundary, pref-visible-progress; [Start running] total 967 B, recall 561 B: own-trigger-words, rule-escalate-on-failure, own-no-shell; [Keep going] total 1002 B, recall 596 B: own-decide-and-record, sw-tag-known-good, pref-phone-short; [Sigue] total 406 B, recall 0 B. So 48-60% of boot on a resume is three items that restate CLAUDE.md, the Spanish trigger gets nothing, and the same ids are written to .brain/log/recall.jsonl in every session (the injection log that feeds memory credit). Querying with the recorded work instead: `brain recall 'payment form card validation Stripe checkout deploy Vercel live address' --family software` -> own-main-deployable, sw-live-check ('2 items, ~116 tokens'). Cause: detect.py:131 `recall.recall(request, …)` always uses the request text.",
+   "repro": "brain init p; brain checkpoint --project p --item 'CB-7 payment form: card validation and Stripe checkout' --next 'CB-8 deploy to Vercel and check the live address'; brain boot Continue | grep '^recall'",
+   "proposed_fix": "In detect.boot_lines, when route.classify returns task_class 'resume' (or the request has no content words beyond a trigger), build the recall query from the state: item + next_list + blockers; if the state is empty too, skip recall. Keep k=3 and the 260-token budget.",
+   "acceptance": "New test tests/test_core.py::DetectTests::test_boot_recall_on_resume_follows_the_recorded_item: with an item about deployment and request 'Continue' (and 'Sigue'), no recall line has id own-trigger-words and the ids equal those of recall.recall(<item text>); with an empty state and 'Continue' there are no recall lines.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "core-13"
+  },
+  {
+   "title": "Smaller slips, each reproduced: adopt accepts the brain itself, STATUS.md cost lines are wrong, an open owner item with the word 'unresolved' vanishes, the total token cap is not enforced by `brain budget`, a broken module gives 'invalid choice', files are written 0600, concurrent checkpoints lose updates",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/budget.py",
+    "/home/user/Claude-Brain/bin/brain",
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/engine/cache.py"
+   ],
+   "evidence": "(1) World w3: `brain adopt <the brain>` -> 'adopted Claude-Brain: family knowledge; added 11 contract file(s); existing files untouched' rc=0; git status ' M CLAUDE.md', ' M NEEDS_YOU.md', '?? .brain/', '?? STATUS.md'; then `brain budget` -> 'CLAUDE.md is 6570 bytes (limit 6000)' rc=1 and doctor FAILs (contract.py:301 guards init only; 'existing files untouched' is also untrue for any adopt, which edits CLAUDE.md and may append to NEEDS_YOU.md). (2) World w9: two run records of one day, zzz-early ($1.11, 08:00) and aaa-late ($9.99, 16:00): status shows 'Last session: about $1.11' (state.py:272 sorts by file name); after any boot the open-session.json marker matches the same glob '*-*.json', sorts last, and the 'Last session' line disappears; a close without transcript shows 'Last session: about $0.00 at list prices, 0 output tokens' and 'Project to date: about $0.00 … over 1 recorded session(s)' for usage that is unknown. (3) NEEDS_YOU item 1 containing 'checkout stays unresolved until you add it': boot 'needs owner: 1' with two open items, and STATUS.md lists only item 2 (state.py:254 `\"RESOLVED\" in line.upper()`). (4) Scratch brain with CLAUDE.md 5,990 B, stub 1,991 B, every description under 300: budget.check errors [] and `brain budget` rc=0 at 'about 3225 tokens' (I-03 cap 3,200 is asserted only in tests/test_core.py:602). (5) With engine/state.py broken: `brain boot`, `checkpoint`, `status`, `release` -> 'brain: error: argument command: invalid choice: 'boot' (choose from …)' rc=2 with no cause (bin/brain:27 only explains commands whose name contains the module name). (6) umask 0022: init creates every contract file as 600 and adopt turns the project's existing CLAUDE.md from 644 to 600 (common.py:81 mkstemp, mode never restored). (7) 12 parallel `brain checkpoint --done … --note …`: 11 of 12 log lines and 10 of 12 notes kept; two at once lost a note in 2 of 10 runs (no lock around read-modify-write). (8) cache.prune has no caller outside tests.",
+   "repro": "(1) brain adopt <copy of the brain>; brain budget. (2) put two '<date>-<sid>.json' records with totals in .brain/log, run brain status --full, then brain boot, then status again. (3) add an item whose text contains 'unresolved' to NEEDS_YOU.md; brain boot | grep 'needs owner'. (7) for i in $(seq 12); do brain checkpoint --project app --done \"item $i\" --note \"note $i\" & done; wait; grep -c '^- note' app/.brain/STATE.md",
+   "proposed_fix": "(1) contract.cmd_adopt: same refusal as cmd_init when the path is the brain root or inside it; change the message to 'existing files kept; CLAUDE.md got a pointer block'. (2) state.last_run/project_cost: glob '[0-9]*-*.json', pick by the record's 'at'; write_status prints 'Last session: usage not recorded' and excludes usage == 'unknown' from the cost sum (count it separately). (3) open_needs: match r'^\\s*(?:[-*>]\\s*)?\\**\\s*(RESOLVED|RESUELTO)\\b' at line start. (4) budget.LIMITS['total_tokens'] = 3200 checked in budget.check. (5) bin/brain: when the wanted command is not registered and any module failed, always print \"'<cmd>' is unavailable: <module (Error)>; run `brain doctor`\" and return 1. (6) common.write_text: os.chmod(tmp, existing mode or 0o666 & ~umask) before os.replace; add '.tmp-*' to the project's .brain/.gitignore template. (7) state.checkpoint: hold an exclusive lock (fcntl.flock on .brain/.lock, standard library) around read_state..write_state. (8) call cache.prune(30) from repomap after a put, or delete it.",
+   "acceptance": "New tests: test_core::ContractTests::test_adopt_refuses_the_brain_itself; StateTests::test_last_session_is_the_latest_by_time_and_ignores_the_open_marker; ::test_unknown_usage_is_not_shown_as_zero_cost; ::test_open_needs_requires_a_resolved_marker_at_line_start; BudgetTests::test_total_cap_is_enforced_when_each_part_is_within_its_cap; test_lint or a new tests/test_cli.py::test_a_broken_module_is_named_for_any_of_its_commands; test_core::test_written_files_respect_the_umask_and_keep_their_mode; test_hygiene::test_parallel_checkpoints_lose_nothing (12 processes, 12 log lines).",
+   "effort": "M",
+   "confidence": "high",
+   "id": "core-14"
+  },
+  {
+   "title": "Idea: one end-of-session command and one start-of-session command, so order-dependent rituals stop producing bugs and tokens",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/ledger.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/CLAUDE.md",
+    "/home/user/Claude-Brain/.claude/skills/brain-handover/SKILL.md"
+   ],
+   "evidence": "brain-handover/SKILL.md: 'Order matters here: 1. BRAIN checkpoint … --push. 2. BRAIN close. Commit the learning inbox file … 3. BRAIN handover.' CLAUDE.md rules 7 and 9 give the two halves separately and in the order that leaves the marker on the remote (finding 3: 'earlier session sess-X was not closed and its transcript is gone; recorded the gap' after a correct close), leaves close's run record unpushed, and leaves the lease held (finding 12). Three calls, three outputs and one manual git commit of the inbox file per session end.",
+   "repro": "",
+   "proposed_fix": "Add `brain finish [--item … --note …] [--class … --outcome …]` in state.py: checkpoint -> ledger capture -> release the lease -> commit and push project bookkeeping and brain records -> handover checks, printing at most 6 lines and the paste line; exit codes 0 ready / 3 saved-not-pushed / 1 failed. Make boot the mirror image: catch up to a newer checkpoint branch (finding 1), repair, then print. CLAUDE.md rules 7 and 9 shrink to one line each; checkpoint, close and handover stay as they are for mid-session use.",
+   "acceptance": "tests/test_rehearsal.py gains a two-container rehearsal: session one ends with `brain finish`; a fresh clone of main on a new branch runs boot and shows the same item, no WARNING, no 'earlier session' line, and both remotes hold every file close wrote.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "core-15"
+  },
+  {
+   "title": "Idea: one project context with a health check that every command goes through, plus a seeded fuzz test that no core command ever tracebacks on malformed contract files",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "Findings 5, 6, 9 and 11 are one cause seen four times: each command re-derives 'which project and is it usable' differently. detect.detect picks the most recent of several projects, common.resolve_project refuses them; manifest_problem checks JSON and the integer only; nothing checks STATE.md; only validate/migrate look at the contract version; `brain validate` said 'contract v1 valid' for an empty STATE.md, conflict markers and duplicate gate ids. Mutation runs in world w4: 6 manifest mutations x 6 commands gave 11 tracebacks.",
+   "repro": "",
+   "proposed_fix": "common.project_context(args, write=False) -> object with project, manifest (shape-normalised), state, mode and problems[] (manifest shape, state health, contract version, duplicate gate ids, missing required files), used by boot (prints the first two as PROBLEM lines), need_project (refuses writes on a blocking problem) and validate (prints all). Add tests/test_fuzz_core.py: with a fixed seed, apply 200 random mutations (null, wrong type, truncation, bad byte, conflict markers, deleted file) to project.json, STATE.md, requirements.jsonl and gates.jsonl, run boot, status, resume, checkpoint, handover, gate, release, validate; assert no exception and at most 15 output lines.",
+   "acceptance": "python3 -m unittest tests.test_fuzz_core passes with the seed fixed (I-13), and `brain validate` on the damaged projects of findings 2 and 5 returns 1 naming the problem.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "core-16"
+  },
+  {
+   "title": "Idea: make checkpoints merge-safe (append-only events, generated views) so two chats or two session branches never conflict on bookkeeping",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/contract/COMPATIBILITY.md"
+   ],
+   "evidence": "Every checkpoint rewrites STATE.md ('session:', 'updated:'), STATUS.md and CHECKLIST.md in full, so any two branches that both checkpointed conflict on merge; a rejected push (world w6: 'PUSH FAILED: … ! [rejected] work -> work (fetch f…') leaves the lead to rebase generated files by hand, and a conflict-marked STATE.md is read without complaint (finding 5). Concurrent writers lose updates today: 10 of 12 notes survived 12 parallel checkpoints.",
+   "repro": "",
+   "proposed_fix": "Additive, no schema change (new optional files): append each checkpoint as one JSON line to .brain/log/state.jsonl (git attribute merge=union written by init into .brain/.gitattributes); STATE.md, STATUS.md, CHECKLIST.md and HANDOVER.md become views regenerated from it (`brain checkpoint --repair` after any merge, also run by `brain catchup`). The lease becomes the last event's session. push_bookkeeping, on a rejected push whose remote side changed only bookkeeping, fetches, merges with the union driver, regenerates the views and pushes once more.",
+   "acceptance": "New test tests/test_hygiene.py::test_two_branches_that_both_checkpointed_merge_without_conflict (merge exits 0, read_state holds the later item and both log lines); test_parallel_checkpoints_lose_nothing passes without a lock on the views.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "core-17"
+  },
+  {
+   "title": "Idea: make the contract's dormant keys real (paths.never_touch, privacy.share_lessons, owner and checklist gates) or mark them reserved",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/engine/ledger.py",
+    "/home/user/Claude-Brain/contract/v1.schema.json",
+    "/home/user/Claude-Brain/contract/COMPATIBILITY.md"
+   ],
+   "evidence": "`grep -rn 'share_lessons\\|never_touch\\|min_contract\\|last_seen' engine/*.py` finds only contract.py:74-78 (default_manifest): the engine writes these keys into every project and reads none of them. World w14 with '\"share_lessons\": \"none\"' and 'never_touch': ['legal/contract.pdf']: `brain validate` -> valid; `brain close --class software.feature --tier 2 --outcome ok` -> 'inbox: 2 record(s)', and the brain inbox holds a ledger and an outcome record for that project (family, task_class, tier, passed). Gate kinds 'owner' and 'checklist' (with a 'file' property) are in the frozen schema but never hold a release (finding 2).",
+   "repro": "brain init priv; set privacy.share_lessons to 'none' in priv/.brain/project.json; brain gate --project priv; brain close --project priv --outcome ok; ls <brain>/learning/inbox/",
+   "proposed_fix": "share_lessons 'none': ledger.capture writes the project-side run record only and no inbox records; `learn note` refuses brain-bound notes from that project with one line. never_touch: gate.diff_detectors adds 'N file(s) under never_touch changed, e.g. X' and release refuses while it is non-empty; the PreToolUse guard hook reads it too when hooks load. brain.last_seen/min_contract: documented as reserved in COMPATIBILITY.md (writing last_seen at boot would dirty the manifest and stale every gate). Owner/checklist gates as in finding 2.",
+   "acceptance": "New tests tests/test_ledger.py::test_share_lessons_none_keeps_everything_in_the_project (inbox unchanged after close), tests/test_core.py::GateTests::test_release_refuses_a_change_under_never_touch; tests/test_fixtures.py (frozen schema hash) stays green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "core-18"
+  },
+  {
+   "title": "Idea: `brain doctor --project`: a preflight of the attached project and git setup that prints the fix for each problem, run by boot when something changed",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/doctor.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "`brain doctor` (0.16 s) checks the brain only: python, FTS5 (always 'ok'), modules, version, model facts, items, budget, template. It does not check that git exists or has an identity (world w9: commit failed with 'Author identity unknown' and checkpoint --push still exited 0), whether the project has a remote and an upstream, whether the current branch is the release branch, whether the contract validates, whether STATE.md is healthy, or whether a newer checkpoint sits on another branch. Each of those was found only by a later command failing with a raw git message (finding 8). CLAUDE.md's only repair advice is 'If something in the brain seems broken, run BRAIN doctor'.",
+   "repro": "",
+   "proposed_fix": "doctor.project_checks(project): git present and identity set; remote 'origin' exists; branch is not detached; upstream set; release branch versus current branch under each rule; contract.validate clean; state.state_problem clean; gate ids unique; newer checkpoint elsewhere; unpushed commits. Output at most 8 lines, each 'FAIL <what>: <the one command or click path that fixes it>'. `brain doctor` runs them when a project resolves; boot runs them only when .brain/log/doctor.json is missing, older than 7 days, or the brain's VERSION.json changed, and prints failures as PROBLEM lines.",
+   "acceptance": "New test tests/test_core.py::DoctorTests::test_project_preflight_names_each_fault_and_its_fix (project with no identity, no remote, detached HEAD, duplicate gate ids: one FAIL line each, exit 1; a healthy project: exit 0 and no extra boot lines).",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "core-19"
+  },
+  {
+   "title": "Idea: a two-container continuity rehearsal in the test suite, so CB-104 ('Continue in a new chat resumes the same item') is checked on every change instead of waiting for a live session",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/tests/test_rehearsal.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py",
+    "/home/user/Claude-Brain/docs/BUILD_STATUS.md"
+   ],
+   "evidence": "docs/BUILD_STATUS.md lists CB-104 under 'Needs a live session (cannot be closed from inside the build session)'. Most of it can be simulated offline: findings 1, 3 and 12 were all found with nothing but a bare remote, a fresh `git clone -b main`, a new branch and a different CLAUDE_CODE_SESSION_ID. tests/test_hygiene.py::test_checkpoint_push_makes_state_visible_to_a_new_clone clones the same branch (`-b work`) with the same session id, which is why none of the three was caught.",
+   "repro": "",
+   "proposed_fix": "Add tests/test_rehearsal.py::test_continue_in_a_new_chat_resumes_the_same_item: container one (session A, branch claude/a from main) boots, works, checkpoints with --push, closes and hands over using exactly the commands the skills name; container two is a fresh clone of both bare remotes at main, on branch claude/b, session B, with A's transcript absent. Assert boot shows A's item and newest note, prints no WARNING and no 'earlier session' line, A's ledger record in the brain inbox still has its models, and `git status` is clean in both clones. Run the same rehearsal for release rules none, pr and main-on-green.",
+   "acceptance": "The new test fails on the current code for the reasons in findings 1, 3 and 12 and passes after their fixes; docs/BUILD_STATUS.md moves CB-104 from 'needs a live session' to 'simulated in tests; live confirmation pending'.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "core-20"
+  }
+ ]
+}

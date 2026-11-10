@@ -1,0 +1,337 @@
+{
+ "summary": "Audit of what the owner reads and whether the documents are true, done in a scratch copy (/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/owner-docs) with its remotes cut before any pushing command; nothing was written to /home/user/Claude-Brain. The engine's measured claims mostly hold (407 tests at 19fb016 and 410 at 9e4b158, doctor healthy, lint 0 errors, 100 templates, HR held-out 78/86 recomputed, routing 107/107 recomputed, 12 eval tasks sound). The weak side is the owner path. (1) The promise he relies on most, \"Continue picks up exactly where the last chat stopped\", fails in a reproduced case: the last chat pushes its checkpoint to its own branch, a new chat starts from main (CLAUDE_CODE_BASE_REF=main), boot does not look at other branches, and handover still said \"ready\". The STATUS.md on the repository front page is stale for the same reason. (2) The owner files contradict each other and GitHub: the guide says a red cross means do not merge while NEEDS_YOU says every push shows a red cross (live: the latest 5 of 37 runs failed in 3 seconds), no pull request has ever existed although the guide's undo story depends on one, and the click path for protecting main creates a ruleset that is disabled by default and, on a private repository, needs a paid plan nobody checked. (3) Two things he is told he can do on GitHub are not read reliably: OVERTURNED is never surfaced by any script, and RESOLVED is matched as a substring (an item whose text contains \"resolved\" vanishes from STATUS; \"RESUELTO\" is ignored). (4) In a brain-only chat, which this session is, \"Status\" and \"Hand over\" have no engine support (exit 1). (5) Numbers are restated by hand in five documents and have drifted (tests: 310+, 358, 406, 407 against 410; build cost: $123, $162 against the ledger's $175.49); lint does not cover docs/ or numbers. (6) Generated STATUS.md is short and honest but shows no address to open, uses a machine timestamp and English labels even for a project created with --language es (the field is never read). (7) Several phrases the owner is told to type are not recognised by route or any skill (\"Check the brain\", \"HR report\", \"Consolidate\", \"schedule the weekly learning run\"), and his real opening message today was sized \"1 small task, data\". The guide lacks: what to do when a chat dies, where to see the result, click paths for merging, and Spanish for six of nine phrases.",
+ "strengths": [
+  "Generated STATUS.md is short and built only from state and logs: 23 to 29 lines in the scratch project, with next items, open owner items and the list-price caveat; boot stays far under its cap (819 bytes with a project, 861 brain-only, cap 1,500). Any redesign must keep it script-generated and under one phone screen.",
+  "The measured claims that matter were reproduced exactly: HR held-out selection 78 first / 86 top three of 100, routing tier 107 of 107, eval audit 12 sound, 100 templates in 10 groups, 141 items valid, doctor healthy, lint 0 errors. BUILD_STATUS and REQUIREMENTS use honest statuses (met / reframed / live) and an 'Open, with reasons' table; keep that structure.",
+  "Handover refuses to say 'ready' while either repository has uncommitted or unpushed work (seen: exit 1 with 'brain: branch ... has never been pushed'), commits its own note, and prints one line to paste. The fix for the branch problem should build on this, not replace it.",
+  "NEEDS_YOU items follow one shape (Why / How / Meanwhile) with bold click targets and 'work never waits'; open items are counted in boot ('needs owner: N') and listed in STATUS.md. A repository created on GitHub with only README, LICENSE or .gitignore is treated as empty, and init is idempotent.",
+  "The core Spanish phrases are recognised with or without accents and inverted marks: Nuevo proyecto, Empieza, Continúa/Continua, Sigue, Rápido/Rapido, A fondo, Estado, ¿Cómo vamos?, Pasa a un chat nuevo, Prepara el relevo, ¿Qué has aprendido?, Vuelve atrás, Deshaz eso, Para después de esto."
+ ],
+ "findings": [
+  {
+   "title": "\"Continue\" in a new chat resumes an old checkpoint and handover still says ready: state is pushed to the last chat's branch, a new chat starts from main, and boot does not look",
+   "severity": "blocking",
+   "kind": "bug",
+   "files": [
+    "engine/detect.py",
+    "engine/state.py",
+    ".claude/skills/brain-start/SKILL.md",
+    ".claude/skills/brain-handover/SKILL.md",
+    "OWNER_GUIDE.md",
+    "tests/test_hygiene.py"
+   ],
+   "evidence": "NEEDS_YOU.md:7 states the platform fact: \"a new chat starts from each repository's `main` branch\". This session confirms it: env CLAUDE_CODE_BASE_REF=main, and the reflog shows \"checkout: moving from 19fb016 to claude/optimistic-newton-sh6lcx\". engine/state.py:172-176 pushes the checkpoint to the current branch only. `grep -n \"branch\\|fetch\\|origin\" engine/detect.py` prints nothing: boot never looks at other branches. Reproduced in the scratch project: on branch claude/session-a, `brain checkpoint --done \"Pantalla para añadir un gasto\" --item \"Resumen mensual\" --push` printed \"checkpoint pushed to claude/session-a\"; `brain handover` printed \"ready: both repositories are committed and pushed ... paste in a new chat with both repositories attached:  Continue\" (exit 0). Fresh clone of the default branch (what a new chat gets), then `brain boot \"Continue\"` printed \"item: Pantalla para añadir un gasto · last done: Proyecto creado y plan escrito\" while `git show origin/claude/session-a:.brain/STATE.md` holds \"item: Resumen mensual / last_done: Pantalla para añadir un gasto\". No warning. The STATUS.md in that clone (what GitHub shows on the repository front page) was the old one too. CB-104 lists this flow as needing a live session; this is the concrete failing case and it needs no live session to reproduce.",
+   "repro": "S=<scratch>; in a managed project with a bare remote whose HEAD is main: git checkout -b claude/session-a; python3 $S/brain/bin/brain checkpoint --done A --item B --push; python3 $S/brain/bin/brain handover; git clone <remote> $S/chat2/proj (next to a copy of the brain); cd $S/chat2/proj; python3 ../brain/bin/brain boot \"Continue\"  -> shows item A as in progress, not B.",
+   "proposed_fix": "1) engine/state.py: add newer_checkpoint(project): unless BRAIN_NO_NETWORK=1, run `git fetch -q origin '+refs/heads/*:refs/remotes/origin/*'` with a 6-second timeout (a failure is ignored), then for each refs/remotes/origin/* read `.brain/STATE.md` with `git show` and return (ref, updated, item) for the latest `updated:` that is later than the local one. A 15-line prototype of this found ('origin/claude/session-a', '2026-11-10T17:50:48Z', 'Resumen mensual') in the reproduced case. 2) engine/detect.py boot_lines: print it straight after the mode line so the byte cap never drops it: `WARNING: newer checkpoint on origin/claude/session-a (2026-11-10 17:50, item: Resumen mensual): merge that branch into this one, then run boot again`. 3) .claude/skills/brain-start/SKILL.md, under Orient: \"If boot warns of a newer checkpoint on another branch, the last chat's work is there: a new chat starts from the default branch and the last chat pushed to its own. Merge that branch into this session's branch (`git merge origin/<branch>`), run `BRAIN boot` again, and only then resume.\" 4) engine/state.py handover and cmd_status: print one more line, `latest STATUS.md: https://github.com/<owner>/<repo>/blob/<branch>/STATUS.md` (from `git remote get-url origin` and the branch), and brain-handover / brain-status 'Tell the owner': \"Give him that link: between releases the newest STATUS.md is on this chat's branch, not on the repository's front page.\" 5) OWNER_GUIDE.md, 'The three files you read', add: \"Between releases the newest copy of these files is on the chat's own branch, so open them from the link Claude gives at the end of each report, not from the repository's front page.\"",
+   "acceptance": "New test in tests/test_hygiene.py, test_boot_warns_when_a_newer_checkpoint_is_on_another_branch: bare remote with main (item A) and claude/x (later `updated:`, item B); clone the default branch; boot_lines(\"Continue\") contains \"newer checkpoint on origin/claude/x\"; after `git merge origin/claude/x` the warning is gone and the item line shows B. `python3 -m unittest tests.test_hygiene` OK; boot output stays under 1,500 bytes (existing cap test).",
+   "effort": "M",
+   "confidence": "high",
+   "id": "owner-docs-01"
+  },
+  {
+   "title": "The guide says a red cross means do not merge, NEEDS_YOU says every push shows a red cross, and the pull-request undo story has no instance: he cannot follow both, and learning only counts what reaches main",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "OWNER_GUIDE.md",
+    "NEEDS_YOU.md",
+    ".claude/skills/brain-learn/SKILL.md",
+    "engine/learn.py"
+   ],
+   "evidence": "OWNER_GUIDE.md:64 \"A check named **brain** also runs on GitHub for every change to the brain; a red cross on a pull request means do not merge it yet.\" NEEDS_YOU.md:47 \"a red cross will show on every push even though nothing is wrong\". Live (GitHub connector, list_workflow_runs): total_count 37; runs 33 to 37 all conclusion \"failure\", each created and finished within 3 seconds (for example created 17:50:09Z, updated 17:50:12Z), on main and on both claude/ branches. OWNER_GUIDE.md:60 \"Claude opens each learning change as one pull request ... To undo a merged one, open that pull request and press **Revert**\"; list_pull_requests with state=all returned []. `git log --oneline main..HEAD` shows the first real learning change (790084d \"learn: first real consolidation (delta d-20261110-a431e755f2 ...)\") sitting on the session branch between an engine fix (30086dc) and a docs commit (2ea9316), so it cannot become one pull request with its own Revert button. .claude/skills/brain-learn/SKILL.md:16 \"consolidation only sees what has reached `main`\". Read literally today: every learning pull request is red, so none is merged, so nothing is learned.",
+   "proposed_fix": "OWNER_GUIDE.md, replace the last sentence of 'If something seems broken' with: \"A check named **brain** is meant to run on GitHub for every change to the brain. Until item 7 in NEEDS_YOU.md is done GitHub does not start it, so every change shows a red cross that says nothing about the change. Until then, read the line in the pull request that begins 'Checks run in the session:' and merge when it says they passed. Once item 7 is done, a red cross means do not merge yet.\" OWNER_GUIDE.md 'Undoing something the brain learned', add the clicks: \"To keep one: github.com → **Claude-Brain** → **Pull requests** → open the one Claude named → **Merge pull request** → **Confirm merge**. To undo one: **Pull requests** → **Closed** → open it → **Revert** → **Create pull request** → **Merge pull request**.\" .claude/skills/brain-learn/SKILL.md 'Consolidate', add: \"Commit the delta alone on a branch named `learn/<delta id>` cut from `main`, and open one pull request for it: a learning change mixed with other commits has no Revert button of its own. Put the gate result in the pull request text as a line beginning 'Checks run in the session:' (test count and each command's exit code): until GitHub's check can start it is the only evidence he has.\" engine/learn.py: after consolidate, print that next step with the branch name. For this session: move delta d-20261110-a431e755f2 to its own branch and pull request before the engineering commits go to main.",
+   "acceptance": "`grep -c \"red cross on a pull request means do not merge it yet\" OWNER_GUIDE.md` is 0; `python3 bin/brain lint` exits 0; `python3 bin/brain learn consolidate` in a scratch copy prints a line containing `learn/d-`; on GitHub one pull request exists whose changed files are only under learning/, stats/, memory/, owner/, playbooks/.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "owner-docs-02"
+  },
+  {
+   "title": "NEEDS_YOU.md: the clicks for protecting main create a ruleset that is disabled by default and may need a paid plan; the resolved item is shown first with stale steps; the real blocker is last",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "NEEDS_YOU.md",
+    "docs/DECISIONS.md"
+   ],
+   "evidence": "NEEDS_YOU.md:17 \"**Settings** → **Branches** → **Add branch ruleset** (or **Add rule**) → branch name `main` → tick ... → **Create**\". GitHub's own page (docs.github.com, 'Creating rulesets for a repository', fetched today) gives: Settings → Rules → Rulesets → New ruleset → New branch ruleset → name → \"Optionally, to change the default enforcement status, click **Disabled** and select an enforcement status\" → \"**Disabled:** your ruleset will not be enforced\" → Target branches: Add a target. The file's steps have no enforcement step and no target step, so following them yields a ruleset that does nothing while everyone believes main is protected. GitHub's plans page (fetched today) lists \"Protected branches\" among the features GitHub Pro adds for private repositories; list_repos returns visibility \"private\" for this repository; list_branches returns \"protected\": false for main. Nothing in NEEDS_YOU.md or D-12 checks the plan, and item 4A (auto-merge) depends on item 2. Presentation: NEEDS_YOU.md:5-12 shows item 1 in full, with click steps naming the old branch `claude/wizardly-darwin-91m4pl`, and only its last line says RESOLVED; item 2's title says \"after items 1 and 7\"; :18 says \"310+ tests\" (410 now); :41 says \"after item 1 is done\" (it is); item 7, which blocks 2 and 4A, is at the bottom; items 3 and 5 ask for nothing he can click or reply. Item numbers are referenced from docs/DECISIONS.md:18, docs/REQUIREMENTS.md:11, docs/BUILD_STATUS.md:79 and :81, docs/NEXT_SESSION.md:30, so they should stay stable.",
+   "proposed_fix": "Keep the numbers; change the text. Line 3, add: \"Do them in this order: 7, then 2, then 4. Item 6 can be done now.\" Item 1 becomes one line: \"## 1. Done: the built brain is on `main`\" followed by \"RESOLVED: 2026-11-10, you approved it in chat.\" (steps removed). Item 2: title \"## 2. Protect the brain's `main` (5 minutes, after item 7)\"; add \"- **First check:** this repository is private, and GitHub enforces branch rules on a private repository only on a paid personal plan. github.com → your picture → **Settings** → **Billing and licensing**: it shows **Free** or **Pro**. On Free, tell me and I will lay out the two choices (upgrade, or keep the check as advice only).\"; replace How with \"github.com → **javilfr/Claude-Brain** → **Settings** → **Rules** → **Rulesets** → **New ruleset** → **New branch ruleset**. Name it `main`. Change **Enforcement status** from **Disabled** to **Active**: a disabled ruleset does nothing. **Target branches** → **Add target** → **Include default branch**. Tick **Require a pull request before merging** and **Require status checks to pass**, then **Add checks**, type `brain` and pick it. **Create**.\"; add \"- **How you know it worked:** say 'check the protection' and I will read the rules GitHub reports for `main`.\"; Meanwhile: \"... The same checks pass when run inside a session (counts are in `docs/BUILD_STATUS.md`).\" Item 6: drop \"after item 1 is done,\". Item 3: move its text to OWNER_GUIDE.md step 3 (already there) and leave \"## 3. Nothing to do: the model habit moved to the owner guide\" with a RESOLVED line. Item 5: title \"## 5. Nothing to do yet: optional guards in two-repo chats\" and one line saying Claude will add clicks when ticket CB-106 is tested.",
+   "acceptance": "In a copy: python3 -c \"import sys; sys.path.insert(0,'.'); from pathlib import Path; from engine import state; print(state.open_needs(Path('.')))\" lists exactly items 2, 4, 6, 7; `grep -c \"wizardly-darwin\\|310+\" NEEDS_YOU.md` is 0; `grep -c \"Enforcement status\" NEEDS_YOU.md` is 1; after the owner does item 2, `gh api repos/javilfr/Claude-Brain/rules/branches/main` returns a non-empty list.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "owner-docs-03"
+  },
+  {
+   "title": "An OVERTURNED decision is never surfaced by any script, so \"the next chat applies it\" depends on the lead reading the whole decisions file; three files give three different instructions",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/state.py",
+    "engine/detect.py",
+    "contract/template/.brain/DECISIONS.md",
+    "OWNER_GUIDE.md",
+    "docs/DECISIONS.md",
+    ".claude/skills/brain-start/SKILL.md"
+   ],
+   "evidence": "OWNER_GUIDE.md:38 \"To reverse one, edit the line on GitHub and write **OVERTURNED** with what you want instead. The next chat applies it.\" `grep -rn OVERTURNED engine/` returns nothing; the only mechanism is one sentence in .claude/skills/brain-start/SKILL.md:23, while the same skill says of boot \"do not re-read what it printed\" and CLAUDE.md rule 3 says scripts before reading. Test in the scratch project: appended to .brain/DECISIONS.md a decision row and the line \"OVERTURNED: quiero que se guarde en la nube con mi cuenta de Google\"; `brain boot \"Continue\"` and `brain resume` printed the usual lines with no mention of it; `brain validate` said \"contract v1 valid\". Wording differs: the guide says edit the line; contract/template/.brain/DECISIONS.md:3 says \"write `OVERTURNED:` and what you want instead on the line below it, or say so in chat\"; docs/DECISIONS.md:3 says \"write `OVERTURNED:` under the row\". The decisions are a Markdown table: a line typed under a row splits the table on GitHub, and on a phone each row is one very long raw line to edit.",
+   "proposed_fix": "engine/state.py: add overturned(project) returning the lines of .brain/DECISIONS.md that contain OVERTURNED (any case; also REVERTIDA and ANULADA) and do not end with `(applied <date>)`. engine/detect.py boot_lines and state.resume_lines: when the list is not empty print `overturned: N decision(s) he reversed in .brain/DECISIONS.md are not applied yet: apply them before resuming`. STATUS.md: one line \"- Reversed by you, not applied yet: N\". .claude/skills/brain-start/SKILL.md: \"When boot reports overturned decisions, apply each one, then add `(applied <date>)` to the end of his line so it is reported once.\" One wording in all three places (template, OWNER_GUIDE.md:38, docs/DECISIONS.md:3): \"To reverse one, say so in chat (for example 'reverse decision 3: use euros'), or on GitHub add a line at the end of this file: `OVERTURNED 3:` and what you want instead. Claude applies it at the start of the next chat and marks it applied.\" The frozen fixture evals/fixtures/project-v1 keeps the old sentence; the reader accepts both forms.",
+   "acceptance": "New test in tests/test_core.py: a project whose DECISIONS.md ends with \"OVERTURNED 1: store in the cloud\" gives boot_lines containing \"overturned: 1\"; after appending \"(applied 2026-11-11)\" to that line the boot line is absent. `grep -c \"line below it\\|under the row\\|edit the line on GitHub\" OWNER_GUIDE.md docs/DECISIONS.md contract/template/.brain/DECISIONS.md` gives 0 for each; tests/test_fixtures.py still passes.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "owner-docs-04"
+  },
+  {
+   "title": "RESOLVED is matched as a substring: an open item whose text contains \"resolved\" vanishes from STATUS.md and from boot's count, and \"RESUELTO\" or \"Hecho\" is ignored",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "engine/state.py",
+    "contract/template/NEEDS_YOU.md",
+    "tests/test_core.py"
+   ],
+   "evidence": "engine/state.py:254 `elif \"RESOLVED\" in line.upper(): resolved = True`. Scratch project NEEDS_YOU.md with four items: 1 open; 2 open, with the Why line \"until the domain name is resolved by DNS to Vercel, the address is the long vercel.app one\"; 3 answered by the owner with \"RESUELTO: verde\"; 4 answered with \"Hecho, ya está guardada.\" `brain status` printed under Needs you: \"- 1. Connect Vercel (3 minutes)\", \"- 3. Elige el color principal\", \"- 4. Stripe key\"; `brain boot` printed \"needs owner: 3\". Item 2, which is open, is missing; items 3 and 4, which he answered in Spanish, still show as open. He often writes in Spanish (owner/standing.jsonl own-reply-language cites 4+ sessions).",
+   "repro": "In a managed project append the four items above to NEEDS_YOU.md, then run `python3 <brain>/bin/brain status`.",
+   "proposed_fix": "engine/state.py: replace the substring test with a line-start match, `RESOLVED_LINE = re.compile(r\"^\\s*(?:[-*>]\\s*)?\\**\\s*(RESOLVED|RESUELTO|RESUELTA|HECHO|LISTO)\\b\", re.I)` and `elif RESOLVED_LINE.match(line): resolved = True`. contract/template/NEEDS_YOU.md line 3 (a new optional wording, no contract bump): \"Reply in chat, or write `RESOLVED:` (or `RESUELTO:`) on a line of its own under an item.\" Same sentence in the brain's NEEDS_YOU.md:3 and OWNER_GUIDE.md:44.",
+   "acceptance": "Extend tests/test_core.py (the test around line 275) with the four-item file: open_needs returns exactly the titles of items 1 and 2. `python3 -m unittest tests.test_core` OK.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "owner-docs-05"
+  },
+  {
+   "title": "In a chat with only the brain attached, \"Status\" and \"Hand over\" have no engine support (exit 1), the brain's own open owner items are not shown, and the handover note and ticket states are kept by hand",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/state.py",
+    "engine/detect.py",
+    "engine/schedule.py",
+    "docs/NEXT_SESSION.md",
+    "docs/plan/tickets.json",
+    ".claude/skills/brain-status/SKILL.md",
+    ".claude/skills/brain-handover/SKILL.md"
+   ],
+   "evidence": "In a folder holding only a clone of the brain at 9e4b158: `python3 bin/brain status` printed \"no managed project found (attach one, or run: brain init <path>)\", exit 1; `python3 bin/brain handover` printed the same, exit 1. Both skills (brain-status, brain-handover) rest on those two commands. `brain boot \"Status\"` printed the mode line, \"brain work: 10 open ticket(s) in docs/plan/tickets.json · next: CB-200 Baseline and self-audit\" and the handover pointer, but nothing about the brain's NEEDS_YOU.md, although state.open_needs on the brain root returns six open items. docs/plan/tickets.json still has CB-200 and CB-201 as \"open\" while commits 790084d and 2ea9316 carry \"Brain-Bootstrap: CB-200 CB-201\" and docs/BUILD_STATUS.md records their results, so the next brain-only boot would send a new chat back to CB-200; `brain plan --help` offers only schedule, assign and packet, so tickets are marked by editing JSON. docs/NEXT_SESSION.md is hand-written and already stale in the session it was written for (:8 \"407 tests\", 410 now; :11 \"three unconsolidated records\", consolidated in 790084d; :25 \"$162\", the ledger says $175.49). This session is brain-only and the owner opened it from his phone (CLAUDE_CODE_ENTRYPOINT=remote_mobile).",
+   "proposed_fix": "engine/state.py cmd_status, when no project is attached: print at most 12 lines about the brain itself and exit 0: version; branch and how many commits are not on main; open tickets and the next one; needs you (open item numbers from the brain's NEEDS_YOU.md via open_needs(BRAIN_ROOT)); inbox files waiting for consolidation; this chat's list-price cost from the ledger. cmd_handover, when no project is attached: regenerate a block between `<!-- state:begin -->` and `<!-- state:end -->` in docs/NEXT_SESSION.md from the same data, check the brain is committed and pushed, and print \"paste in a new chat with only Claude-Brain attached:  Continue\". engine/detect.py brain_work_lines: add \"needs owner: N\" when the brain's NEEDS_YOU.md has open items. engine/schedule.py: add `brain plan done <file> <id>` so a ticket is closed by a command. engine/lint.py: a ticket id named in a `Brain-Bootstrap:` trailer on this branch must not be `open` in docs/plan/tickets.json. Skills: brain-status and brain-handover each get one sentence, \"With only the brain attached, the same command reports on the brain itself.\"",
+   "acceptance": "In a folder holding only the brain: `python3 bin/brain status; echo $?` prints a line starting \"needs you:\" and 0; `python3 bin/brain handover; echo $?` prints the paste line and 0 when the tree is clean and pushed, and names the problem otherwise; `python3 bin/brain plan done docs/plan/tickets.json CB-200` then `python3 bin/brain boot` no longer names CB-200 as next; new tests in tests/test_hygiene.py for both modes.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "owner-docs-06"
+  },
+  {
+   "title": "Numbers are restated by hand in five documents and have drifted; nothing checks them (lint covers neither docs/ nor numbers)",
+   "severity": "should-fix",
+   "kind": "stale-fact",
+   "files": [
+    "docs/BUILD_STATUS.md",
+    "docs/REQUIREMENTS.md",
+    "docs/NEXT_SESSION.md",
+    "NEEDS_YOU.md",
+    "README.md",
+    "engine/lint.py",
+    "engine/doctor.py"
+   ],
+   "evidence": "Claim against command result (full table in the data field). Tests: NEEDS_YOU.md:18 \"310+ tests\"; docs/REQUIREMENTS.md:36 \"358 unit, fixture and rehearsal tests\"; docs/BUILD_STATUS.md:25 \"406 tests\"; BUILD_STATUS.md:119 and NEXT_SESSION.md:8 \"407\"; `python3 -m unittest discover -s tests -t .` gives 407 at 19fb016 and \"Ran 410 tests ... OK\" at 9e4b158. Always-loaded text: BUILD_STATUS.md:10 \"`CLAUDE.md` 5,356 bytes ... about 2,534 tokens\"; `brain budget` prints \"CLAUDE.md 5423 B ... about 2550 tokens\". Engine: BUILD_STATUS.md:9 \"21 engine modules (about 9,500 lines)\"; `ls engine/*.py | grep -v __init__ | wc -l` = 22 and `wc -l engine/*.py bin/brain` = 10,554. Radar tests: REQUIREMENTS.md:38 \"(42 tests)\"; `python3 -m unittest tests.test_radar` ran 44. Build cost: BUILD_STATUS.md:106-107 \"About 131 minutes, 30 helpers, about 198 million tokens, about $123 ... Helpers were 73%\"; NEXT_SESSION.md:25 \"about $162 ..., 64% of it helpers\"; the recorded row in stats/ledger/2026-11.jsonl for session ad24da2f has wall_minutes 565.7, helpers 40, model costs summing to $175.49 and 268.6 million tokens. Position: BUILD_STATUS.md:81 \"The brain is on its working branch, not `main`\"; GitHub list_branches shows main at 19fb016, the built brain. README.md:19 says `contract/` holds migrations; `ls contract/migrations` fails. BUILD_STATUS.md:113 points at docs/plan/IMPROVEMENT_PLAN.md, absent at 9e4b158 (in flight). engine/lint.py instruction_files() lists CLAUDE.md, OWNER_GUIDE.md, README.md, NEEDS_YOU.md, skills, agents, method, playbooks and the template: no file under docs/, and its link check reads only [text](target) links, not backticked paths.",
+   "proposed_fix": "Now: BUILD_STATUS.md:9 \"22 engine modules (about 10,500 lines ...)\"; :10 \"5,423 bytes ... about 2,550 tokens\"; delete row :81 and add to the header \"On `main` since 2026-11-10 (commit 19fb016).\"; :106-107 \"About 566 minutes of wall time, 40 helpers, about 269 million tokens, about $175 at list prices (the final record in `stats/ledger/2026-11.jsonl`; the figures first written here were a mid-session reading).\" and recompute or drop the helper share; NEXT_SESSION.md:25 the same figure; NEEDS_YOU.md:18 \"(the full test suite, self-test and lint; counts are in `docs/BUILD_STATUS.md`)\"; REQUIREMENTS.md R-23 \"The unit, fixture and rehearsal suite (count in `docs/BUILD_STATUS.md`)\" and R-25 without the count; README.md:19 \"schema and project template; migration scripts go in `contract/migrations/` when a second version exists\". Mechanism so it does not recur: `brain doctor --facts` prints one fixed block (tests discovered by the unittest loader without running them, engine modules and lines, CLAUDE.md bytes, budget tokens, templates, items, eval tasks, routing and recall rows); docs/BUILD_STATUS.md holds that block between `<!-- facts:begin -->` and `<!-- facts:end -->`, rewritten by `brain doctor --facts --write`; `brain lint` gains check_facts (the block must equal the command's output; a test count or token count written outside the block in OWNER_GUIDE.md, NEEDS_YOU.md, README.md, docs/REQUIREMENTS.md or docs/NEXT_SESSION.md is an error) and adds docs/BUILD_STATUS.md, docs/REQUIREMENTS.md, docs/NEXT_SESSION.md and docs/DECISIONS.md to the link check, extended to backticked repository paths.",
+   "acceptance": "`grep -n \"310+\\|358 unit\\|406 tests\\|2,534\\|5,356\\|21 engine\\|\\$123\\|\\$162\\|working branch, not\" NEEDS_YOU.md README.md docs/*.md` prints nothing; `python3 bin/brain lint` exits 0; after adding one test method without `brain doctor --facts --write`, `python3 bin/brain lint` exits 1 naming the facts block; a new test in tests/test_lint.py covers both.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "owner-docs-07"
+  },
+  {
+   "title": "Generated STATUS.md does not say what to open, starts with a machine timestamp and a stage name, and stays in English for a project created with --language es (the field is never read)",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/state.py",
+    "engine/contract.py",
+    ".claude/skills/brain-new/SKILL.md",
+    "tests/test_core.py"
+   ],
+   "evidence": "CLAUDE.md:38 \"For an app, done means deployed and visible on his phone; say what to look at.\" Set release.live_url to https://gastos.example.app and logged a release in .brain/log/releases.jsonl, then `brain status --full | grep -i \"gastos.example\\|release\\|live\"` matched nothing (exit 1): write_status (engine/state.py:287-320) never reads live_url or the release log. First lines as generated: \"# Status: Gastos\" then \"Updated 2026-11-10T17:50:48Z · stage: build\". The project was created with `brain init ... --language es` (project.json \"languages\": [\"es\"]) and its items were written in Spanish, yet every label is English (\"Working on\", \"Last finished\", \"Needs you\", \"Cost\"); `grep -n \"languages\" engine/*.py` shows the field is only written (contract.py:75, :311), never read, and contract/v1.schema.json gives it no meaning. Cost line: \"Last session: about $4.36 at list prices, 44,911 output tokens, 1 helper(s)\", while OWNER_GUIDE.md:50 says STATUS.md shows \"tokens used\"; the short `brain status` view cuts off at 14 lines before \"Project to date\".",
+   "proposed_fix": "engine/state.py write_status, new shape (labels from a two-language table chosen by languages[0], default en): line 1 `# Gastos: building` (stage in plain words: intake 'getting started', requirements 'writing down what you asked', research 'researching', plan 'planning', build 'building', verify 'checking', deliver 'publishing', learn 'wrapping up', done 'finished'). Then, only when release.live_url is set: `Open it: https://... (last published 10 Nov 2026, 18:00 UTC)` from the last line of releases.jsonl, or `(not published yet)`. Then `Now:`, `Done last:`, `Next:`, `Your requests: 0 of 3 done`, `Needs you: 2 things, see NEEDS_YOU.md` with the titles, the cost section with both lines kept inside the short view, and `Updated 10 Nov 2026, 17:50 UTC` as the last line. Spanish labels: `# Gastos: en construcción`, `Ábrela:`, `Ahora:`, `Hecho:`, `Siguiente:`, `Tus peticiones: 0 de 3 hechas`, `Te necesita:`, `Coste`, `Actualizado`. Cost line: \"about $4.36 at list prices (4.2 million tokens in all, 44,911 written by Claude), 1 helper\". engine/contract.py: when --language es, write the Spanish first line of STATUS.md and the Spanish header of NEEDS_YOU.md. .claude/skills/brain-new/SKILL.md: \"L is the language he reads this project's STATUS.md and NEEDS_YOU.md in (`es` when he wrote the request in Spanish).\" OWNER_GUIDE.md:36: \"STATUS.md: what to open, what is done, what is next, and what it cost.\"",
+   "acceptance": "New tests in tests/test_core.py: with live_url and one release, the URL is within the first four lines of write_status(); with languages [\"es\"] the text contains \"Siguiente:\" and not \"Next:\"; the text has no match for `\\dT\\d\\d:\\d\\d:\\d\\dZ`; at most 40 lines; `brain status` (short view) contains the project-to-date cost line. Existing fixtures still validate (`python3 -m unittest tests.test_fixtures`).",
+   "effort": "M",
+   "confidence": "high",
+   "id": "owner-docs-08"
+  },
+  {
+   "title": "Phrases the owner is told to type are not recognised by route or by any skill, and his real opening message today was sized \"1 small task, data\"",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/route.py",
+    "evals/routing.jsonl",
+    "method/routing.md",
+    ".claude/skills/brain-learn/SKILL.md",
+    "OWNER_GUIDE.md"
+   ],
+   "evidence": "`brain route` in the copy. From OWNER_GUIDE.md: \"Check the brain\" → \"size 1 small task | software | software.feature ... unsure between 1 and 2\" (`grep -rn -i \"check the brain\"` finds it only in OWNER_GUIDE.md:64); \"HR report\" → \"size 0 answer | knowledge | answer | no task verb; answer or acknowledge\". From NEEDS_YOU.md: \"Consolidate\" → size 0 answer; \"schedule the weekly learning run\" → size 0 answer; \"merge learning changes automatically\" → size 1 software.feature; a grep for \"weekly learning run\", \"merge learning changes automatically\", \"auto-merge\" and \"routine\" in .claude/skills, method/, CLAUDE.md and learning/PROMOTION_RULES.md returns nothing, and `brain recall` on either phrase returns three unrelated items, so a new chat has no instruction for either reply. From docs/DECISIONS.md: \"use more helpers\" and \"adopt the Travel Journal\" → size 0 answer. Triggers advertised in skill descriptions that route sizes 0 (\"answer directly, no scripts\"): \"Adopt this repo\", \"Adopta este repo\", \"Propose options\", \"Propón opciones\", \"Publícalo\", \"Súbelo a main\", \"Constrúyelo\", \"Consolida\", \"Learning digest\", \"How much has this cost?\", \"¿Cuánto ha costado?\", \"Find out ...\", \"Compare ...\", \"Give me 5 ...\"; \"Research which database is best\" and \"Investiga qué base de datos es mejor\" → \"size 2 project | data | data.pipeline\". Spanish variants: \"Volver atrás\", \"Para cuando termines esto\", \"Revisa el cerebro\", \"Informe de RRHH\" → size 0 answer. The message that opened this session (\"Start running, quickly do comprehensive improve plan ... executed and very implemented\") → {\"tier\": 1, \"family\": \"data\", \"task_class\": \"data.analysis\", \"reason\": \"unsure between 1 and 2; chose 1 ...\"}: the resume trigger allows at most 6 following words (engine/route.py:89). At size 0 boot also skips recall (engine/detect.py:128).",
+   "proposed_fix": "engine/route.py TRIGGERS: add (\"doctor\", \"check the brain, brain check, revisa el cerebro, comprueba el cerebro\", 4) → size 1, class brain.check; (\"hr\", \"hr report, informe de rrhh, informe de recursos humanos\", 4) → size 0, class status; (\"consolidate\", \"consolidate, consolida, learning digest\", 4) → size 1, class learn.consolidate; (\"release\", \"ship it, publicalo, subelo a main, push to main\", 4) → size 1, software.release; (\"adopt\", \"adopt this repo, adopta este repo, adopt the\", 6) → size 2; (\"create\", \"propose options, propon opciones, give me 5, dame 5\", None) → size 1, class create; extend status with \"how much has this cost, cuanto ha costado\", revert with \"volver atras\", stop with \"para cuando termines\", deep with \"research, investiga, find out, compare\" mapping to knowledge.research. When a message starts with a resume phrase and more than 6 words follow, size the rest as well and take the larger size, and with only the brain attached and open tickets use the programme's recorded size. evals/routing.jsonl: one row per phrase above in both languages, plus the long \"Start running, ...\" message at tier 3. method/routing.md: rename the section 'Phrases with no skill' and add \"**Check the brain** (\\\"Revisa el cerebro\\\"): run `BRAIN doctor`, `BRAIN lint` and the test suite through `BRAIN run`, then say in plain words what failed and whether a recent learning change caused it. His projects are not touched.\" and \"**use more helpers**: raise the cap only for the task he names and record it as a decision; the default stays four because wide fan-out has emptied his usage window before.\" .claude/skills/brain-learn/SKILL.md, new section 'Two replies from the brain's NEEDS_YOU.md': \"'schedule the weekly learning run': create one Claude Code routine that opens a chat on the brain alone once a week with the message 'Consolidate', show him its name and time before it first runs, and mark item 6 `RESOLVED:`. 'merge learning changes automatically': check that items 2 and 7 are resolved and that auto-merge is allowed on the repository; if so, switch it on for each learning pull request from then on and record the choice in `docs/DECISIONS.md`, since it changes D-12; if not, say which click is missing.\"",
+   "acceptance": "tests/test_route.py accuracy tests pass on the enlarged evals/routing.jsonl with tier 100% on the new rows; `python3 bin/brain route \"Check the brain\"` prints class brain.check; `python3 bin/brain route \"Publícalo\"` prints software.release; the long \"Start running, ...\" message prints size 3 with only the brain attached; `python3 bin/brain lint` exits 0 (the new skill and method text names only real commands).",
+   "effort": "M",
+   "confidence": "high",
+   "id": "owner-docs-09"
+  },
+  {
+   "title": "OWNER_GUIDE.md has no answer for a chat that dies, where to see the result, how to merge on GitHub, or how to stop at once, and gives Spanish for three of nine phrases",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "OWNER_GUIDE.md",
+    "engine/lint.py"
+   ],
+   "evidence": "Read as a phone user: the guide has 68 lines and sections for starting, typing, the three files, answering, cost, HR, undoing a lesson and something broken. `grep -n -i \"dies\\|stops\\|freez\\|lost\\|crash\" OWNER_GUIDE.md` finds nothing: the commonest event in his history (\"the most repeated complaint in his history is losing the thread\", .claude/skills/brain-handover/SKILL.md:8) has no entry. Nothing says where the built thing is seen (no mention of an address, preview or link). 'Undoing something the brain learned' says \"Merge it to keep it\" with no click path. 'Stop after this' is the only stop. Line 30: \"The phrases work in Spanish too (\\\"Nuevo proyecto: …\\\", \\\"Continúa\\\", \\\"Estado\\\")\": three of nine; the other six Spanish forms exist in engine/route.py and were verified to route correctly (Rápido:, A fondo:, Pasa a un chat nuevo, ¿Qué has aprendido?, Vuelve atrás, Para después de esto), but he has no way to know them, and guessing fails (\"Volver atrás\" and \"Para cuando termines esto\" → size 0 answer).",
+   "proposed_fix": "Replace the 'What to type' table with three columns, and delete line 30: | You type | En español | What happens | with rows **New project:** one sentence / **Nuevo proyecto:** una frase; **Start running** or **Continue** / **Empieza** or **Continúa**; **Quick:** … / **Rápido:** …; **Go deep:** … / **A fondo:** …; **Status** / **Estado**; **Hand over** / **Pasa a un chat nuevo**; **What did you learn?** / **¿Qué has aprendido?**; **Go back** / **Vuelve atrás**; **Stop after this** / **Para después de esto**; **Check the brain** / **Revisa el cerebro** (the last row once the route fix is in). Add: \"## If a chat stops or you lose it\\n\\nOpen a new chat, select the same two repositories and type **Continue** (**Continúa**). Claude saves its place after each finished piece, so at most the piece in progress is redone. You do not need the old chat. To stop a chat yourself at once, press the stop button: what was saved stays saved.\" Add: \"## Where to see the result\\n\\nFor an app, STATUS.md starts with the address to open on your phone and when it was last published. For a document or a data result it names the file. If the address shows an old version, type **Status**.\" Add the merge and revert click paths given in the red-cross finding. engine/lint.py: check that every phrase in the guide's table routes to a class other than `answer` (reads the table, calls route.classify), so the table cannot drift from the engine.",
+   "acceptance": "`python3 bin/brain lint` exits 0 and exits 1 when a table phrase is changed to one route does not know (test in tests/test_lint.py); `grep -c \"If a chat stops\\|Where to see the result\" OWNER_GUIDE.md` is 2; the file stays under 110 lines.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "owner-docs-10"
+  },
+  {
+   "title": "Three engine commands commit and push whatever is in learning/inbox to the origin of whichever copy of the brain they run from; today test records reached the real branch that way",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "engine/state.py",
+    "hr/GUIDELINES.md",
+    "tests/test_hygiene.py"
+   ],
+   "evidence": "engine/state.py:190-203 (push_brain_records): `git add -- learning/inbox learning/radar`, commit \"learn: session records\", `git push -q -u origin <branch>`, with no check of which session wrote the files or where the copy lives; it is called by `checkpoint --push` and `handover`. A copy made with `cp -a` keeps the real remote: `git remote -v` in my copy printed \"origin https://github.com/javilfr/Claude-Brain (push)\" until I repointed it. On the real branch: commit 89b5624 \"learn: session records\" added learning/inbox/2026-11-10-------------tmp-evil.jsonl, 2026-11-10-timing-test.jsonl and a second copy of this session's record; commit 9e4b158 removed them (\"three test records an auditor's scratch copy pushed by mistake (two with made-up session ids, one stale copy of this session's record)\"). docs/BUILD_STATUS.md:48 already lists \"forged inbox records are not distinguishable from real ones\" as open; this is the cheap part of that problem and it happened within an hour of real use. Any helper that copies the brain to experiment has the same path.",
+   "proposed_fix": "engine/state.py push_brain_records: 1) commit only files this session wrote: `learning/inbox/<date>-<this session id>.jsonl`, `learning/inbox/<date>-radar.jsonl` and `learning/radar/state.json`; any other new inbox file is left uncommitted and named in the message (\"left alone: 2026-11-10-timing-test.jsonl was not written by this session\"). 2) Refuse to push when the brain's folder is under the system temporary directory or a path containing `/scratchpad/`, with the message \"not pushed: this copy of the brain is a scratch copy\"; the tests that need a push set BRAIN_ALLOW_SCRATCH_PUSH=1. 3) hr/GUIDELINES.md, one line for every brief whose task says to copy the brain: \"If you copy the brain to experiment, run `git remote remove origin` in the copy first: `checkpoint --push`, `handover` and `release` push to the copy's origin.\"",
+   "acceptance": "New tests in tests/test_hygiene.py: with an inbox file named for another session beside this session's file, push_brain_records commits only this session's file and its message names the other; with the brain under a temporary folder and no override, it returns \"not pushed: this copy of the brain is a scratch copy\" and the bare remote has no new commit.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "owner-docs-11"
+  },
+  {
+   "title": "After \"What did you learn?\" the next \"Hand over\" cannot pass: the digest command writes a file in the brain that no command commits",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "engine/learn.py",
+    "engine/state.py",
+    ".claude/skills/brain-learn/SKILL.md"
+   ],
+   "evidence": "In the scratch project: `brain learn digest --weeks 1` (the command .claude/skills/brain-learn/SKILL.md:28 gives for \"What did you learn?\") printed the digest and created learning/digest/2026-W46.md; then `brain handover` printed \"not ready to hand over yet ... - brain: 1 uncommitted change(s)\", exit 1; `git status --short` in the brain copy: \"?? learning/digest/\". push_brain_records commits only learning/inbox and learning/radar (engine/state.py:190), so a repeat run never passes, although the skill says \"a repeat run passes once both are clean\". The message does not name the file. CLAUDE.md rule 8 tells the lead not to touch brain files by hand, so it has no clean way out. Of thirteen reporting commands tried in a clean clone (hr report, ml report, learn status, learn digest, budget, doctor, lint, recall, route, boot, hr rack, status, ledger) only `learn digest` left a change.",
+   "repro": "In a managed project beside a clean brain copy with a remote: python3 <brain>/bin/brain learn digest --weeks 1; python3 <brain>/bin/brain handover; echo $?",
+   "proposed_fix": "engine/learn.py: `learn digest` prints only; it writes learning/digest/<week>.md when called with `--write`, which the weekly consolidation uses. engine/state.py repo_cleanliness: name up to three paths in the message (\"1 uncommitted change(s): learning/digest/2026-W46.md\"). .claude/skills/brain-learn/SKILL.md 'What did you learn?': no change to the command; add under Consolidate \"`BRAIN learn digest --weeks N --write` keeps the weekly digest with the delta.\"",
+   "acceptance": "New test in tests/test_learn.py: `learn digest` leaves `git status --porcelain` empty in the brain; with `--write` the file exists. Repeat the repro: handover exits 0.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "owner-docs-12"
+  },
+  {
+   "title": "\"HR report\" tells him to say \"Consolidate\" for hires that are already folded in",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "engine/hr.py",
+    "tests/test_hr.py"
+   ],
+   "evidence": "Fresh clone of the real repository at 2ea9316, after the first consolidation (learning/manifest.jsonl lists learning/inbox/2026-11-10-ad24da2f-….jsonl under inbox_files): `python3 bin/brain hr report` printed \"rack: 100 templates · settled hires folded into learning: 2\" and on the next line \"2 settled hire(s) are recorded in the inbox and count once the next consolidation runs (say \\\"Consolidate\\\")\". `python3 bin/brain learn status` in the same clone correctly printed \"inbox: 1 file(s) pending (7 record(s))\" (the radar file). engine/hr.py:722 counts hire records in every file under learning/inbox, including files a delta has already consumed; consumed files stay in place, so the line never goes away and saying \"Consolidate\" changes nothing.",
+   "proposed_fix": "engine/hr.py:722: count only files that are not named in any `inbox_files` list of learning/manifest.jsonl, using the same pending-files function `learn status` uses.",
+   "acceptance": "New test in tests/test_hr.py: after a consolidation that consumed a file with two hire records, report lines contain \"folded into learning: 2\" and no line contains \"next consolidation\". In a clone of the current branch: `python3 bin/brain hr report | grep -c \"next consolidation\"` prints 0.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "owner-docs-13"
+  },
+  {
+   "title": "Five smaller statements that are untrue or that a new lead would misread",
+   "severity": "minor",
+   "kind": "unclear",
+   "files": [
+    "OWNER_GUIDE.md",
+    "engine/gate.py",
+    ".claude/skills/brain-verify/SKILL.md",
+    "engine/learn.py",
+    "docs/DECISIONS.md",
+    "engine/route.py"
+   ],
+   "evidence": "(a) OWNER_GUIDE.md:27 \"**Go back** | Returns the project to its last release you accepted\" and method/routing.md:26 \"the last release he accepted\": engine/gate.py:304 logs only {\"at\", \"commit\", \"branch\", \"session\"}; `grep -rn -i \"accepted\\|known-good\" engine/*.py` finds nothing about releases, so no release is ever marked accepted and the lead must guess which one to return to. (b) OWNER_GUIDE.md:40 \"learning/CHANGELOG.md lists in plain words what the brain has learned\": the first real entry reads \"## 2026-11-10 d-20261110-a431e755f2 / - 1 ledger row(s) recorded / - 2 record(s) folded into the learning statistics / - 1 inbox file(s) consolidated\". (c) docs/DECISIONS.md D-09 still reads \"No board, HR catalogue, payroll simulation or 500-idea table\" with no mark; only D-13, four rows later, says it reverses the HR part, and the HR department and wage system now exist. (d) boot and route give a self-contradicting reason for his main phrase: `brain boot \"Nuevo proyecto: una app para llevar mis gastos en el móvil\"` printed \"size: 2 project · software · software.feature · new project; no task verb; answer or acknowledge\". (e) `brain digest` prints \"operations.build: too few to compare (1 tasks now, 0 before)\".",
+   "proposed_fix": "(a) engine/gate.py: `brain release --accept [commit]` appends {\"accepted\": true, \"commit\", \"at\"} to .brain/log/releases.jsonl; .claude/skills/brain-verify/SKILL.md: \"When he says a release looks good, run `BRAIN release --accept`: Go back returns to the last accepted release, or to the one before the latest when none was accepted.\"; OWNER_GUIDE.md:27 \"Returns the project to the last version you said was good (if you never said, the one before the latest), with a new change rather than by erasing history.\" (b) engine/learn.py changelog writer: heading \"## 10 Nov 2026\" with the delta id in brackets at the end; lines as sentences: \"Recorded what 1 chat cost.\", \"Counted the results of 2 helpers: this adjusts which helper is picked and how large its budget is.\", \"Added 1 lesson: <its text>.\" (c) docs/DECISIONS.md D-09, append to the decision cell: \"(The HR part was reversed by you on 2026-11-10: see D-13.)\" (d) engine/route.py: when the new-project trigger fires, the reason is \"new project\" only. (e) Use \"1 task\" when the count is one.",
+   "acceptance": "New test in tests/test_core.py: after `release --accept`, the last line of releases.jsonl has accepted true. `python3 bin/brain route \"New project: a habit tracker\"` prints a why line without \"answer or acknowledge\". `grep -c \"see D-13\" docs/DECISIONS.md` is at least 1. A consolidate run in a scratch copy writes a changelog section whose lines contain no \"row(s)\" or \"record(s)\". `python3 bin/brain learn verify` still passes on the existing delta (the first entry's hash is in the manifest, so the new wording applies to new entries only).",
+   "effort": "M",
+   "confidence": "high",
+   "id": "owner-docs-14"
+  },
+  {
+   "title": "Idea: one source for owner phrases",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "evals/owner_phrases.jsonl",
+    "OWNER_GUIDE.md",
+    "engine/lint.py",
+    "tests/test_route.py"
+   ],
+   "evidence": "The same phrases live in four places that drifted apart: the guide table (OWNER_GUIDE.md:18-30), skill descriptions, engine/route.py TRIGGERS and evals/routing.jsonl; 20 or so advertised phrases route to \"answer\" (see the phrases finding).",
+   "proposed_fix": "Add evals/owner_phrases.jsonl with one row per phrase: {\"en\", \"es\", \"class\", \"skill\", \"in_guide\"}. A test routes every en and es form and checks the class; lint checks that every row with in_guide true appears in the guide's table and that the named skill's description contains the phrase. Adding a phrase then means adding one row, and the three surfaces cannot disagree.",
+   "acceptance": "`python3 -m unittest tests.test_route` covers every row; `python3 bin/brain lint` fails when a row's phrase is removed from the guide.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "owner-docs-15"
+  },
+  {
+   "title": "Idea: a command that writes and closes NEEDS_YOU items, so every item has the same checked shape",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/state.py",
+    "contract/template/NEEDS_YOU.md",
+    ".claude/skills/brain-new/SKILL.md"
+   ],
+   "evidence": "Items are written by hand (`brain --help` has no command for them); the shape Why / How / Meanwhile and \"Nothing here needs a command\" (contract/template/NEEDS_YOU.md:3) are prose only; the brain's own file drifted (resolved item first, non-actions listed, wrong click path). OWNER_GUIDE.md:44 promises \"Claude records your answer in the right file\", also by hand.",
+   "proposed_fix": "`brain needs add --title T --why W --how H --meanwhile M [--minutes N]` appends the next numbered item and refuses a How with no bold click target or with a code fence; `brain needs resolve N --answer \"his words\"` writes the RESOLVED line and moves the item under a `## Done` heading as one line; `brain needs list` prints open items. Numbers are never reused, so references stay valid.",
+   "acceptance": "Tests: add refuses a How containing a fenced block; resolve leaves open_needs without that item; STATUS.md lists the rest.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "owner-docs-16"
+  },
+  {
+   "title": "Idea: a Spanish edition of the guide, checked for parity",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "GUIA.md",
+    "OWNER_GUIDE.md",
+    "engine/lint.py"
+   ],
+   "evidence": "owner/standing.jsonl own-reply-language: \"Reply in the language he writes in, and write deliverables in the language their audience reads\"; owner/preferences.jsonl pref-bilingual-bar: \"he expects native quality in both Spanish and English, with the same facts in each edition\". The guide, both NEEDS_YOU files and STATUS.md are English only.",
+   "proposed_fix": "Add GUIA.md, a native Spanish edition of OWNER_GUIDE.md (written by the writer agent with the language playbook, not machine-literal), linked from the first line of each. Lint checks parity: same number of headings, same number of table rows, the same bold click targets. It is read on demand, so it costs no always-loaded tokens.",
+   "acceptance": "`python3 bin/brain lint` exits 1 when a section is added to one edition only.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "owner-docs-17"
+  },
+  {
+   "title": "Idea: cost he can act on, as a comparison rather than dollars he is not charged",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/state.py",
+    "OWNER_GUIDE.md"
+   ],
+   "evidence": "OWNER_GUIDE.md:50 says the dollars are not charged and \"the real limit is your plan's usage window\"; STATUS.md shows only list-price dollars and output tokens (\"Last session: about $4.36 at list prices, 44,911 output tokens, 1 helper(s)\"), which do not tell him whether a chat was heavy.",
+   "proposed_fix": "Once three sessions are recorded for a project, add one line to STATUS.md: \"This chat used about 1.4 times what a usual chat on this project uses; helpers were 60% of it.\" (median of the project's recorded sessions from .brain/log). It uses data the ledger already writes and gives him a reason to say \"use fewer helpers\".",
+   "acceptance": "Test: with four run records of known cost, the line shows the right ratio; with fewer than three it is absent.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "owner-docs-18"
+  },
+  {
+   "title": "Idea: a first-project walkthrough in the guide, then frozen as a rehearsal",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "OWNER_GUIDE.md",
+    "tests/test_rehearsal.py"
+   ],
+   "evidence": "The guide lists phrases but never shows one project from start to finish: what he types, what comes back, how long the first reply takes, what the three questions look like, when STATUS.md first has an address. CB-103 and CB-110 will produce exactly this material in a live session.",
+   "proposed_fix": "After CB-110, add a section 'Your first project, step by step' of at most 15 lines with the real messages from that run (his sentence, the three questions with defaults, the first report with its link, the first NEEDS_YOU item, the first release). Add the same sequence to tests/test_rehearsal.py as assertions on what each command prints, so the walkthrough cannot go stale without a failing test.",
+   "acceptance": "tests/test_rehearsal.py asserts the report text contains a STATUS.md link and, for an app, the live address.",
+   "effort": "M",
+   "confidence": "low",
+   "id": "owner-docs-19"
+  }
+ ],
+ "data": "TRUTH CHECK (claim -> what the command gave). Checked in the scratch copy at 19fb016 unless a later commit is named.\n\nSTALE OR FALSE\n- docs/BUILD_STATUS.md:9 \"21 engine modules (about 9,500 lines)\" -> 22 modules (ls engine/*.py without __init__), 10,554 lines with bin/brain (at 9e4b158).\n- docs/BUILD_STATUS.md:10 \"CLAUDE.md 5,356 bytes\" -> 5,423 (wc -c). \"about 2,534 tokens\" -> \"about 2550 tokens\" (brain budget, brain doctor).\n- docs/BUILD_STATUS.md:11 boot \"757 bytes for Continue\" -> 861 bytes brain-only, 819 with a project (cap 1,500 still holds).\n- docs/BUILD_STATUS.md:25 \"406 tests\" -> 407 at 19fb016; 410 at 9e4b158. NEEDS_YOU.md:18 \"310+ tests\". docs/REQUIREMENTS.md:36 (R-23) \"358\". docs/NEXT_SESSION.md:8 \"407\".\n- docs/REQUIREMENTS.md:38 (R-25) \"tests/test_radar.py (42 tests)\" -> 44.\n- docs/BUILD_STATUS.md:81 \"The brain is on its working branch, not main\" -> GitHub: main = 19fb016 = the built brain; main \"protected\": false.\n- docs/BUILD_STATUS.md:106-107 \"131 minutes, 30 helpers, 198 million tokens, $123, helpers 73%\" and docs/NEXT_SESSION.md:25 \"$162, 64% helpers\" -> stats/ledger/2026-11.jsonl row for session ad24da2f: 565.7 wall minutes, 40 helpers, 268.6 million tokens, $175.49 (fable $110.66, opus $57.17, sonnet $7.67).\n- docs/NEXT_SESSION.md:11 \"three unconsolidated records\" -> consolidated in 790084d (delta d-20261110-a431e755f2).\n- docs/plan/tickets.json: CB-200 and CB-201 \"open\" -> their results are recorded in BUILD_STATUS and commit trailers name them.\n- docs/BUILD_STATUS.md:113 names docs/plan/IMPROVEMENT_PLAN.md -> not in the tree at 9e4b158 (being written).\n- README.md:19 contract/ holds \"migrations\" -> no contract/migrations directory.\n- OWNER_GUIDE.md:64 \"a red cross ... means do not merge it yet\" against NEEDS_YOU.md:47 \"a red cross will show on every push even though nothing is wrong\" -> live: runs 33-37 of 37 all failed within 3 seconds.\n- OWNER_GUIDE.md:60 \"Claude opens each learning change as one pull request\" -> list_pull_requests(state=all) = [].\n- OWNER_GUIDE.md:27 \"last release you accepted\" -> nothing records acceptance.\n- OWNER_GUIDE.md:36/50 \"STATUS.md shows tokens used\" -> output tokens only, and no address to open.\n- OWNER_GUIDE.md:38 \"The next chat applies it\" (OVERTURNED) -> no script reads it.\n- NEEDS_YOU.md:17 click path for protecting main -> GitHub's page: Settings > Rules > Rulesets > New ruleset > New branch ruleset; enforcement defaults to Disabled; repository is private (plan requirement unchecked).\n\nVERIFIED TRUE\n- 10 skills, 6 agents; brain doctor \"brain is healthy\"; brain lint \"0 error(s), 0 note(s)\".\n- brain hr audit: 100 templates in 10 groups (scout 0, researcher 17, builder 48, writer 19, reviewer 15, redteam 1); tests/test_hr.py 48 tests.\n- HR held-out selection recomputed: top-1 78, top-3 86 of 100.\n- Routing set: 107 rows; tier 107/107 and class 76/76 recomputed.\n- brain items check: 141 items in 9 files; memory/facts.jsonl 18 rows; evals/recall_golden.jsonl 60 rows.\n- brain eval audit: 12 tasks, 12 sound; 6 seeded defects; 9 definitions of done; 5 playbooks; research files 10 + 10 + 4.\n- Two settled hires in the inbox: 54,250 and 81,995 actual tokens.\n- NEEDS_YOU.md item 7 (Actions do not start): still true today.\n- The test suite leaves a clean tree (git status empty after 410 tests in a fresh clone).\n\nOWNER PHRASES THROUGH `brain route` (copy)\nRecognised: New project:/Nuevo proyecto:, Start running, Continue/Continúa/Continua, set up, Empieza, Sigue, Resume, Keep going, Quick:/Rápido:/Rapido:, Go deep:/A fondo:, Status/Estado/Where are we?/¿Cómo vamos?, Hand over/New chat/Pasa a un chat nuevo/Prepara el relevo, What did you learn?/¿Qué has aprendido?, Go back/Vuelve atrás/Deshaz eso, Stop after this/Para después de esto, Ship it/Release/Push to main (software.release).\nSized \"0 answer, no task verb\": HR report, Informe de RRHH, Consolidate, Consolida, Learning digest, schedule the weekly learning run, use more helpers, adopt the Travel Journal, Adopt this repo, Adopta este repo, Propose options, Propón opciones, Give me 5 names for the app, Find out ..., Compare ..., Publícalo, Súbelo a main, Constrúyelo, Volver atrás, Para cuando termines esto, Revisa el cerebro, Comprueba el cerebro, How much has this cost?, ¿Cuánto ha costado?\nMis-sized: Check the brain (1, software.feature), Research ... / Investiga ... (2, data.pipeline), Build me a habit tracker (1), the session's real opening message (1, data.analysis).\n\nGENERATED FILES IN THE SCRATCH PROJECT\n- STATUS.md after init: 3 lines (\"Nothing has been built yet. Say what you want in the chat to begin.\"). After req add, checkpoint and close: 29 lines, 5 sections (Where things stand, Needs you, Cost, Recent); English labels although the project was created with --language es.\n- `brain status` short view: 14 non-empty lines, cut before \"Project to date\".\n- HANDOVER.md: 15 lines; says \"Branch with the work: main\" or the session branch; the paste line is \"Continue\".\n- boot: 819 bytes with a project, 861 brain-only, 943 for \"Start running\" brain-only."
+}

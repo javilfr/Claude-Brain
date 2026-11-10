@@ -26,14 +26,29 @@ LEARNED_ZONE = ("memory/", "owner/", "stats/", "playbooks/", "learning/")
 # Inside the learned zone, sessions may only append here.
 INBOX_DIR = "learning/inbox/"
 
-SECRET_PATTERNS = [
-    re.compile(r"sk-[A-Za-z0-9_-]{16,}"),
-    re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
-    re.compile(r"AKIA[0-9A-Z]{16}"),
-    re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
-    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-    re.compile(r"(?i)\b(api[_-]?key|secret|password|token)\b\s*[:=]\s*['\"]?[A-Za-z0-9_\-/+]{20,}"),
+# (label, pattern). The label is what a refusal names; the value is never shown.
+# Each pattern is specific to one credential format: a loose "password = ..."
+# rule would fire on ordinary code and make the scan something people ignore.
+SECRET_RULES = [
+    ("API key (sk-)", re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{16,}")),  # not the tail of a word such as "task-..."
+    ("GitHub token", re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}")),
+    ("AWS access key id", re.compile(r"AKIA[0-9A-Z]{16}")),
+    ("Slack token", re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}")),
+    ("private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("key or password assignment", re.compile(r"(?i)\b(api[_-]?key|secret|password|token)\b\s*[:=]\s*['\"]?[A-Za-z0-9_\-/+]{20,}")),
+    ("GitHub fine-grained token", re.compile(r"github_pat_[A-Za-z0-9_]{30,}")),
+    ("Google API key", re.compile(r"AIza[0-9A-Za-z_-]{35}")),
+    ("Stripe key", re.compile(r"\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}")),
+    ("signed web token", re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
+    ("bearer token", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}")),
+    ("password inside an address", re.compile(r"\b[a-z][a-z0-9+.-]{1,15}://[^/\s:@]+:[^@\s/]{6,}@[A-Za-z0-9.-]+")),
+    ("npm token", re.compile(r"\bnpm_[A-Za-z0-9]{30,}")),
+    ("Telegram bot token", re.compile(r"\b\d{8,10}:AA[A-Za-z0-9_-]{30,}")),
+    ("SendGrid key", re.compile(r"\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}")),
+    ("Twilio key", re.compile(r"\b(?:SK|AC)[0-9a-f]{32}\b")),
+    ("AWS secret key", re.compile(r"(?i)aws.{0,24}(?:secret|private).{0,24}['\"][A-Za-z0-9/+=]{40}['\"]")),
 ]
+SECRET_PATTERNS = [pat for _label, pat in SECRET_RULES]
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 
@@ -224,6 +239,26 @@ def find_secrets(text: str) -> list[str]:
         if pat.search(text or ""):
             hits.append(f"secret-pattern-{i}")
     return hits
+
+
+def secret_problem(text: str) -> str:
+    """One line to print when text holds something shaped like a credential,
+    else "". It names the kind, never the value, and says what to do instead:
+    chat and git history cannot be cleaned, so the engine refuses to store it."""
+    for label, pat in SECRET_RULES:
+        if pat.search(text or ""):
+            return (f"refused: this text holds what looks like a {label} (the value is not shown or stored). "
+                    "Ask for it through the secure credential form, or add a NEEDS_YOU item with the clicks to store it in the environment's settings")
+    return ""
+
+
+def redact_secrets(text: str) -> str:
+    """The text with every credential-shaped run replaced by ``[redacted]``,
+    for records that must keep the rest (a gate command, a log line)."""
+    out = text or ""
+    for _label, pat in SECRET_RULES:
+        out = pat.sub("[redacted]", out)
+    return out
 
 
 # ---------------------------------------------------------------- projects

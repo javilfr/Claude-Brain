@@ -1,0 +1,344 @@
+{
+ "summary": "I ran the first real two-repository flow in a scratch copy for the Spanish request and built the tool: `gastos.py`, 102 lines, 7 tests, released to `main` on a green gate and passing from a clean clone. The engine is fast and quiet, but \"Continue\" in a new chat picks up the right item only when that chat happens to open the working branch.\n\n**What a new chat saw, from fresh clones of the remotes:**\n\n| Moment | Branch the new chat opens | What `boot` reported |\n|---|---|---|\n| After item 1, project on `main` | `main` | \"bootstrap · empty project\" — nothing had been pushed, and `checkpoint --push` exited 0 |\n| Mid-build, state pushed to a working branch | `main` | \"bootstrap · empty project\" |\n| Mid-build | the working branch | correct: item P2, last done P1 |\n| After release and checkpoint | `main` | stale: \"item: P3 · last done: P2\", one requirement open, \"no gate has run\" |\n| After `handover` said \"ready\" | `main` | \"item: none · next: P3\" (P3 was finished) |\n| After `handover` | the working branch | correct, with the note |\n\n**Process cost on top of the building** (about 11 build commands, 8,038 bytes of code and tests):\n- 36 brain commands returned 7,958 bytes in 7.6 s.\n- 3 required reads (playbook and two definition-of-done files) added 5,295 bytes.\n- 5 help look-ups for formats the skills do not give added 3,307 bytes.\n- The six skills are 14,559 bytes.\n- About 18 of the 36 commands would have been enough for this project.\n\n**Other main defects:**\n- **Helpers:** HR picked a `researcher` agent with no shell for a code task that has a test command. When no helper ran, `settle` still recorded a pass for the template.\n- **Evidence:** `req evidence --done` accepted a path that does not exist.\n- **Spanish:** recall returned nothing for the owner's Spanish request and three items for its English translation.\n- **Running tests:** `brain run` executes in the caller's folder; from the brain folder it ran the brain's own tests and printed \"ok\".\n- **Learning:** `brain close` as the skill writes it records `tier: null`, so the sizing learner gets no label.\n\n**One side effect to know about:** my `cp -a` copy kept the real `origin`, and one `checkpoint --push` at 17:52 tried to push \"learn: session records\" to GitHub. It was rejected as non-fast-forward and nothing landed (commit 73edba2 does not exist in the real repository). I then pointed the copy at a local bare remote. This is the hazard already ticketed as CB-211.\n\nEverything is in `/tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/e2e-trial`; the friction log is `tools/friction.tsv` there, with each step's output in `tools/out/`.",
+ "strengths": [
+  "Speed and quiet output: all 88 brain invocations took 0.11-0.50 s except one at 1.36 s (a network push attempt). Typical output is tiny: `req add` 12 bytes, `req evidence` 39, `checkpoint` 90-250, `boot` 240-283, a test run through `brain run` three lines.",
+  "Release safety held under every probe: `release` refused with uncommitted work, pushed only fast-forward on a green gate recorded for HEAD, and tolerated bookkeeping-only changes after the gate. `checkpoint --push` never put ungated work on `main`; the block is right, only its exit code and way out are missing.",
+  "Resume is accurate when the chat is on the branch that holds the state: in a fresh clone `boot` plus `resume` gave item, last done, next, the open ledger lines with their pass conditions and the last gate with its commit in under 700 bytes, with no file reads needed.",
+  "HR's guard rails work: hiring again marks the earlier contract `superseded` automatically; `hire --material-tokens 3000` answered \"do not hire\" with the start-up cost; `settle` ran the sealed check itself and took no self-report; `--dry-run` writes nothing.",
+  "The closing chain is evidence-based and mostly self-serving: `learn note` required evidence that resolved to a real gate run, `close` recorded real token use and the gate result with hashed request words, and `handover` committed and pushed both repositories' records itself before printing one line to paste."
+ ],
+ "findings": [
+  {
+   "title": "On a new project that sits on its release branch, no checkpoint reaches the remote before the first green release, and `checkpoint --push` still exits 0",
+   "severity": "blocking",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-new/SKILL.md"
+   ],
+   "evidence": "Empty repo on `main` with a bare origin, `init --release main-on-green`, then the plan skill's first checkpoint. `brain checkpoint --stage build --item P1 --next P2 --next P3 --push` exited 0 and printed: \"checkpoint committed; not pushed: this is the release branch (main) and 2 changed file(s) are not released yet (e.g. .brain/ext/README.md): use `brain release`, which pushes only on a green gate\". The two files are init's own `.brain/ext/README.md` and `.brain/project.json`. Following the hint, `brain release --run-gates --push` printed \"refusing: uncommitted changes. Commit, run `brain gate --all`, then release.\" (the only uncommitted file was the `CLAUDE.md` that init wrote and nothing tells the lead to commit). After item 1 was built and committed, the next `checkpoint --done P1 ... --push` said the same with \"8 changed file(s)\". `git ls-remote origin` still showed only the initial commit. A fresh clone plus `brain boot \"Continúa\"` printed \"mode: bootstrap · empty project: on 'New project: …' run `brain init <path> --family F --title T`\". Code: `release_branch_block` at state.py:120 treats `.brain/project.json` and `.brain/ext/` as work; `cmd_checkpoint` at state.py:399 returns 1 only when the message contains \"FAILED\".",
+   "repro": "git init -b main p; add a bare origin; push an empty commit; `brain init p --family software --title T --release main-on-green`; `brain checkpoint --item P1 --push; echo $?`; `git -C p ls-remote origin`.",
+   "proposed_fix": "1) state.py `push_bookkeeping`: when the release-branch block applies, do not stop. Push the same commit to a side branch that is not the release branch (`git push origin HEAD:refs/heads/brain/wip-<project id>`, plain push, a session-suffixed name if that is rejected) and print \"saved to origin/brain/wip-<id>; main is updated only by `brain release`\". 2) `cmd_checkpoint` returns non-zero whenever nothing reached a remote. 3) contract.py `cmd_init`: in a git repository, commit the files it created as \"chore(brain): contract v1\" so the project `CLAUDE.md` is not left untracked; when HEAD is the release branch under `main-on-green`, print one line: \"work on a branch: git switch -c work/<id>\". 4) brain-new, Set up: add \"If the repository is on its release branch, switch to a working branch before the first checkpoint; checkpoints push only bookkeeping to the release branch.\"",
+   "acceptance": "New test in tests/test_hygiene.py: init on `main` with a bare origin and `main-on-green`, run `checkpoint --item P1 --push`, clone the origin fresh; `.brain/STATE.md` is reachable on a remote branch and `main` is unchanged. A second test asserts `cmd_checkpoint` returns non-zero when its message contains \"not pushed\". A third asserts `git status --porcelain` is empty right after `init` in a git repository.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-01"
+  },
+  {
+   "title": "A new chat that opens the default branch does not see state saved on the working branch; handover's line to paste omits the branch",
+   "severity": "blocking",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-start/SKILL.md"
+   ],
+   "evidence": "With the full state pushed to `origin/claude/gastos-inicio` and `main` still at the initial commit, a fresh clone (checked out on `main`) and `brain boot \"Continúa\"` printed \"brain: brain · mode: bootstrap · empty project: on 'New project: …' run `brain init …`\" followed by the contradictory \"size: 2 project · software · resume · resume at the recorded size 2\". After `git switch claude/gastos-inicio` the same command printed the right position (\"item: P2 · last done: P1 · next: P3 · requirements: 2/4 done\"). `brain handover` printed \"ready: both repositories are committed and pushed\" and \"paste in a new chat with both repositories attached:  Continue\"; the line \"Branch with the work: claude/gastos-inicio\" exists only in `.brain/HANDOVER.md` on that branch. The information is cheap to get from a clone on `main`: `git for-each-ref --sort=-committerdate refs/remotes/origin` plus `git show <ref>:.brain/STATE.md` returned \"origin/claude/gastos-inicio … updated: 2026-11-10T17:55:45Z\" against the checked-out \"updated: 2026-11-10T17:55:01Z\". Code: detect.py:107 prints only \"project folder: gastos\" for an unmanaged checkout.",
+   "repro": "Push `.brain/` on a branch other than the default, clone the remote, run `brain boot \"Continue\"`.",
+   "proposed_fix": "detect.py `boot_lines`: for a git project, read the five most recently committed `refs/remotes/origin/*`, take `updated:`, `item:` and `last_done:` from `<ref>:.brain/STATE.md`, and print one line when a ref holds a newer state than the checkout, or any state while the checkout has none: \"newer state on origin/<branch> (item …, last done …, <time>): switch to it or merge it before working; do not init\". In bootstrap mode this replaces the init hint. state.py `cmd_handover`: when the branch is not the release branch, print \"Continue (branch <name>)\". brain-start, Orient: one sentence saying to act on that line first. If cloud clones turn out to be single-branch, fall back to `git ls-remote --heads origin` and a depth-1 fetch of the newest `claude/*` or `work/*` branch; I could not check that here (it belongs with CB-104).",
+   "acceptance": "tests/test_core.py: state on branch `work` pushed, `main` without `.brain/`; in a fresh clone, boot output contains \"origin/work\" and does not contain \"brain init\". Second case: `main` holds an older `updated:` than `origin/work`; boot prints the newer-state line. Boot stays within its 1,500-byte cap. `handover` output contains the branch name when it differs from the release branch.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-02"
+  },
+  {
+   "title": "After a release, main never holds the record of that release: \"Continue\" from main repeats the release item, and a second release duplicates the release log",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-verify/SKILL.md"
+   ],
+   "evidence": "On the working branch: `gate --all` (exit 0), `req evidence R-004 … --done`, `req check` (all 4 done), then `release --run-gates --push` printed \"released d44d0ad to main (fast-forward, gates green)\" while `git status` still showed ` M .brain/requirements.jsonl`, `?? .brain/log/gates.jsonl`, `?? .brain/log/releases.jsonl`. `checkpoint --done P3 --stage deliver --push` then pushed only the working branch (`ls-remote`: main d44d0ad, claude/gastos-inicio bd9b4fa). A fresh clone of `main`: boot \"stage build · item: P3 · last done: P2 · next: P3 · requirements: 3/4 done, 1 open\"; resume \"no gate has run\"; `req check` exit 1 \"R-004: open — con tests\". Running `release --push` again printed \"released bd9b4fa to main\", left ` M .brain/log/releases.jsonl`, and the log now holds two records for one release. The software playbook's `sw-tag-known-good` relies on that log to go back to an accepted release. brain-verify never mentions a checkpoint after the release.",
+   "repro": "On a working branch with a green gate: `brain release --run-gates --push`, `brain checkpoint --done X --push`, clone the remote, run `brain boot` and `brain req check` on `main`.",
+   "proposed_fix": "gate.py `cmd_release`, after a successful push: append the release record, commit the bookkeeping (reuse `state.push_bookkeeping`), then fast-forward the release branch to that bookkeeping commit with a plain `git push origin HEAD:<branch>`; this is allowed by the existing rule because only bookkeeping differs. When `same_work(last released commit, HEAD)` is true, print \"already released; bookkeeping synced\" and append no record. state.py `push_bookkeeping` on a working branch: when `origin/<release branch>` is an ancestor of HEAD and the difference is bookkeeping only, also push `HEAD:<release branch>`.",
+   "acceptance": "Extend tests/test_rehearsal.py: after `release --run-gates --push` and one `checkpoint --done X --push` on a working branch, `git rev-parse origin/main` equals `git rev-parse HEAD`; in a fresh clone of `main`, `brain req check` exits 0 and `brain resume` shows \"gate checks exit 0\"; `.brain/log/releases.jsonl` has exactly one line; a second `release --push` adds none and leaves the tree clean.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-03"
+  },
+  {
+   "title": "`checkpoint --done X` leaves X in `next`, so the checklist keeps an open line for finished work",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "`brain checkpoint --done P2 --item P3 --push` printed \"checkpoint: stage build · item: P3 · next: P3\". `brain checkpoint --done P3 --stage deliver --push` printed \"checkpoint: stage deliver · item: none · next: P3\", and `.brain/CHECKLIST.md` then read \"- [ ] next: P3\" although every item and all four requirements were done. brain-start says an unattended run \"keeps working while `.brain/CHECKLIST.md` … has open lines\". A new chat's boot showed \"item: none · last done: P3 / next: P3\". Code: `checkpoint()` at state.py:76 sets `item` and `last_done` but never removes them from `next`. The only way to clear it was `checkpoint --next ''`, which no skill mentions.",
+   "repro": "`brain checkpoint --item P1 --next P2`; `brain checkpoint --done P1 --item P2`; `brain checkpoint --done P2`; `cat .brain/CHECKLIST.md`.",
+   "proposed_fix": "In `checkpoint()`, when `--next` is not passed, drop from the stored `next` list any entry equal to the new `item` or to `done`. Document `--next ''` in the flag's help as the way to empty the list.",
+   "acceptance": "tests/test_core.py: with next \"P2; P3\", `--done P1 --item P2` leaves next \"P3\"; `--done P2 --item P3` leaves it empty; `--done P3` writes a checklist whose only line is \"- nothing open\".",
+   "effort": "S",
+   "confidence": "high",
+   "id": "e2e-trial-04"
+  },
+  {
+   "title": "HR assigns agents that cannot do the work: a researcher with no shell for a code task with a test command, a read-only reviewer for a build ticket, and Opus at ten times the wage when the task is worded in Spanish",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/route.py",
+    "/home/user/Claude-Brain/.claude/agents/researcher.md"
+   ],
+   "evidence": "In the `family: software` project: `brain hr hire \"Add a monthly summary command (resumen AAAA-MM: total per category and month total) to the expenses CLI, with unit tests\" --owns gastos.py --owns tests/test_gastos.py --check \"python3 -m unittest tests.test_gastos.SummaryTests\"` printed \"template none fits: plain helper … agent: researcher · model sonnet · effort medium … wage: 60,000\". The contract holds `\"family\": \"knowledge\", \"task_class\": \"knowledge.longform\"`; `brain route` on the same text says \"size 1 small task | knowledge | knowledge.longform\" (the word \"summary\"). `.claude/agents/researcher.md:4` is `tools: Read, Grep, Glob, WebSearch, WebFetch, Write`: no Bash and no Edit, so it cannot run the acceptance command or edit the file it owns. Dry runs with `--owns gastos.py` and a unittest check: \"Add the monthly summary command with unit tests\" gave \"template repo-cartographer … agent: reviewer\"; \"Añade el resumen mensual a gastos.py con tests\" gave \"template knowledge-base-compiler … agent: writer · model opus … wage: 200,000 output-equivalent tokens (about $4.00)\", against 20,000 ($0.20) for an English CLI wording. `hr staff` gave the same ticket \"repo-cartographer · reviewer on opus · wage 20,000 ($0.40)\". Code: hr.py:538 lets `route.classify(task, …)` override the project's family; hr.py:552 falls back to `researcher` whenever the family is not software. This is not the known \"one request in seven misses the top three\": here the chosen agent lacks the tools the contract requires.",
+   "repro": "In a software project: `brain hr hire \"Add a monthly summary command to the CLI, with unit tests\" --owns x.py --check \"python3 -m unittest\" --dry-run`.",
+   "proposed_fix": "In `hire()`: 1) when a project is attached, its manifest family is the default; the text classifier decides only without a project or with `--family`. 2) A capability filter before template scoring: with `--owns`, only templates whose base agent can edit and run (builder, writer); with a command check, only agents that have Bash; the plain fallback is `builder` whenever `--owns` or `--check` is given. 3) Apply the same filter in `cmd_staff` from the ticket's `files`. 4) Pass the task text through the same Spanish-to-English term map proposed for recall before scoring. 5) Print the family used and why (\"family software (project)\") on the agent line.",
+   "acceptance": "tests/test_hr.py: the three dry runs above, in a software project, print \"agent: builder\"; the Spanish wording's wage is within twice the English one; `hr staff` never gives scout, researcher, reviewer or redteam to a ticket that lists `files`. Add ten Spanish requests to the labelled HR set and report the held-out figure for them.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-05"
+  },
+  {
+   "title": "`req evidence --done` accepts any text: a path that does not exist closed a requirement before its code existed, the stored check is never run, and a line cannot be reopened",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/req.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "Before any monthly-summary code existed: `brain req evidence R-003 \"no/such/file.log\" --done` printed \"R-003: 1 evidence item(s), status done\" with exit 0, and `req list` showed \"R-003 [done] un resumen mensual\". The line's own check (`python3 -m unittest tests.test_gastos.SummaryTests`, given with `req add --check`) would have failed; no command runs it: `cmd_evidence` (req.py:148) appends the string and `cmd_check` (req.py:203) only reads status and the evidence list. The subcommands are add, set, evidence, drop, list, check; with no reopen I had to hand-edit `requirements.jsonl`, which left the generated `REQUIREMENTS.md` stale. The skill's suggested evidence, a log path, points into `.brain/log/run/`, which `.brain/.gitignore` excludes (`log/run/`), so R-001's evidence `.brain/log/run/20261110-175129-5341f4df.log` does not exist in the next session's clone.",
+   "repro": "`brain req add --quote q --passes-when w --check false`; `brain req evidence R-001 nothing-here --done`; `brain req check; echo $?`.",
+   "proposed_fix": "`cmd_evidence`: resolve each evidence string as an existing path (for `path:line`, the file has that line), `gate:<id>` (a green record for HEAD in gates.jsonl), `run:<log>` (store the exit code and a hash of the log, since the file is ignored by git) or a URL; refuse `--done` when nothing resolves. Add `req evidence <id> --run`: run the line's check in the project through `run_filtered`, attach \"run:<log> exit 0 @<commit>\", mark done only on exit 0. Add `req check --run` to re-run every stored check, and `req reopen <id> --reason`. brain-build: replace the evidence sentence with \"`BRAIN req evidence <id> --run --done` runs the line's check and records the result\".",
+   "acceptance": "tests/test_core.py ReqTests: a missing path with `--done` exits 1 and the line stays open; `--run` leaves a failing line open and marks a passing one done with \"exit 0\" in its evidence; `reopen` returns a done line to open and regenerates REQUIREMENTS.md; `req check --run` exits 1 when a done line's check now fails.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-06"
+  },
+  {
+   "title": "Settling a hire nobody worked records a pass or fail for the template, and a failed settle is final but prints as if it had been run again",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "No helper ran in this trial; I did each hire's work myself. `brain hr settle` printed \"h-20261110-c84ca7: cli-script-builder on sonnet · usage not found on this machine · check passed\" and appended to the brain inbox `{\"kind\": \"hire\", \"template\": \"cli-script-builder\", \"model\": \"sonnet\", \"passed\": true, \"actual_tokens\": null, \"sealed\": true}`. `fold_hire` (hr.py:228) moves the template, group and rack pass counts whenever `passed` is a bool and `sealed` is true, whether or not a helper transcript was found, so the template earned a pass for work a different model did. Second case: settling the next hire before its work existed printed \"h-20261110-dfe429: plain on sonnet · usage not found on this machine · CHECK FAILED\" (exit 1). After the fix, when the same check passed in `brain run`, `brain hr settle h-20261110-dfe429` printed the identical \"CHECK FAILED\" line with exit 1. The contract's `check_log` was unchanged, because `settle()` returns early for a settled contract. brain-build says \"A failed check goes back to the same helper once with the failing output\" but gives no way to record the retry.",
+   "repro": "`brain hr hire \"t\" --check \"test -f done.txt\"`; `brain hr settle`; `touch done.txt`; `brain hr settle <id>`; read the inbox file.",
+   "proposed_fix": "`settle()`: store `helper_seen = bool(usage)` in the contract and the inbox record. `fold_hire`: count a pass or fail only when `helper_seen` is true. `cmd_settle`: without a transcript print \"no helper transcript mentions this contract: result kept for the project, not counted for the template (if nobody ran it: brain hr settle <id> --abandon)\". Add `hr settle <id> --retry`, allowed once: re-run the sealed check and record `passed_after_retry` while the first result stays as the first-pass result. A plain re-settle prints \"settled at <time>, check failed then; not re-run (use --retry after the fix)\". brain-build: name `--retry` in the failed-check sentence.",
+   "acceptance": "tests/test_hr.py: settling with no transcript paths and a passing check leaves the template's pass counts unchanged after a fold; fail then `--retry` pass gives exit 0 and a record with first pass false and `passed_after_retry` true; a plain re-settle of a failed contract contains \"not re-run\".",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-07"
+  },
+  {
+   "title": "`brain run` runs where it was typed, not in the detected project: from the documented stance the project's tests fail to import, from the brain folder the brain's own tests run and report ok; same-second logs overwrite each other",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/CLAUDE.md"
+   ],
+   "evidence": "From the folder that holds both repositories (the stance `CLAUDE.md` gives: `python3 Claude-Brain/bin/brain`), `brain run -- python3 -m unittest tests.test_gastos.AddTests tests.test_gastos.CategoryTests` printed \"FAILED (exit 1) … ImportError: Failed to import test module: tests … full output: /tmp/brain-run/20261110-175112-5341f4df.log\". From the same folder `validate`, `req`, `checkpoint`, `gate` and `hr` all found `gastos` by themselves. `brain run -- pwd` printed the caller's folder each time. From inside the brain folder, `python3 bin/brain run -- python3 -m unittest tests.test_route` printed \"ok in 0.7s · 5 lines … Ran 16 tests … OK\": the brain's own tests. This project's gate, `python3 -m unittest discover -s tests -t .`, is the same command as the brain's, so a lead whose working folder is the brain gets a green result for the wrong suite. Only `brain run --help` reveals `--cwd`. Log names: two `brain run -- pwd` calls in one second from different folders both printed \"full output: /tmp/brain-run/20261110-175128-a1159e9d.log\" and the file holds only the second; two identical concurrent runs inside the project both reported `.brain/log/run/20261110-175816-da453be0.log`. Code: gate.py:49 names the log from the second and the command's hash; `cmd_run` (gate.py:215) says \"The command runs where it was typed\". The known item M16 covers only where the log goes.",
+   "repro": "From the parent of brain and project: `python3 brain/bin/brain run -- pwd`. Then run the same `brain run -- \"echo x; sleep 0.2\"` twice in parallel and compare the two log paths.",
+   "proposed_fix": "`cmd_run`: when the caller's folder is not inside a managed project and exactly one managed project is detected (the same detection every other command uses), run there and start the digest with \"in <project>:\"; `--cwd` still overrides. Refuse to guess when several projects are attached. Name the log with microseconds and the process id, or create it exclusively and add a counter on collision.",
+   "acceptance": "tests/test_core.py: from the parent folder with one managed sibling, `brain run -- pwd` prints the project path and writes under its `.brain/log/run/`; from inside the brain folder with a project attached, the same; two runs of one command in the same second leave two log files.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "e2e-trial-08"
+  },
+  {
+   "title": "Recall works only in English: the owner's Spanish request returns nothing while its translation returns three items",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/recall.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/evals/recall_golden.jsonl",
+    "/home/user/Claude-Brain/.claude/skills/brain-plan/SKILL.md"
+   ],
+   "evidence": "Step 1 of brain-plan with the real request: `brain recall \"herramienta de línea de comandos en Python para apuntar gastos con categorías y resumen mensual, con tests\" --family software` printed \"nothing relevant in memory\". The English equivalent printed three items, about 181 tokens (`rule-bulk-through-run`, `rule-claim-audit`, `sw-release-command`). Paired probes: \"arregla el bug del login que falla en producción\" gave nothing, \"fix the login bug that fails in production\" gave `sw-reproduce-first` and two more; \"traduce este documento al inglés\" gave nothing, the English gave three; \"haz capturas de pantalla en el móvil\" gave nothing, \"take screenshots at phone size\" gave `sw-phone-screenshots` and two more. `evals/recall_golden.jsonl` has 60 queries and none is Spanish, so the reported recall@5 of 0.781 says nothing about his usual language. Boot shows the same split: in one state `boot \"Continúa\"` returned 287 bytes with no recall, `boot \"Continue\"` returned 766 bytes, of which 479 are three recall lines restating rules already in the always-loaded file (`own-trigger-words`, `rule-checkpoint-boundary`, `pref-visible-progress`). Cause: items are English and the coverage floor (`DEFAULT_FLOOR = 0.15`, recall.py:47) is taken over the query's own terms; `route.py` has Spanish vocabulary, `recall.py` has none.",
+   "repro": "`brain recall \"arregla el bug del login que falla en producción\" --family software` against `brain recall \"fix the login bug that fails in production\" --family software`.",
+   "proposed_fix": "recall.py: before stemming, map Spanish content words to English through a table kept in the engine (start from the pairs in route.py and add the playbooks' vocabulary, about 200 pairs: arregla/fix, prueba/test, publica/release, captura/screenshot, móvil/phone, traduce/translate, resumen/summary, gasto/expense). Unmapped Spanish function words must not count against coverage. detect.py: skip recall when the request is a bare trigger (resume, status, handover). Add 20 Spanish queries, translations of labelled ones, to the golden file as their own split. Until then, brain-plan step 1 should read \"`BRAIN recall \"<the request in one English line>\"`\".",
+   "acceptance": "tests/test_recall.py: recall@5 on the Spanish split is at least 0.6 and the English figures are not lower than today (0.781, MRR 0.853); `boot \"Continue\"` and `boot \"Continúa\"` print the same lines, with no \"recall [\" line for a bare resume.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-09"
+  },
+  {
+   "title": "`brain close` as the skill writes it records `tier: null`, so the sizing learner gets no label from normal sessions",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/ledger.py",
+    "/home/user/Claude-Brain/engine/mlearn.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-learn/SKILL.md"
+   ],
+   "evidence": "`brain close --outcome ok --class software.feature --request \"Nuevo proyecto: …\"` (the exact form in brain-learn) wrote an outcome record with `\"rule_tier\": 2, … \"tier\": null` and twelve hashed request words, while `.brain/STATE.md` held `tier: 2`. Code: ledger.py:505 passes `tier=args.tier`, which is None unless `--tier` is typed; `_sizing_learn` (mlearn.py:706) reads `label = r.get(\"tier\")` and returns when the label is not a known size. Every session closed the documented way therefore teaches the shadow sizing learner nothing, even though the size the work ran at is on disk.",
+   "repro": "In a project whose STATE.md says tier 2: `brain close --outcome ok --class software.feature --request \"build x\" --json` and read the outcome's `tier`.",
+   "proposed_fix": "`cmd_close`: when `--tier` is absent, take the size from the project's `STATE.md` (then the manifest's `tier`), and keep `--tier` as an override. No skill change is needed.",
+   "acceptance": "tests/test_ledger.py: closing without `--tier` in a project whose state says 2 writes `tier == 2`; after folding that record, the sizing counts hold an entry for size 2.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "e2e-trial-10"
+  },
+  {
+   "title": "`checkpoint --push` also commits and pushes the brain repository, from any copy and without saying so (already ticketed as CB-211; measurement and fix details)",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md",
+    "/home/user/Claude-Brain/.claude/skills/brain-handover/SKILL.md"
+   ],
+   "evidence": "In my `cp -a` copy, which kept the real `origin`, `brain checkpoint --done P1 --item P2 --next P3 --push` at 17:52:16 printed \"brain records committed; PUSH FAILED: To https://github.com/javilfr/Claude-Brain ! [rejected] claude/optimistic-newton-sh6lcx -> claude/optimistic-newton-sh6…\" and exited 1. Nothing landed: the copy's commit 73edba2 is absent from the real repository (`git branch -a --contains 73edba2`: \"no such commit\"); it was refused only because the real branch had moved on. I then set the copy's origin to a local bare repository. The real repository's commit 9e4b158 shows another copy did push three records. What the ticket may not have: `checkpoint --help` says only \"also commit the bookkeeping files and push the branch\" and brain-build says \"It commits only bookkeeping files and pushes\"; neither mentions the brain. Exit codes disagree: the project not being pushed returned 0, the brain push failing returned 1 (state.py:399). brain-handover step 2 tells the lead to \"Commit the learning inbox file … and push the brain's working branch\" by hand, yet `handover` did both itself and printed \"ready\" without that step.",
+   "repro": "`cp -a` the brain, attach a project, run `brain hr settle` (writes an inbox record), then `brain checkpoint --push`.",
+   "proposed_fix": "`push_brain_records`: 1) do nothing when `BRAIN_NO_PUSH` or `BRAIN_NO_NETWORK` is set, and print that it skipped; 2) commit only inbox files named for this session's id, never whatever else sits in the folder; 3) refuse when the brain root is under the system temporary folder or a scratchpad path unless `BRAIN_ALLOW_PUSH=1`. Say in the `--push` help and in brain-build that the brain's own records are pushed too. Remove the manual commit sentence from brain-handover step 2. Any audit or rehearsal brief that says \"make a copy\" should add `git -C <copy> remote remove origin`.",
+   "acceptance": "tests/test_hygiene.py: with `BRAIN_NO_PUSH=1`, `checkpoint --push` creates no commit in the brain; an inbox file not named for this session is left uncommitted; a brain root under the temporary folder is not pushed without the override. `brain lint` requires the `--push` help to mention the brain repository.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "e2e-trial-11"
+  },
+  {
+   "title": "The tickets file has two undocumented shapes: `hr staff` ignores `check` and reports \"no acceptance command\"",
+   "severity": "minor",
+   "kind": "unclear",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/engine/schedule.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-plan/SKILL.md"
+   ],
+   "evidence": "brain-plan says \"put them in a tickets file\" with no format. `brain plan schedule --help` documents `{\"agents\": 4, \"tickets\": [{\"id\", \"est\", \"deps\", \"files\", \"tokens\"}]}` (no unit for `est`); `brain hr staff --help` documents nothing (\"positional arguments: plan\"). A file written to the documented shape scheduled correctly, but `hr staff` printed \"P1: plain · builder on sonnet · lead does it (no acceptance command)\" for every ticket. Adding `title` and `check`, the word `req add` and `hr hire` use, still printed \"P1: cli-script-builder · builder on sonnet · lead does it (no acceptance command)\". Only after reading `cmd_staff` (hr.py:876) did I find that it reads `title`, `goal`, `accept`, `size`, `material_tokens`, `parallel`, `family`, `risk`; with `accept` it printed \"wage 20,000 ($0.20)\". This cost two help look-ups, a source read and two extra `hr staff` runs.",
+   "repro": "Write a tickets file with id, est, deps, files, tokens, title and check; run `brain hr staff <file>`.",
+   "proposed_fix": "`cmd_staff`: accept `check` as the acceptance command (keep `accept` as an alias); when a ticket has neither `title` nor `goal`, print \"<id>: no title or goal, template chosen blind\". Give both commands the same help epilog listing every key with its unit (`est` in minutes). In brain-plan section 4, add one example ticket on one line.",
+   "acceptance": "tests/test_hr.py: a ticket with `check` gets a wage line; a ticket without title or goal gets the warning. tests/test_lint.py: both helps mention `title`, `check` and the unit of `est`.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "e2e-trial-12"
+  },
+  {
+   "title": "Files the owner reads are in English with bare ids although the project was created with `--language es`; the option is stored and never read",
+   "severity": "minor",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-plan/SKILL.md",
+    "/home/user/Claude-Brain/.claude/skills/brain-new/SKILL.md"
+   ],
+   "evidence": "brain-new gives `--language L` with no meaning, and `brain init --help` lists `--language LANGUAGE` with no help text; I had to read the source to learn it is the owner's language and not the programming language. `init … --language es` stored `\"languages\": [\"es\"]`; `grep -n language engine/*.py` finds it only in contract.py (lines 75, 310-311, 376), where it is written, and nothing reads it. `STATUS.md` after two checkpoints, for an owner who wrote in Spanish: \"## Where things stand / - Working on: P2 / - Last finished: P1 / - Next: P3 / - Requirements: 2 of 4 done with evidence, 2 open\". `NEEDS_YOU.md` and `.brain/HANDOVER.md` are English too. The ids come from the skills' own wording (`--item <first id> --next <id>`), so the owner's status says \"P2\" and never what P2 is, and after the release it does not mention that anything was released.",
+   "repro": "`brain init p --family software --title T --language es`; `brain checkpoint --item P2`; `cat p/STATUS.md`.",
+   "proposed_fix": "A two-language label table (en, es) in the engine for the roughly 20 fixed strings of `write_status`, the `NEEDS_YOU.md` template and the handover note, chosen by `languages[0]`. Help text for the option: \"the owner's language for the files he reads (en or es)\", and the same words in brain-new. `checkpoint`: when `--item`, `--done` or `--next` is a bare id that starts a line in `.brain/PLAN.md`, store the id with that line's title (clipped to 60 characters). `write_status`: add the last release from `releases.jsonl` (\"Published: <date>, <short commit>\").",
+   "acceptance": "tests/test_core.py: after `init --language es` and a checkpoint, STATUS.md contains \"Trabajando en\" and not \"Working on\"; with a PLAN.md line \"1. **P2 · resumen mensual**\", `checkpoint --item P2` stores an item that starts \"P2 · resumen mensual\"; after a release STATUS.md has a line with the released commit.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-13"
+  },
+  {
+   "title": "Process weight on a three-item project: 36 process commands, 3 required reads and 5 help look-ups around 11 build commands, and several output lines mislead",
+   "severity": "minor",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/.claude/skills/brain-plan/SKILL.md",
+    "/home/user/Claude-Brain/.claude/skills/brain-verify/SKILL.md",
+    "/home/user/Claude-Brain/.claude/skills/brain-handover/SKILL.md",
+    "/home/user/Claude-Brain/engine/route.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/method/dod/app-or-feature.md"
+   ],
+   "evidence": "Measured (full table in `data`). 36 process commands: 7,958 bytes out, 4,722 bytes of command text typed, 7.58 s. 3 required reads: 5,295 bytes (playbook 3,638; two definition-of-done files 1,657). 5 help look-ups forced by gaps: 3,307 bytes. Six skills: 14,559 bytes. The build itself: 3 file writes (190 lines, 8,038 bytes), 3 test runs, 3 commits, 1 release. By command: checkpoint 6 calls, 1,074 bytes; hr hire 3 calls, 2,638 bytes, the largest; req add 4 and req evidence 4 calls. Skippable with nothing lost here: `validate` after `init`; `req list`; `plan schedule` and `hr staff` for a serial plan; all three hires (HR's own rule says \"do not hire: about 3,000 tokens of material is small enough to do yourself\" once a size is given); `status` and `ledger` unasked. The playbook had 2 lines of 14 that applied and the checklists 6 of 16 (no screens, budgets, migration or live address for a command-line tool). About 18 commands and 2 KB would have carried the same guarantees. Misleading lines: boot for the request printed \"size: 2 project · software · software.feature · new project; no task verb; answer or acknowledge\" (route.py:275 and :335); `hr hire … --check …` printed \"the brief assumes you supplied: … the acceptance command\" although it was supplied (hr.py:777), and \"note: the brief is 389 words; briefs read best under 350\" for a two-sentence task; brain-verify's risk list says \"High (release, …)\", which makes every `main-on-green` release need a fresh reviewer, even for 100 lines.",
+   "repro": "Replay `tools/friction.tsv` in the scratch folder, or count brain invocations in tests/test_rehearsal.py.",
+   "proposed_fix": "Engine: `init` validates itself; `req add` takes several lines in one call (repeatable `--line` or `--from <file>`); `handover` accepts `--note`, `--outcome`, `--class`, `--request` and runs checkpoint and close itself. route.py: for the new-project trigger, replace the inner reason when the inner size is 0 (\"new project\"); detect.py: no \"resume at the recorded size\" text in bootstrap mode. hr.py: drop a template need the flags already satisfy and print the delegate line once. Skills: brain-plan step 1 points to recall first and the playbook only when recall returns nothing; brain-verify: \"High (a release of something public or holding users' data, …)\" and \"read `code-change.md`, and `app-or-feature.md` only when there is a screen or a live address\"; brain-handover: drop the manual brain commit.",
+   "acceptance": "tests/test_rehearsal.py counts brain invocations and output bytes for a three-item serial project and asserts at most 22 commands and 6,000 bytes. String tests: boot for \"Nuevo proyecto: una herramienta …\" does not contain \"answer or acknowledge\"; a hire with `--check` does not list \"the acceptance command\" as missing. `brain budget` and `brain lint` stay green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "e2e-trial-14"
+  },
+  {
+   "title": "Idea: let `init` finish the set-up in one call",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/contract.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-new/SKILL.md"
+   ],
+   "evidence": "After `init` I ran `validate` twice (26 bytes each), hand-edited `.brain/project.json` to fill `commands` and the gate, and later found `tests/__pycache__/*.pyc` (8,956 bytes) committed because no root `.gitignore` existed when the first tests ran. The project `CLAUDE.md` stayed untracked until I committed it myself.",
+   "proposed_fix": "`brain init <path> … --check \"<command>\"` fills `commands.check_fast`, `check_full` and the `checks` gate, validates, seeds a root `.gitignore` for the family when none exists (Python and Node caches for software), and commits its files.",
+   "acceptance": "One `init --check` call leaves a valid contract, a gate with the command, a clean `git status`, and `__pycache__/` ignored; running it twice changes nothing.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "e2e-trial-15"
+  },
+  {
+   "title": "Idea: one call to end a session",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-handover/SKILL.md"
+   ],
+   "evidence": "The handover took `checkpoint --note … --push` (93 bytes), `close …` (399 bytes) and `handover` (144 bytes), in an order the skill must spell out (\"Order matters here\"), plus a manual brain commit that turned out not to be needed.",
+   "proposed_fix": "`brain handover --note \"…\" --outcome ok --class <c> --request \"…\"` performs the checkpoint, the close and the cleanliness check in the right order and prints the line to paste, with the branch. The skill's ordered list becomes one command.",
+   "acceptance": "A single `handover` call with those flags leaves both repositories clean and pushed, one run record and one outcome in the inbox; running it again changes nothing.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "e2e-trial-16"
+  },
+  {
+   "title": "Idea: fold evidence into the checkpoint that finishes an item",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/req.py"
+   ],
+   "evidence": "Finishing item 1 took three calls for one fact (`req evidence R-001 … --done`, `req evidence R-002 … --done`, `checkpoint --done P1 … --push`), and the evidence strings were never checked.",
+   "proposed_fix": "`brain checkpoint --done P1 --proves R-001 --proves R-002 --push` runs those lines' stored checks, records the results as evidence, marks them done only on exit 0, then checkpoints.",
+   "acceptance": "One call marks both lines done with \"exit 0\" evidence when their checks pass, and leaves them open with exit 1 when one fails.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "e2e-trial-17"
+  },
+  {
+   "title": "Idea: a small-project lane stated in one place",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/.claude/skills/brain-plan/SKILL.md",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md",
+    "/home/user/Claude-Brain/engine/detect.py"
+   ],
+   "evidence": "This request was size 2 by the router's rule (\"new project\") but its plan was three serial items in two files, about 190 lines. The skills are written for the general case, and I ran schedule, staff and three hires that the brain's own rules would have declined.",
+   "proposed_fix": "A sentence at the top of brain-plan and brain-build: \"If the plan is at most three serial items with one check command, write PLAN.md, skip the tickets file, schedule, staff and hire, and build it yourself.\" Boot can print \"small plan: no helpers\" once PLAN.md exists with three items or fewer.",
+   "acceptance": "The rehearsal for a three-item serial project uses no `plan schedule`, `hr staff` or `hr hire` call and still ends with `req check` passing and a release.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "e2e-trial-18"
+  },
+  {
+   "title": "Idea: show what a template adds to the done condition before the lead delegates",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/hr/GUIDELINES.md"
+   ],
+   "evidence": "The `cli-script-builder` brief for the expenses tool wrote into `<done_when>`: \"the self-test passes; dry run lists planned changes; a second real run on the test copy changes nothing\". For an expense logger a second `add` must add a second row, and nobody asked for a dry-run flag. The same brief says \"Leave out features … that were not asked for\", and brain-build tells the lead \"Do not retype the brief\", so the lead does not see the conflict.",
+   "proposed_fix": "`hr hire` prints one line with the done conditions the template adds beyond the check (\"template adds: self-test, dry run, unchanged second run; drop with --only-check\"), and `--only-check` renders the brief with the lead's check as the whole done condition.",
+   "acceptance": "A hire with `--template cli-script-builder` prints the added conditions; with `--only-check` the brief's `<done_when>` holds only the acceptance command.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "e2e-trial-19"
+  },
+  {
+   "title": "Idea: shorter digests with paths relative to the project",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/engine/hr.py"
+   ],
+   "evidence": "Each `brain run` and `gate` digest was 217-230 bytes, of which about 155 were the absolute log path; each `hr hire` printed the absolute brief path twice (859-910 bytes per hire). With a typical `/home/user/<project>` root the path is still 60-70 bytes per mention.",
+   "proposed_fix": "Print paths relative to the project root (\".brain/log/run/<name>.log\") when the file is inside the project, and print the brief path once in `hr hire`.",
+   "acceptance": "A `brain run` digest inside a project contains no absolute path; `hr hire` output mentions the brief path once; tests that parse these lines still pass.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "e2e-trial-20"
+  }
+ ],
+ "data": "SCRATCH: /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/e2e-trial (brain copy: brain/, project: gastos/, bare remotes: gastos.git and brain.git, friction log: tools/friction.tsv, per-step outputs: tools/out/NNN.txt, new-chat clones: newchat1/ and newchat2/, clean clone of released main: cleanclone/).\n\nIN-FLOW STEPS (kind P = process command, T = test run through brain run, R = read a skill requires, H = help look-up forced by a gap). Columns: step | kind | what | seconds | output bytes | exit\n1|P|boot \"<request>\"|0.15|240|0\n2|H|init --help (what is --language?)|0.12|517|0\n3|P|init gastos --family software --release main-on-green --language es|0.15|42|0\n4|P|validate|0.12|26|0\n5|P|validate after hand-editing project.json|0.11|26|0\n6|P|recall \"<Spanish request>\" --family software -> nothing|0.18|27|0\n10|R|playbooks/software.md|0.01|3638|0\n13-16|P|req add x4 (one sentence, four clauses)|0.58|48|0\n17|P|req list|0.16|480|0\n18|H|plan schedule --help (tickets format)|0.12|581|0\n19|H|hr staff --help (documents no fields)|0.11|204|0\n21|P|plan schedule|0.12|230|0\n22|P|hr staff (file as documented) -> \"lead does it (no acceptance command)\"|0.12|279|0\n24|P|hr staff (after reading source: title + accept)|0.15|293|0\n27|P|checkpoint --stage build --item P1 --next P2 --next P3 --push -> committed, NOT pushed, exit 0|0.29|247|0\n29|P|hr hire P1 -> \"template none fits\"|0.16|859|0\n31|P|hr hire P1 again with --template cli-script-builder|0.13|910|0\n35|T|brain run -- tests, from the parent folder -> ImportError|0.21|530|1\n39|H|brain run --help (finds --cwd)|0.15|318|0\n40|T|brain run --cwd gastos -- tests (5 pass)|0.23|217|0\n42|P|hr settle -> \"usage not found on this machine · check passed\"|0.22|99|0\n43-44|P|req evidence R-001, R-002 --done|0.25|78|0\n47|P|checkpoint --done P1 --push -> not pushed; brain push to GitHub rejected|1.36|404|1\n49|P|checkpoint --push after switching to a working branch -> pushed|0.28|90|0\n53|P|status|0.13|359|0\n54|P|hr hire P2 -> agent researcher|0.15|869|0\n57|T|brain run --cwd gastos -- SummaryTests (2 pass)|0.26|217|0\n58|T|brain run --cwd gastos -- full suite (7 pass)|0.24|217|0\n60|P|req evidence R-003 --done|0.16|39|0\n61|P|checkpoint --done P2 --item P3 --push -> \"item: P3 · next: P3\"|0.35|146|0\n62-63|R|method/dod/app-or-feature.md + code-change.md|0.00|1657|0\n64|P|gate --all|0.24|230|0\n65|P|req evidence R-004 --done|0.12|39|0\n66|P|req check -> all 4 done|0.17|72|0\n67|P|release --run-gates --push -> released d44d0ad to main|0.17|137|0\n68|P|checkpoint --done P3 --stage deliver --push -> \"item: none · next: P3\"|0.33|94|0\n75|P|status|0.15|429|0\n76|P|ledger|0.14|405|0\n77|H|learn note --help (exact --signal values)|0.17|1687|0\n79|P|checkpoint --note … --push|0.27|93|0\n80|P|learn note --evidence gate:checks --signal first-success|0.14|125|0\n81|P|close --outcome ok --class software.feature --request \"…\"|0.14|399|0\n82|P|handover -> \"ready … paste: Continue\"|0.39|144|0\n\nTOTALS\n- Process commands: 36, 7.58 s, 7,958 bytes out, 4,722 bytes of command text typed.\n- Test runs through brain run: 4 (one failed only because of the folder), 0.94 s, 1,181 bytes.\n- Required reads: 3, 5,295 bytes. Two helper briefs I read in the helper's place: 4,047 bytes (not counted for the lead).\n- Forced help look-ups: 5, 3,307 bytes, plus reading cmd_staff in engine/hr.py.\n- Skill text loaded: 14,559 bytes (brain-new 2,354, plan 2,469, build 2,656, verify 2,320, handover 1,937, learn 2,823). Always loaded: CLAUDE.md 5,423 plus the project stub 1,140.\n- Process output added on top of building: 16,560 bytes (roughly 4,100 tokens) over 44 extra tool calls, plus about 3,600 tokens of skill text. The artefact is 8,038 bytes (gastos.py 102 lines, tests 88 lines).\n- Build itself: 3 file writes, 3 commits, 1 .gitignore and branch, 3 passing test runs.\n- Speed: every brain command 0.11-0.50 s except step 47 (1.36 s, network push attempt).\n- By command (calls, bytes): checkpoint 6, 1,074 · hr hire 3, 2,638 · status 2, 788 · hr staff 2, 572 · req list 1, 480 · ledger 1, 405 · close 1, 399 · boot 1, 240 · gate 1, 230 · plan schedule 1, 230 · req evidence 4, 156 · handover 1, 144 · release 1, 137 · learn note 1, 125 · hr settle 1, 99 · req check 1, 72 · validate 2, 52 · req add 4, 48 · init 1, 42 · recall 1, 27.\n- Project repository afterwards: 6 commits \"chore(brain): checkpoint\" against 2 feature commits; about 12,260 bytes of tracked bookkeeping (.brain/, STATUS.md, NEEDS_YOU.md, CLAUDE.md) against 8,038 bytes of work.\n\nSTEPS I WOULD SKIP, AND WHAT WOULD BE LOST\n- validate after init (4): nothing lost; init's own output is valid.\n- recall (6): nothing lost this time because it returned nothing for Spanish, which is the defect.\n- playbook read (10): 2 of 14 lines applied; I would have lost the \"two of everything\" reminder, which recall returns in about 180 tokens when asked in English.\n- req list (17): nothing; each add already confirms.\n- plan schedule, hr staff (21, 22, 24): nothing for a serial plan; the skill itself limits them to parallel work.\n- hr hire x3 and settle (29, 31, 54, 42): nothing; skipping would have avoided a wrong agent choice and a false pass record.\n- status, ledger (53, 75, 76): only when he asks.\n- definition-of-done reads (62-63): 6 of 16 lines applied; I would lose the clean-clone reminder (I ran it: 7 tests pass from a clean clone of main).\n- Not skippable: boot, init, req add, per-item checkpoint, gate, req check, release, learn note, close, handover. That is about 18 commands and 2 KB.\n\nWHAT A NEW CHAT SAW (fresh clones of both remotes, then boot)\n- After P1, project on main, two checkpoints with --push: remote main still the initial commit; boot \"mode: bootstrap · empty project\".\n- State pushed to claude/gastos-inicio, clone on main: boot \"mode: bootstrap · empty project\".\n- Same, clone switched to the working branch: \"item: P2 · last done: P1 · next: P3 · requirements: 2/4 done\" (correct).\n- After release and checkpoint, clone on main: \"stage build · item: P3 · last done: P2 · 3/4 done, 1 open\"; resume \"no gate has run\"; req check exit 1.\n- After handover said ready, clone on main: \"item: none · last done: P3 · next: P3\"; on the working branch: correct, with the note.\n- boot \"Continue\" 766 bytes (three recall lines) against boot \"Continúa\" 287 bytes in the same state.\n\nSETTLE WITH NO HELPER TRANSCRIPT\n- Prints \"usage not found on this machine · check passed\", sets the contract to settled, and writes a hire record to the brain inbox with passed true and actual_tokens null, which the learner counts as a pass for the template.\n- A contract settled as failed stays failed; settling it again prints the old \"CHECK FAILED\" without running the check.\n- Hiring again for the same work marks the earlier contract \"superseded\" by itself.\n\nSIDE EFFECTS OUTSIDE THE SCRATCH FOLDER\n- One rejected push attempt to the real GitHub branch at 17:52:16 from the copy (nothing landed; the copy's remote now points at a local bare repository).\n- `brain run` typed outside the project wrote three small logs to /tmp/brain-run/ (20261110-175112-5341f4df.log, 20261110-175128-a1159e9d.log, 20261110-180022-97705d71.log), a folder shared with other sessions; I left them in place.\n- /home/user/Claude-Brain was only read (git log, ls-remote, show, grep)."
+}

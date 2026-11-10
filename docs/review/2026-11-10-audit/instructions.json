@@ -1,0 +1,346 @@
+{
+ "summary": "Audit of the instruction surface (CLAUDE.md, ten skills, six agents, method/, dod/, playbooks/, PROMOTION_RULES, hr/GUIDELINES, lint), done by walking twelve owner messages through scratch copies and running every named command.\n\nMain result: the text is mechanically consistent (lint 0 errors, every named flag exists) but breaks at the seams between modes and sizes. The largest gap is the one this session hit: with the brain alone, seven project commands the core rules depend on exit 1, and brain-start sends the lead to an earlier session's tickets instead of the owner's message. Next come sizing of \"trigger + task\" messages, the end-of-session order (close leaves both repositories uncommitted), boot recall that repeats loaded rules, and owner overrides that boot never shows.\n\nExact replacement wording for 18 instruction files is in one patch: /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/instructions/proposed-instructions.patch. Checked in a scratch copy: `git apply --check` against the real tree exits 0; with it applied `brain lint` gives 0 errors, `brain budget` gives CLAUDE.md 5,667 B (now 5,423; cap 6,000), and the suite runs 407 tests OK. Engine changes proposed in the findings are not in the patch, except one I tried (digest path, finding 3).\n\nOne thing to know: a `handover` in my first scratch copy tried to push to the real origin before I re-pointed the copies' remotes at local bare repos. GitHub rejected it, and neither of my copy's commits (be15b17, a927b69) exists in the real repository (`git cat-file` says \"Not a valid object name\"). The lead already tracks the cause as CB-211, so it is not repeated as a finding; the proposed method/brain-work.md carries the instruction-side guard.",
+ "strengths": [
+  "The lint builds its command tree from the real argparse definitions, so instructions cannot name a command or flag that does not exist: `brain lint` gives 0 errors, and every flag I ran from the skills worked as written. Keep this as the gate for any wording change.",
+  "The always-loaded core is small and capped by script and test: CLAUDE.md 5,423 B (cap 6,000), every description under 300 characters, total under the 3,200-token test in tests/test_core.py:602. Rules carry their reasons: my scan for bare never/always found one in CLAUDE.md and twelve across skills, agents and method.",
+  "Release safety holds under misuse: `release` refused uncommitted changes, refused a project with no gate command (\"no command gate is defined, so nothing proves this commit works\"), and `checkpoint --push` refused to push unreleased work to the release branch.",
+  "Output discipline works: `brain run` printed 325 B for a 50,000-character line and 1,555 B for a 400-line failure; boot stayed between 311 and 1,028 B across twelve messages (cap 1,500); `init` run twice changed nothing.",
+  "The numbers in learning/PROMOTION_RULES.md and hr/GUIDELINES.md match the code and schema (similarity 0.6 and 0.8, 30% and 40 characters, 10% and 20%, 90 and 180 days, 400 characters; all template field limits; 230, 350 and 500 words), and `hr hire` refuses a hire with no check."
+ ],
+ "findings": [
+  {
+   "title": "With the brain alone, the core rules name commands that cannot run, and brain-start sends the lead to an earlier session's tickets instead of the owner's message",
+   "severity": "blocking",
+   "kind": "gap",
+   "files": [
+    "CLAUDE.md",
+    ".claude/skills/brain-start/SKILL.md",
+    ".claude/skills/brain-handover/SKILL.md",
+    "method/brain-work.md",
+    "engine/detect.py"
+   ],
+   "evidence": "In a brain-only copy each of these printed \"no managed project found (attach one, or run: brain init <path>)\" and exited 1: `brain req add ...`, `req check`, `checkpoint --push`, `resume`, `status`, `gate --all`, `release --check-live`, `handover`. So CLAUDE.md rule 1 (ledger), rule 7 (checkpoint, resume) and brain-handover's goal (\"`BRAIN handover` reporting ready\") cannot be met. `close` works but leaves `?? learning/inbox/<session>.jsonl` with no command to commit it. brain-start/SKILL.md:19 says: \"If boot lists open brain tickets, the work is the brain itself: read `docs/NEXT_SESSION.md`, then work the tickets ... Otherwise answer what he asked.\" Boot lists 10 open tickets (CB-200 to CB-209) and NEXT_SESSION.md holds the previous session's instruction, so a new request such as this session's is answered with the old programme. No loaded text says what replaces the ledger, checkpoint, gate or handover for brain work.",
+   "repro": "cd <brain-only copy>; python3 bin/brain boot \"Start running\"; python3 bin/brain req check; python3 bin/brain checkpoint --push; python3 bin/brain handover",
+   "proposed_fix": "Apply the patch. It adds to CLAUDE.md: \"## When the brain is the project — With no project attached, or when he asks to change the brain, read `method/brain-work.md` first: `req`, `checkpoint`, `resume` and `handover` stop without a project, and that page says what stands in for each.\" It adds method/brain-work.md (2.5 KB, on demand): tickets.json as ledger and plan, `BRAIN eval contract` as gate (37.8 s measured, so once per ticket), commit and push per ticket, NEXT_SESSION.md as handover, what may be edited, and trying state-writing commands only in a copy whose origin is a local folder. brain-start's bullet becomes: \"`brain-only`: no project is attached. A question gets an answer. If his message asks for work on the brain, or says nothing beyond the trigger while boot lists open brain tickets, follow `method/brain-work.md`.\" Engine, one line in engine/detect.py MODE_HELP: \"no project attached: a question gets an answer; for work on the brain read method/brain-work.md\".",
+   "acceptance": "`python3 bin/brain lint` prints 0 errors; `python3 bin/brain budget` prints CLAUDE.md 5667 B; `python3 -m unittest discover -s tests -t .` runs 407 tests OK (all three observed with the patch applied). Add a test that, in a brain-only temp tree, `req check`, `checkpoint` and `handover` exit 1, so the page is revisited if the engine later supports that mode.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-01"
+  },
+  {
+   "title": "A trigger followed by a task is sized by a stray word, and 17 of the 52 trigger phrases in the skill descriptions route as a plain answer",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "CLAUDE.md",
+    "engine/route.py",
+    "evals/routing.jsonl",
+    "engine/lint.py"
+   ],
+   "evidence": "`brain route \"Start running, quickly do comprehensive improve plan ... executed and very implemented\"` printed \"size 1 small task | data | data.analysis ... unsure between 1 and 2; chose 1\"; \"Start running\" alone gives \"size 2 project | software | resume\"; \"Make a very detailed plan to improve the brain and execute it\" gives size 1. I extracted every quoted phrase from the ten descriptions and routed it: 52 phrases, 26 absent from evals/routing.jsonl, 17 classed \"answer\" at size 0. Examples: \"Adopt this repo\", \"Adopta este repo\", \"Publícalo\", \"Súbelo a main\", \"Constrúyelo\", \"Consolida\", \"Compare …\"; yet \"Ship it\" and \"Push to main\" give software.release. Boot shows the guess beside the mode: `boot \"Adopt this repo\"` printed \"mode: adopt · ... `brain adopt <path> --survey` first\" and \"size: 0 answer · ... no task verb; answer or acknowledge\". CLAUDE.md:18 (\"Between two sizes, choose the smaller\") then pushes the lead down.",
+   "repro": "python3 bin/brain route \"Publícalo\"; python3 bin/brain route \"Adopta este repo\"; python3 bin/brain boot \"Adopt this repo\"",
+   "proposed_fix": "Wording (in the patch): size-3 row \"Phases, parallel streams, or a plan that is then carried out\"; size-2 row gains \"Adopt this repo\"; after the table: \"Words after a trigger are the request: size \\\"Start running, <task>\\\" by the task, which outranks the recorded next item. A phrase a skill lists (\\\"Status\\\", \\\"Ship it\\\") uses that skill at any size. Boot's size line is a guess; his words decide.\" Engine, engine/route.py: when a resume trigger is followed by more than six words, classify the remainder and keep the larger size; strip Spanish enclitics (-lo, -la, -los, -las, -melo, -selo) from tokens of six letters or more before matching, so publícalo matches publica; add adopt and adopta as a size-2 trigger. Tests: add the 26 missing phrases to evals/routing.jsonl; add a lint check that every quoted phrase in a skill description has a routing case.",
+   "acceptance": "`brain route \"Publícalo\"` prints software.release; `brain route \"Adopta este repo\"` prints size 2; the session's own request prints size 3; `python3 -m unittest tests.test_route` passes with the new cases; `brain lint` fails when a description gains a phrase with no routing case.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "instructions-02"
+  },
+  {
+   "title": "`close` leaves both repositories uncommitted, the core rules run it after the last push, and two skills prescribe hand commits the engine already makes",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "CLAUDE.md",
+    ".claude/skills/brain-handover/SKILL.md",
+    ".claude/skills/brain-learn/SKILL.md",
+    "engine/state.py",
+    "engine/learn.py"
+   ],
+   "evidence": "After a typo fix, `brain close ...` left the brain with `?? learning/inbox/2026-11-10-<session>.jsonl` and the project with ` D .brain/log/open-session.json`, ` M STATUS.md`, `?? .brain/log/<run>.json`, `?? .brain/log/salt` (brain dirty 1, project dirty 4). CLAUDE.md puts `checkpoint --push` (rule 7) before `close` (rule 9), and rule 9 names no push, so at size 1 the record \"the brain learns from\" is never pushed. Running `brain checkpoint --push` after close printed \"checkpoint pushed to claude/work\" and \"brain records pushed to <branch>\"; both trees were then clean and `handover` printed \"ready\". Yet brain-handover/SKILL.md:19 says \"Commit the learning inbox file it wrote in the brain repository and push the brain's working branch\" and brain-learn/SKILL.md:16 says \"Commit the inbox file on the brain's working branch, push it\". Separately, `brain learn digest --weeks 1` (the answer to \"What did you learn?\") writes `learning/digest/2026-W46.md`, which nothing commits: the next `handover` printed \"not ready ... brain: 1 uncommitted change(s)\". brain-learn:28 asks for `--weeks <weeks since the last digest>`, which the lead can only find by listing that folder.",
+   "repro": "In a brain + project copy with a local origin: python3 bin/brain close --outcome ok; git status --short (both); python3 bin/brain checkpoint --push; git status --short; python3 bin/brain learn digest --weeks 1; python3 bin/brain handover",
+   "proposed_fix": "In the patch: rule 7 starts \"Commit the work, then `BRAIN checkpoint --push`\"; rule 9 becomes \"Before the final message of a session that changed files, run `BRAIN close`, then `BRAIN checkpoint --push`, which commits and pushes what close recorded in both repositories. Close records real token use and outcomes at no model cost; it is the data the brain learns from.\" brain-handover step 2 becomes \"`BRAIN close`.\" and step 3 says handover pushes \"the project's bookkeeping files and the brain's session records itself\". brain-learn drops the hand commit and keeps only the pull request. Engine: add \"learning/digest\" to the paths in push_brain_records (engine/state.py); with that one change, handover after a digest printed \"ready\" and the brain tree was clean. Default `learn digest --weeks` to the span since the newest file in learning/digest/.",
+   "acceptance": "New test: in a temp brain and project, `close` then `checkpoint --push` leaves `git status --porcelain` empty in both; `learn digest` then `handover` exits 0. `grep -c \"Commit the learning inbox file\" .claude/skills/brain-handover/SKILL.md` prints 0.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-03"
+  },
+  {
+   "title": "A third of boot's output is recall matched on the trigger words, repeating loaded rules or returning unrelated items",
+   "severity": "should-fix",
+   "kind": "inefficiency",
+   "files": [
+    "engine/detect.py",
+    "engine/recall.py",
+    ".claude/skills/brain-start/SKILL.md"
+   ],
+   "evidence": "Across eleven owner messages in a project mid-item, boot printed 6,688 B, of which 2,278 B (34%) were recall lines. \"Start running\": 954 B, 561 B recall (59%): [own-trigger-words], [rule-escalate-on-failure], [own-no-shell], each restating CLAUDE.md or brain-build. \"Go deep: which database for offline sync\": 604 B recall of [own-decide-and-record], [fact-effort-curves], [sw-tag-known-good]; the same question without the trigger words (`brain recall \"which database for offline sync\" --family data`) printed \"nothing relevant in memory\". \"fix the typo in the home title\" recalled [rule-review-rounds] \"One review round always ...\", which contradicts brain-verify's \"Trivial (typo, copy change): your own check\". BUILD_STATUS lists the overlap as open; this is the measurement and a different fix.",
+   "repro": "python3 bin/brain boot \"Start running\" | grep -c '^recall'; python3 bin/brain recall \"Go deep: which database for offline sync\" --family data; python3 bin/brain recall \"which database for offline sync\" --family data",
+   "proposed_fix": "In engine/detect.py boot_lines: build the recall query from the request with the trigger phrases removed (route.py already finds them). When nothing but a trigger remains and the state has an item, query with the item text and its notes, so a resume recalls lessons about the work and not about the word \"continue\". Skip recall for the classes status, handover, learned and stop.",
+   "acceptance": "`brain boot \"Go deep: which database for offline sync\"` prints no recall line; `brain boot \"Start running\"` in a project whose item is \"P1 add-expense form\" prints no [own-trigger-words] line; `python3 -m unittest tests.test_recall` still passes with recall@5 at 0.781 on the labelled set.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-04"
+  },
+  {
+   "title": "Boot never shows the owner's OVERTURNED and RESOLVED marks, so every resume must read two files in full or miss his override",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/detect.py",
+    "engine/state.py",
+    ".claude/skills/brain-start/SKILL.md"
+   ],
+   "evidence": "I added \"OVERTURNED: I want it synced between my phone and laptop\" under a decision in `.brain/DECISIONS.md` and \"RESOLVED: done, the site is gastos.example.app\" under an item in NEEDS_YOU.md. `brain boot \"Continue\"` printed nothing about either (only \"needs owner: 1\"), while spending three lines on recall. `grep -n OVERTURNED engine/*.py` has no match. brain-start/SKILL.md:23 requires: \"Apply any lines he marked `RESOLVED:` in `NEEDS_YOU.md` or `OVERTURNED` in `.brain/DECISIONS.md` before resuming.\" brain-new/SKILL.md:8 names building on an unanswered fork as his largest past rework.",
+   "repro": "Append an OVERTURNED line to <project>/.brain/DECISIONS.md, then: python3 bin/brain boot \"Continue\"",
+   "proposed_fix": "Engine: boot prints one line, for example \"owner edits to apply: D-01 OVERTURNED; NEEDS_YOU 1 RESOLVED\", for marks that have no `APPLIED` line beneath them. brain-start wording: \"Boot lists what he marked `RESOLVED:` or `OVERTURNED` and you have not yet applied. Apply each before resuming and write `APPLIED <date>` under it, so the next boot stops listing it. Re-plan only if the plan is finished or an overturned decision invalidates it.\"",
+   "acceptance": "New test in tests/test_hygiene.py: a fixture with an OVERTURNED line makes boot print \"OVERTURNED\"; after an APPLIED line beneath it boot does not; boot output stays at or under 1,500 B.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "instructions-05"
+  },
+  {
+   "title": "Research hires: the skill and rule 4 disagree, and `hr hire` either refuses or puts a research question on a builder with no web tools and no date",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    ".claude/skills/brain-research/SKILL.md",
+    "CLAUDE.md",
+    ".claude/agents/researcher.md",
+    "engine/hr.py"
+   ],
+   "evidence": "CLAUDE.md rule 4: \"Hire through `BRAIN hr hire \\\"<goal>\\\" --check \\\"<command>\\\"`\". brain-research/SKILL.md:20 has the lead write the brief: \"Each brief carries the question, today's date, the memo path and the return format\". Following rule 4 without a check: \"do not hire: no check was given\". With a check, `brain hr hire \"Research which database suits offline sync for a phone web app, with sources\" --check \"grep -q 'END OF MEMO' ...\" --dry-run` printed \"template web-app-scaffolder ... agent: builder · model sonnet\" (builder has no WebSearch or WebFetch), and the written brief told the helper to create \"a minimal buildable app\". With `--template option-comparer` the brief was right but held no date (grep for \"today\" or \"2026-\" in its text: 0 matches), while researcher.md:10 says \"Today's date is in the brief\".",
+   "repro": "python3 bin/brain hr hire \"Research which database suits offline sync for a phone web app, with sources\" --check \"grep -q 'END OF MEMO' research/x.md\" --dry-run",
+   "proposed_fix": "In the patch, brain-research step 3: \"Hire with `BRAIN hr hire \\\"<sub-question>\\\" --agent researcher --owns research/<topic>.md --check \\\"grep -q 'END OF MEMO' research/<topic>.md\\\" --also \\\"Today is <date>; judge how current each source is against it\\\"`. The agent filter matters: word matching alone can pick a builder template, which has no web tools, and the brief carries no date unless you add it.\" Engine, engine/hr.py: when the task matches the research vocabulary in route.py (research, compare, investigate, find out, sources), consider only templates whose base agent has web tools; render \"Today is <date>.\" in every researcher-base brief, after which the `--also` in the skill can go.",
+   "acceptance": "The dry run above prints \"agent: researcher\"; a written researcher brief satisfies `grep -c \"Today is\" <brief>` = 1; `python3 -m unittest tests.test_hr` passes and the held-out selection figure in evals/hr_golden.jsonl does not drop below 78%.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "instructions-06"
+  },
+  {
+   "title": "\"Continue on your own at most three times in a row\" has no reason, no unit, and refers to a re-prompt mechanism that does not exist",
+   "severity": "should-fix",
+   "kind": "unclear",
+   "files": [
+    ".claude/skills/brain-start/SKILL.md"
+   ],
+   "evidence": "brain-start/SKILL.md:27: \"Continue on your own at most three times in a row, then stop and report.\" The same file, line 8: \"He types two words on his phone and expects hours of correct work\", and line 27 also says the run \"keeps working while `.brain/CHECKLIST.md` ... has open lines\". The source is docs/EXECUTION_PLAN.md:144, \"a cap of 3 automatic continuations\", about a harness that re-prompts a model that ended its turn. No such harness exists: .claude/hooks/session_end.py says \"It never blocks and never prints\". Read alone, the sentence tells the lead to stop after three items.",
+   "proposed_fix": "In the patch: \"... a progress report is not the end of the work, so start the next item instead of ending the turn. Stop when the checklist is empty or everything left waits on him. An item whose check still fails at the top of the escalation order is recorded with `--blockers` and the next unblocked item starts, because retrying it again spends his usage without new information.\"",
+   "acceptance": "`grep -c \"three times in a row\" .claude/skills/brain-start/SKILL.md` prints 0; `python3 bin/brain lint` prints 0 errors; live check CB-104 then also confirms a run does not stop after three items while the checklist has open lines.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-07"
+  },
+  {
+   "title": "brain-new leaves the contract uncommitted and the release rule unset, and \"Ship it\" under rule `none` has no instruction",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    ".claude/skills/brain-new/SKILL.md",
+    ".claude/skills/brain-verify/SKILL.md",
+    "engine/contract.py",
+    "engine/gate.py"
+   ],
+   "evidence": "Empty repo, following brain-new then brain-plan: after `init` and `checkpoint --push`, `git status` showed `?? CLAUDE.md` (the stub is not bookkeeping) and checkpoint printed \"checkpoint committed; not pushed: this is the release branch (main) and it has never been released: use `brain release`\". `handover` then printed \"project: 1 uncommitted change(s)\" and \"branch main has never been pushed\". Adoption: `brain adopt --help` has no `--release` or `--language` (init has both), the manifest keeps `\"rule\": \"none\"`, and brain-new:14 lists only \"commands, gates, live address\" to fill. Then \"Ship it\": with a red gate (\"gate checks: FAILED (exit 1)\"), `brain release --run-gates --push` printed \"this project has no release rule (release.rule is 'none' in .brain/project.json)\" and exited 0. brain-verify section 5 covers only `main-on-green` and `pr`.",
+   "repro": "git init an empty clone on main; python3 bin/brain init ../proj --family software --title P --release main-on-green; python3 bin/brain checkpoint --push; git -C ../proj status --short; python3 bin/brain handover",
+   "proposed_fix": "In the patch, brain-new: \"... live address if known, and for an adopted repo the release rule and languages, which `adopt` leaves at `none` and empty.\" and \"Commit what `init` or `adopt` wrote, on a working branch rather than `main`: the stub `CLAUDE.md` is not bookkeeping, so no checkpoint commits it and a handover stops on it; and under `main-on-green` a checkpoint on `main` is committed but not pushed.\" brain-verify: \"Under rule `none` the command releases nothing and still exits 0: say that nothing was published, and if he asked to ship, set `release.rule` in `.brain/project.json` (ask which only when where the project deploys is unclear), commit, and run it again.\" Engine: give `adopt` the `--release` and `--language` flags that `init` has; make `release --push` exit 1 under rule `none`.",
+   "acceptance": "After `init` and the skill's steps, `git status --porcelain` in the project is empty and `brain handover` reports no uncommitted change; `brain adopt --help` lists --release and --language; a test asserts `release --push` exits non-zero under rule none.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "instructions-08"
+  },
+  {
+   "title": "A brief that is written but never delegated is settled by `close` as a failed hire against its template",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "engine/hr.py",
+    ".claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "`brain hr hire \"Build the add-expense form with validation and tests\" ... --check \"test -f src/form.js\"` wrote a brief; no helper was started; `brain close --outcome ok --class software.feature` printed \"hr: 1 of 1 contract(s) settled, 1 failed its check\", and the inbox holds {'kind': 'hire', 'template': 'build-failure-diagnoser', 'passed': False, 'actual_tokens': None, 'turns': None}. hr/GUIDELINES.md:69 says a template \"whose record turns bad is put on probation\", so a change of mind counts against a template. brain-build never mentions `hr settle <id> --abandon`, and `brain hr settle --abandon` with no id printed \"name an existing contract to abandon\" (exit 1).",
+   "repro": "python3 bin/brain hr hire \"Build the add-expense form with validation and tests\" --owns src/form.js --check \"test -f src/form.js\" --material-tokens 40000; python3 bin/brain close --outcome ok",
+   "proposed_fix": "Engine, engine/hr.py settle: a contract with no helper transcript (turns and actual_tokens both empty) is recorded as never run and is not folded into the template's pass record; `close` prints \"1 brief never used: dropped\". In the patch, brain-build: \"Drop a brief you decide not to use with `BRAIN hr settle <id> --abandon`: left open, close settles it as a failed hire, and that failure counts against its template.\" Keep the sentence until the engine change lands, then shorten it to the first clause.",
+   "acceptance": "New test in tests/test_hr.py: hire, no delegation, close; the inbox holds no hire record with passed False for that contract, and `brain hr report` does not count it as a checked hire.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-09"
+  },
+  {
+   "title": "brain-plan's parallel step: the tickets file format is not given, and the scheduler prices a helper's cold start at zero, so parallel work looks free",
+   "severity": "should-fix",
+   "kind": "inefficiency",
+   "files": [
+    ".claude/skills/brain-plan/SKILL.md",
+    "engine/schedule.py"
+   ],
+   "evidence": "brain-plan/SKILL.md:24: \"put them in a tickets file and run `BRAIN plan schedule <file>`. It returns waves ... with the elapsed-time and token cost of parallel versus sequential.\" The format appears only in `plan schedule --help`. With three independent tickets of 40,000 tokens each, the command printed \"tokens: 120000 of work either way; 3 helpers each start cold at 0: parallel 120000 vs sequential 120000\"; with `--start-tokens 20000`: \"parallel 180000 vs sequential 140000\". engine/schedule.py:107 defaults `helper_start_tokens` to 0 while engine/hr.py:57 uses `startup_tokens: 6000`, and method/efficiency.md:15 says multi-agent work used about 15 times the tokens of a chat.",
+   "repro": "python3 bin/brain plan schedule <file with three independent tickets that each carry \"tokens\": 40000>",
+   "proposed_fix": "Engine: in engine/schedule.py default `helper_start_tokens` to the HR rule's `startup_tokens` when the file and the flag give none. In the patch, brain-plan: \"put them in a tickets file (`{\\\"agents\\\": 4, \\\"tickets\\\": [{\\\"id\\\", \\\"est\\\", \\\"deps\\\", \\\"files\\\", \\\"tokens\\\"}]}`, `est` in minutes) and run `BRAIN plan schedule <file> --start-tokens 6000`, which charges each parallel helper its cold start; without the flag parallel work looks free.\" Drop the flag and that clause from the skill once the default is fixed.",
+   "acceptance": "With no flag, the three-ticket file prints a parallel total larger than the sequential total; `python3 -m unittest tests.test_schedule` passes after its expected totals are updated on purpose.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-10"
+  },
+  {
+   "title": "Review rounds are stated three ways, and the review-stopping learner needs two reviewers that the method forbids",
+   "severity": "minor",
+   "kind": "unclear",
+   "files": [
+    ".claude/skills/brain-verify/SKILL.md",
+    "memory/items.jsonl",
+    "memory/ml_config.json",
+    "method/quality.md",
+    "engine/learn.py"
+   ],
+   "evidence": "brain-verify/SKILL.md:25: \"One round; a second only to confirm blocking fixes; stop when only style remains.\" Memory item rule-review-rounds, as recalled at boot: \"One review round always, a second only to confirm blocking fixes, never more than three.\" memory/ml_config.json: `review.max_rounds = 3`. \"One review round always\" also contradicts brain-verify:20 (\"Trivial (typo, copy change): your own check\"), and boot recalled it for \"fix the typo in the home title\". `brain learn review` takes `--found-a --found-b --both` (two reviewers' counts), while method/quality.md:13 says \"One reviewer, not a panel\", and no loaded file names that command, so the learner listed as built in BUILD_STATUS (\"review stopping\") can never receive data.",
+   "proposed_fix": "Through `brain learn`, supersede rule-review-rounds with: \"Review depth follows risk: none for a trivial change, one round otherwise, and a second only to confirm blocking fixes. A reviewer always finds something, so stop when only style remains.\" Set `review.max_rounds` to 2 in memory/ml_config.json. Then choose one: name the command in brain-verify for the only case that produces its inputs (\"When a second round is run by a different reviewer, record `BRAIN learn review --found-a N --found-b M --both K`\"), or remove the review-stopping learner.",
+   "acceptance": "`python3 bin/brain recall \"review rounds\"` prints no text containing \"three\"; `grep max_rounds memory/ml_config.json` shows 2; `python3 bin/brain items check` and `python3 bin/brain learn verify` exit 0.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-11"
+  },
+  {
+   "title": "The size-0 row forbids scripts that three skills run at size 0, brain-create runs its full pass for a list of names, and the project stub says boot always comes first",
+   "severity": "minor",
+   "kind": "unclear",
+   "files": [
+    "CLAUDE.md",
+    ".claude/skills/brain-create/SKILL.md",
+    "contract/template/CLAUDE.stub.md",
+    "method/routing.md"
+   ],
+   "evidence": "CLAUDE.md:13: \"Answer directly. No scripts, no files, no helpers.\" Yet route sizes \"Status\", \"¿Qué has aprendido?\" and \"Dame 5 nombres para la app\" at 0, and their skills run `status`, `ledger`, `learn digest` (which writes a file) and `recall`. For \"Quick: why is the build red?\" the literal reading forbids looking at the gate log, against method/dod/answer.md (\"Was anything checkable actually checked\"). brain-create fires on \"Dame 5 …\" and asks for a 150-word brief, a recall, five 40-word sketches and, at line 24, \"For icons, names, palettes and layouts ... each an image\". Its recall (`brain recall \"name defaults to avoid\"`) returned [rule-name-defaults], the same sentence as brain-create:12. The stub written into every project says \"Its first step is `python3 <brain>/bin/brain boot`\", against the size table. method/routing.md:18 says sizes 0 and 1 skip \"the digest\", a term nothing defines.",
+   "proposed_fix": "In the patch: size-0 row \"Check what it is about (a file, a failing command), then answer. No boot, ledger or helpers.\"; brain-create gains \"A request for a handful of names, taglines or other short lines is a size-0 answer: reply with the numbered options, each with the one-line reason it fits, and skip the steps below. The steps earn their cost for a screen, a visual identity or a long piece.\" and drops \"names\" from the image menu; routing.md:18 becomes \"Sizes 0 and 1 skip boot, the ledger and the plan.\" Stub (not in the patch; tried separately, 1,193 B, 58 contract and lint tests OK): \"follow that repository's `CLAUDE.md`, which sizes the request before anything else; its commands run as `python3 <brain>/bin/brain`.\" Existing projects keep the old sentence until their stub is refreshed.",
+   "acceptance": "`python3 bin/brain lint` prints 0 errors and `brain budget` stays under the caps (observed: 5,667 B). `grep -c \"first step\" contract/template/CLAUDE.stub.md` prints 0. `grep -c \"the digest\" method/routing.md` prints 0.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-12"
+  },
+  {
+   "title": "All six agent files set a token cap that the guidelines forbid and the briefs contradict, and builder.md relies on a `brain run` path no brief gives",
+   "severity": "minor",
+   "kind": "unclear",
+   "files": [
+    ".claude/agents/builder.md",
+    ".claude/agents/researcher.md",
+    ".claude/agents/reviewer.md",
+    ".claude/agents/redteam.md",
+    ".claude/agents/scout.md",
+    ".claude/agents/writer.md",
+    "engine/hr.py"
+   ],
+   "evidence": "hr/GUIDELINES.md:48: \"No token numbers in template text. A written budget changes how much current models spend.\" method/models.md:30 lists \"token budgets\" among things to leave out. Each agent body says \"in under about 2,000 tokens\" (builder.md:16, redteam.md:20, reviewer.md:20, writer.md:21, researcher.md:19, scout.md:20), while the briefs `hr hire` wrote cap the same reply in words (\"At most 200 words\", \"At most 400 words\"), so a helper holds two different caps. builder.md:14: \"Run checks through `brain run -- <command>` when the brief gives its path\"; `grep -c \"brain run\" engine/hr.py` is 0 and no rack file mentions it, so the brief never gives the path and builders' full test output lands in their own context.",
+   "proposed_fix": "In the patch, each agent: \"Return, within the word cap the brief gives (about 600 words when it gives none):\" (scout: \"Keep it within the word cap the brief gives, or about 600 words when it gives none.\"). The 600-word default is my choice and should be trialled like any template change. Engine, engine/hr.py: for agents with Bash, add one brief line with the absolute path: \"Run builds and tests as `python3 <brain>/bin/brain run -- <command>`: it prints the result and the failing lines and keeps the full log in a file.\"",
+   "acceptance": "`grep -l \"2,000 tokens\" .claude/agents/*.md` prints nothing; a new test in tests/test_hr.py asserts a builder brief contains \"bin/brain run --\"; `python3 bin/brain hr audit` prints \"rack is sound\".",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "instructions-13"
+  },
+  {
+   "title": "\"Go back\" is offered to the owner, but its steps sit in a file nothing points to and \"the last release he accepted\" is recorded nowhere",
+   "severity": "minor",
+   "kind": "gap",
+   "files": [
+    "method/routing.md",
+    ".claude/skills/brain-verify/SKILL.md",
+    "OWNER_GUIDE.md",
+    "engine/gate.py"
+   ],
+   "evidence": "OWNER_GUIDE.md lists **Go back** among what to type. No skill description contains it (grep over the ten SKILL.md files and CLAUDE.md: no match). The steps are in method/routing.md:26, which says \"return the project to the last release he accepted (releases are listed in `.brain/log/releases.jsonl`)\". The log line is {\"at\", \"branch\", \"commit\", \"session\"}: no acceptance mark, and `grep -n \"accepted\\|known.good\" engine/*.py` finds no command that records one. Route sizes \"Go back\" at 1, where CLAUDE.md runs no boot, so the one recall hint ([sw-tag-known-good]) is not shown either.",
+   "proposed_fix": "In the patch: brain-verify's description gains \"Go back\" and \"Vuelve atrás\" (still under 300 characters) and a section: \"## Go back — He wants the last version he was happy with. `.brain/log/releases.jsonl` lists each release with its commit and time: return to the one before the release he is unhappy with, unless he names another. Undo the later commits with revert commits on the working branch, never a reset, because rewritten history needs a force-push and `release` never forces; then release as usual. In the same message say which release he is back on: its date and what it contained.\" routing.md:26 shrinks to a pointer.",
+   "acceptance": "`grep -c \"Go back\" .claude/skills/brain-verify/SKILL.md` is at least 2; `python3 bin/brain budget` reports no description over 300 characters; `python3 bin/brain lint` prints 0 errors (both observed with the patch).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-14"
+  },
+  {
+   "title": "Idea: let the brain be its own managed project, so brain work uses the same ledger, checkpoint, resume and handover as any project",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/common.py",
+    "engine/detect.py",
+    "engine/contract.py"
+   ],
+   "evidence": "In a scratch copy, after `brain adopt . --family software --title \"Claude Brain\"`, `BRAIN_PROJECT=. brain req add ...` printed \"R-001 added\" and `checkpoint` and `resume` worked. Three things block it today: adopt prepends the 1,150 B project stub to the brain's own CLAUDE.md (which would pass the 6,000 B cap), boot still reports \"mode: brain-only\", and commands without BRAIN_PROJECT print \"no managed project found\".",
+   "proposed_fix": "When no sibling project exists and `<brain>/.brain/project.json` does, resolve_project returns the brain root and boot reports mode `work`; `adopt` skips the stub when the path is the brain root; the brain's release rule is `pr`. docs/plan/tickets.json and docs/NEXT_SESSION.md then give way to the ordinary ledger, STATE and HANDOVER, and method/brain-work.md shrinks to the edit rules.",
+   "acceptance": "In a brain-only temp tree with `.brain/` installed, `brain boot`, `req add`, `checkpoint --push`, `resume` and `handover` exit 0, and `brain budget` still passes.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "instructions-15"
+  },
+  {
+   "title": "Idea: a `gate --last` that answers \"why is the build red?\" from the recorded run without running the build again",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/gate.py"
+   ],
+   "evidence": "With a red gate, `brain resume` printed \"gate checks exit 1 at 2026-11-10T17:52 on d5269af\" with neither the log path nor the failing lines. The last line of `.brain/log/gates.jsonl` holds both the exit code and \"log\": \".brain/log/run/<file>.log\". Today the quick answer costs a re-run of the gate or two file reads.",
+   "proposed_fix": "`brain gate --last` prints, for each gate, the recorded exit code, commit, age and the same failing tail that `brain run` prints, read from the saved log. Name it in the size-0 row's parenthesis only if a live session shows leads miss it.",
+   "acceptance": "After a failing `gate --all`, `brain gate --last` prints the failing lines in under 1,500 B and starts no gate command (checked in a test by a gate command that writes a marker file).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-16"
+  },
+  {
+   "title": "Idea: a scripted walk-through of the owner's phrases as a regression test",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "tests/test_rehearsal.py",
+    "evals/routing.jsonl"
+   ],
+   "evidence": "Every finding above came from running twelve owner messages against scratch workspaces (brain alone, empty repo, repo with content, project mid-item). The 407 tests passed before and after my wording patch, so no test notices that a skill names a command that exits 1 in the mode it is used in, or that `close` leaves the trees uncommitted.",
+   "proposed_fix": "A table-driven test: for each (workspace fixture, owner message) pair, assert the boot mode and size, then run the commands the matching skill names for that mode and assert their exit codes and that `git status --porcelain` is empty after the session-end sequence. Start with the twelve messages in this audit.",
+   "acceptance": "The new test fails on today's tree for the brain-only handover and for close-then-status, and passes once findings 1 and 3 are fixed.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "instructions-17"
+  },
+  {
+   "title": "Idea: extend the lint to the gaps found here",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/lint.py"
+   ],
+   "evidence": "engine/lint.py checks that commands and flags exist, budgets, imports, links, project names and exact repeated sentences, and its reason check reads only CLAUDE.md (`unscoped_absolutes`). It did not flag: 26 trigger phrases with no routing case, a rule with no reason in a skill (brain-start:27), a token number in agent text against GUIDELINES:48, or 14 engine subcommands that no loaded file names (among them `learn review`, `ml flaky`, `plan packet`, `req set`).",
+   "proposed_fix": "Add three checks: every quoted trigger phrase in a skill description has a case in evals/routing.jsonl (error); the reason check also covers skills and agents (note); a token number in an agent body (note). Add a report-only list of subcommands that no instruction file names, so dead features are visible.",
+   "acceptance": "`python3 bin/brain lint` on today's tree reports the 26 phrases and the six agent lines; `python3 -m unittest tests.test_lint` covers each new check with a failing and a passing sample.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "instructions-18"
+  },
+  {
+   "title": "Idea: with several projects attached, say so instead of \"no managed project found\"",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/common.py",
+    ".claude/skills/brain-start/SKILL.md"
+   ],
+   "evidence": "With two managed projects beside the brain, boot printed \"mode: choose ... also attached: gastos (using the most recently active)\", but the next command, `brain req list`, printed \"no managed project found (attach one, or run: brain init <path>)\". resolve_project returns a project only when exactly one managed sibling exists, and brain-start's `choose` line does not mention `--project`.",
+   "proposed_fix": "Error text: \"several projects are attached: add --project <path> (boot shows which one it chose)\". The patch already adds to brain-start: \"With several projects attached the engine does not guess, so pass `--project <path>` to every later command.\"",
+   "acceptance": "With two managed siblings, `brain req list` prints the new message and exits 1; with `--project` it lists that project's ledger.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "instructions-19"
+  },
+  {
+   "title": "Idea: answer \"Status\" with one command",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/state.py",
+    ".claude/skills/brain-status/SKILL.md"
+   ],
+   "evidence": "brain-status names three commands for the usual reply (`status`, `ledger`, and `release --check-live` when a live address is set). `brain status` printed 12 lines whose Cost section said \"No session has been recorded yet\" until `close` ran, so the session's own cost needs the second call. It also rewrites the tracked STATUS.md on every status question.",
+   "proposed_fix": "`brain status` appends this session's one-line ledger summary and, when `release.live_url` is set, the live check result, and writes STATUS.md only when its content changed. brain-status's Sources list then starts with that single command.",
+   "acceptance": "`brain status` prints the session cost line and the live result in at most 15 lines; running it twice in a row leaves `git status --porcelain` unchanged.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "instructions-20"
+  }
+ ],
+ "data": "ALWAYS-LOADED TEXT (measured on the real tree at the time of the audit)\n- CLAUDE.md: 5,423 B, about 1,356 tokens at 4 B per token.\n- Ten skill descriptions: 2,411 B (2,527 B with names), about 632 tokens. Largest: brain-handover 269, brain-create 263, brain-start 253, brain-verify 252.\n- Six agent descriptions: 1,102 B (1,145 B with names), about 286 tokens.\n- Total: 9,095 B, about 2,274 tokens at 4 B per token; nearer 2,600 at 3.5 B per token, which suits Markdown with code spans. No tokenizer was available, so both are estimates.\n- `brain budget` prints 2,550 because it adds the 1,150 B project stub, which loads only with a project attached.\n- With the proposed patch: CLAUDE.md 5,667 B (+244 B, about +60 tokens); budget prints about 2,620.\n\nSENTENCES THAT EARN THEIR PLACE LEAST IN CLAUDE.md (all cut or shortened in the patch, about 600 B)\n- :3 \"This file is the whole always-loaded core; everything else loads when needed.\" (79 B): describes the file, changes no action.\n- :3 \"does not use a terminal,\" repeats :39 \"He has no terminal\".\n- :25 \"it picks the template, agent, model, effort and token wage, and writes the brief to a file, so the delegation message is one line pointing at it\" (about 150 B): repeats brain-build:16, which is loaded whenever a hire happens.\n- :29 \"`memory/`, `owner/`, `stats/` and `playbooks/` change only through `BRAIN learn`\" (about 85 B): restates the sentence before it and is inexact; `brain guard path memory/models.json` answers \"kernel zone\".\n- :46 the models.json and hr/ pointers (133 B): rule 5 keeps the lead's model and `hr hire` picks helpers' models, so the lead decides nothing from them.\n- :24 \"`BRAIN boot` gives the project's position;\" (44 B): repeats the size table.\n- :47 the MASTER_PLAN pointer (84 B): replaced by the pointer to method/brain-work.md.\n\nWHAT WAS MISSING (added by the patch)\n- What to do when the brain is the project.\n- That words after a trigger are the request and outrank the recorded item.\n- That a plan which is then carried out is size 3, and that boot's size line is only a guess.\n- \"commit it\" at size 1.\n- close, then checkpoint with push.\n- \"wait for his yes\" after a sample (the owner item own-sample-first says it; CLAUDE.md:37 did not).\n\nWALK-THROUGH (what a lead following only the loaded text does)\n1. \"Start running\", brain alone: boot (311 B without a request) shows brain-only and 10 open tickets; brain-start says run boot again, read NEXT_SESSION.md (the previous session's instruction), work CB-200 onwards. req, checkpoint, resume and handover exit 1.\n2. \"Start running\", project mid-item: boot 954 B, 561 B of it recall of loaded rules; brain-start repeats boot; both NEEDS_YOU.md and DECISIONS.md must be read for RESOLVED and OVERTURNED; boot shows item ids only, so PLAN.md is read too; \"at most three times in a row\" is ambiguous.\n3. \"Nuevo proyecto: una app para apuntar gastos\", empty repo: boot says \"size: 2 project ... no task verb; answer or acknowledge\"; init creates 12 files; checkpoint on main is \"committed; not pushed\"; the stub CLAUDE.md stays untracked and handover later stops on it.\n4. \"Adopt this repo\": boot shows mode adopt beside \"size: 0 answer\"; adopt has no --release, so the rule stays none; its NEEDS_YOU item has no number although brain-status reports item numbers.\n5. \"Quick: why is the build red?\": size 0 says no scripts; `resume` shows \"gate checks exit 1 at ... on d5269af\" with no log path.\n6. \"Go deep: which database for offline sync\": boot recall is 604 B of unrelated items; direct recall says nothing relevant; hiring gives a refusal or a builder (finding 6).\n7. \"Dame 5 nombres para la app\": sized 0, yet brain-create asks for a brief, a recall, five sketches and images.\n8. \"Ship it\": works under main-on-green (\"released b5aef9d to main (fast-forward, gates green)\"); under none it exits 0 having released nothing.\n9. \"Status\": status plus ledger plus the live check, three calls; `status` rewrites STATUS.md.\n10. \"¿Qué has aprendido?\": digest writes learning/digest/2026-W46.md, which nothing commits; handover then fails.\n11. \"Hand over\": checkpoint, close, a hand commit that handover makes itself, then handover; with the brain alone it exits 1.\n12. \"fix the typo in the home title\": CLAUDE.md does not say commit; checkpoint printed \"1 other uncommitted change(s) left for their author\"; close left both trees uncommitted.\n\nROUTING OF THE 52 TRIGGER PHRASES QUOTED IN SKILL DESCRIPTIONS\n- 26 are not in evals/routing.jsonl.\n- 17 route as size 0 \"answer\": Constrúyelo, Propose options, Give me 5 …, Propón opciones, Dame 5 …, context is running low, Consolidate, Learning digest, Consolida, Adopt this repo, Adopta este repo, Find out …, Compare …, How much has this cost?, ¿Cuánto ha costado?, Publícalo, Súbelo a main.\n\nENGINE SUBCOMMANDS NO LOADED INSTRUCTION FILE NAMES (CLAUDE.md, skills, agents, method, playbooks)\ndetect, req set, items check, plan assign, plan packet, learn review, learn apply, learn status, guard path, guard diff, ml alarms, ml flaky, radar, eval audit, eval grade, eval record, eval prereg, eval defects, ablate, hr audit, lint, skill-audit.\n\nOTHER MEASUREMENTS\n- `brain eval contract`: 407 tests, 37.8 s.\n- `brain boot`: 0.15 s.\n- Boot output over eleven messages: 6,688 B, of which 2,278 B recall.\n\nFILES IN /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/instructions\n- proposed-instructions.patch: 18 files of wording, applies cleanly to the real tree.\n- ws_prop/Claude-Brain: the patched copy that passed lint, budget, doctor and 407 tests.\n- brain: brain-only copy.\n- ws_new: brain plus the scratch project gastos. Its brain copy also carries the one-line digest fix in engine/state.py.\n- ws_adopt: brain plus the adopted repo shop.\n- All copies have origin set to local bare repositories under remotes/."
+}

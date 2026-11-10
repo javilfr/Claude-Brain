@@ -1,0 +1,56 @@
+{
+ "summary": "Found by the lead while running this session.",
+ "strengths": [],
+ "findings": [
+  {
+   "id": "lead-01",
+   "title": "The token ledger did not see helpers started by a workflow (fixed: CB-210)",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "engine/common.py",
+    ".claude/hooks/session_end.py"
+   ],
+   "evidence": "`brain ledger` printed '1 helper(s) ... $3.42' while seven workflow helpers were running; their transcripts are in <session>/subagents/workflows/<run>/agent-*.jsonl. After the fix the same moment read '7 helper(s) ... $13.14'.",
+   "repro": "",
+   "proposed_fix": "Done: common.helper_transcripts finds agent-*.jsonl at any depth under subagents/ and ignores a workflow's journal.jsonl; the session-end hook uses it.",
+   "acceptance": "tests/test_helper_transcripts.py (3 tests) passes.",
+   "effort": "S",
+   "confidence": "high"
+  },
+  {
+   "id": "lead-02",
+   "title": "The session-end hook rewrites a tracked inbox file after every turn, so the tree is dirty after every turn and each turn ends with a request to commit",
+   "severity": "should-fix",
+   "kind": "inefficiency",
+   "files": [
+    ".claude/hooks/session_end.py",
+    "engine/ledger.py",
+    "engine/learn.py"
+   ],
+   "evidence": "After the first turn of this session `git status` showed `?? learning/inbox/2026-11-10-<session>.jsonl`; the cloud session's own stop check then answered 'There are untracked files in the repository. Please commit and push'. The history already holds three 'learn: session records' commits from one build session.",
+   "repro": "",
+   "proposed_fix": "The hook keeps capturing (a session can die without `close`), but into a path git ignores: learning/inbox/.live/<date>-<session>.jsonl (add learning/inbox/.live/ to .gitignore). `brain close` and `checkpoint --push` write the tracked record as today and delete the live file. The repair of an unclosed session at the next boot reads the live file first, then the transcript. learn.pending_session_records also reads the live file, so `close` keeps what an earlier capture knew.",
+   "acceptance": "Tests: the hook leaves `git status --porcelain` empty in a git brain; close after a hook capture writes one tracked record with the same totals and removes the live file; repair uses a live file when the transcript is gone.",
+   "effort": "M",
+   "confidence": "high"
+  },
+  {
+   "id": "lead-03",
+   "title": "A copy of the brain made with cp -a keeps the real remote: an auditor's scratch copy pushed three test records to this branch",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "method/brain-work.md",
+    "hr/GUIDELINES.md",
+    "engine/state.py"
+   ],
+   "evidence": "Commit 89b5624 'learn: session records' on origin/claude/optimistic-newton-sh6lcx came from a scratch copy running `checkpoint --push`; reverted in 9e4b158. Two other auditors' copies also tried to push before they re-pointed their remotes.",
+   "repro": "",
+   "proposed_fix": "Engine side is package A (push_brain_records: only this session's files, never from a copy under the temp folder, honour BRAIN_NO_PUSH). Instruction side: method/brain-work.md and hr/GUIDELINES.md say a scratch copy of the brain is made with `git clone --no-hardlinks <brain> <copy> && git -C <copy> remote remove origin` (or with BRAIN_NO_PUSH=1), never cp -a.",
+   "acceptance": "grep -q 'remote remove origin' method/brain-work.md; the package A tests for push_brain_records.",
+   "effort": "S",
+   "confidence": "high"
+  }
+ ]
+}

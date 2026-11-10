@@ -1,0 +1,341 @@
+{
+ "summary": "The release core, the token ledger and the hooks' fail-open behaviour are sound: 410 tests pass in my copy, and the ledger matches my independent recomputation of the real session to the cent ($12.91, after the CB-210 fix). The most important change is that the two mechanisms deciding \"done\" accept claims instead of evidence. `req check` passes on an empty evidence string, on evidence that points at nothing and on a ledger missing most of the request; a gate is green on exit 0 even when its command cannot fail or its output says FAILED; release prints \"gates green\" while owner and checklist gates are unmet. Next come `brain run` and gate process handling (lost stderr and orphans on timeout, inherited stdin, 1.1 GB of memory for 300 MB of output, no record when killed), then the guard, which only covers Edit/Write on learned files and whose lock one edit removes. Disclosure: while testing, `brain checkpoint --push` from my scratch copy (which kept the real `origin`) pushed one junk commit, 89b5624, to the brain's remote working branch although BRAIN_NO_NETWORK=1 was set. I told the main session immediately, removed the remote from my copy, and the main session reverted it in 9e4b158; the defect behind it is finding 6. Scratch projects are under /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/quality-path/ (p1 to p4).",
+ "strengths": [
+  "Token ledger arithmetic is exact on a real transcript: engine main cost $3.599093 against my independent $3.5990928, and total $12.91 both ways once workflow helpers are counted (CB-210). The 1-hour and 5-minute cache-write split, repeated message ids and the journal file are handled correctly; no message id repeats across the 8 transcript files.",
+  "Release core holds under probing: it refused a dirty tree, a never-run gate, a red gate, a gate passed on an older work commit ('the work has changed since') and a non-fast-forward, and it never forces. Committing only the gate log keeps a gate green. Do not loosen `green_at_head` or `same_work`.",
+  "The requirements loader is strict: a corrupt line stops every req command with exit 2 and the file is never rewritten; `--done` is refused without a 'passes when'; identical words are not added twice.",
+  "Both hooks fail open in well under a second on malformed, empty, array and wrong-type stdin, sanitise a session id containing path segments, and the guard hook resolves symlinks and `..` before deciding (a symlink into memory/ from outside was still blocked when locked). The Stop hook captured a 4.5 MB transcript set in 0.085 s.",
+  "`brain run` keeps the conversation small and preserves exit codes: 300 MB (5.7 million lines) of output printed 3 lines, non-UTF8 and NUL bytes were handled, exit 7, 300 (as 44) and SIGKILL (as 247) came through, and a timeout returned 124 in 2.0 s. The lint derives the command tree from the real argparse parsers and caught 4 of the 10 errors I planted."
+ ],
+ "findings": [
+  {
+   "title": "`req check` passes on evidence that is empty, free text or points at nothing; the stored `check` command is never run",
+   "severity": "blocking",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/req.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-verify/SKILL.md",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "Scratch project, tier 2. `brain req add --quote \"fourth\" --passes-when \".\"; brain req evidence R-004 \"\" --done` -> `R-004: 1 evidence item(s), status done`; the row holds `\"evidence\": [\"\"]`. `brain req evidence R-002 \"gate:checks exit 0\" \"run:does-not-exist.log\" \"file:/nope/nothing.txt\" --done` (no gate had ever run) -> `R-002: 3 evidence item(s), status done`. `brain req check` -> `requirements: all 2 line(s) done with evidence or dropped with a reason`, exit 0. req.py:157-160 appends any string; req.py:101 `elif not r.get(\"evidence\")` is the only test. The `check` field is written at req.py:117 and 142 and read nowhere in engine/ (grep). state.py write_status then tells the owner 'N of M done with evidence'. By contrast learn.py:425 `resolve_evidence` verifies gate:, run:, test: and review: for memory notes.",
+   "repro": "brain req add --quote \"x\" --passes-when \".\"; brain req evidence R-001 \"\" --done; brain req check; echo $?   (prints the success line, 0)",
+   "proposed_fix": "In `req.cmd_evidence`: strip each item and refuse an empty one (exit 1, nothing written). Add `req.resolve(project, sid, item)` for typed evidence: `gate:<id>` needs that gate's latest record to be exit 0 and `gate.same_work(project, rec.commit, HEAD)`; `run:<log>` needs the log in .brain/log/run with header `[exit 0`; `test:<name>` needs the name in a green log; `file:<path>` must exist inside the project (store a 12-hex content hash); `commit:<sha>` must exist; owner words only through `--quote`, checked with `learn.verify_owner_quote`. A typed item that does not resolve is refused. Untyped text stays accepted (the existing test uses it) but is stored as a claim. `req.problems`/`cmd_check` report 'N verified, M done on a claim only'; exit stays 0 by default and is 1 with a new `--strict`, which brain-verify step 4 uses at tier 2 and above. `write_status` prints 'verified / done but not verified / open / dropped'. Add `req check --run`: run each line's `check` through `gate.run_filtered` and attach `check:<log> exit N @<commit7>` as script-written evidence.",
+   "acceptance": "New tests in tests/test_core.py::ReqTests: test_empty_evidence_is_refused, test_typed_evidence_must_resolve (gate with no run, missing run log, missing file: exit 1 and ledger unchanged), test_strict_check_fails_on_claim_only_lines, test_check_run_attaches_script_written_evidence. Existing ReqTests stay green unchanged.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "quality-path-01"
+  },
+  {
+   "title": "Nothing checks that the ledger holds the request: empty ledger, one line of many, all lines dropped and a rewritten 'passes when' all pass",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/req.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/CLAUDE.md"
+   ],
+   "evidence": "CLAUDE.md rule 1 says done is when `req check` passes 'on a ledger that holds every sentence'. (a) New tier-2 project, `brain req check` -> `requirements: ledger is empty (fine for an answer or a small task)`, exit 0; req.py:223 fails an empty ledger only once the lead has checkpointed stage build or later. (b) One line for a longer request -> exit 0; the request text is stored nowhere. (c) Three lines, each `brain req drop R-00N --reason \"later\"` -> `requirements: all 3 line(s) done with evidence or dropped with a reason`, exit 0; STATUS.md was not regenerated and showed no requirements line (`req.save` does not call `write_status`), though brain-verify says a drop is something 'he sees'. (d) `brain req set R-004 --passes-when \"page exists\"` replaced 'Lighthouse mobile run shows checkout under 2 s' with no trace, then `--done` was accepted.",
+   "repro": "brain init p --release main-on-green; BRAIN_PROJECT=p brain req check; echo $?   (0 at tier 2 with nothing in the ledger)",
+   "proposed_fix": "1. `brain req intake --request \"<text>\"` (called by `boot \"<request>\"` at tier 2 and above) stores the request's sentences project-side in `.brain/log/requests.jsonl` (project data only, I-05 unaffected), taking the owner's typed turns from `learn.owner_turns` when a transcript is on disk. 2. `req.problems` adds 'request sentence not in the ledger: ...' when a stored sentence has no line whose normalised quote it contains or is contained in (reuse `learn.containment` at 0.8). 3. `cmd_check`: an empty ledger fails at tier 2/3 whenever STATE has an item or last_done, or any gate or release record exists, not only by stage. 4. The success line states the split ('2 done, 3 dropped: R-002 later; ...'); `req.save` calls `state.write_status`; STATUS.md lists dropped lines with reasons. 5. `cmd_set` keeps `passes_when_history` and refuses to change a done line without `--reopen`.",
+   "acceptance": "Tests: test_request_sentence_missing_from_ledger_fails_check, test_empty_ledger_fails_at_project_size_once_work_is_recorded, test_all_dropped_is_reported_as_dropped_not_done, test_passes_when_change_is_recorded, test_status_lists_dropped_lines. `test_empty_ledger_fails_at_project_size_once_building` and `test_check_blocks_until_every_line_has_evidence` stay green unchanged.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "quality-path-02"
+  },
+  {
+   "title": "A gate is green on exit 0 even when the command cannot fail, a pipe hides the failure, or the output says FAILED; the detectors miss removed tests and common skip markers",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/tests/test_core.py"
+   ],
+   "evidence": "Scratch project p3. One commit changed the gate to `python3 -m unittest discover -s tests || true`, deleted two of three tests and added `@pytest.mark.xfail`, `self.skipTest(...)` and `raise unittest.SkipTest`. `brain gate --all` -> `gate checks: ok in 0.1s · 20 lines` followed by `Ran 1 test` / `FAILED (errors=1)`, exit 0, and no 'check this before calling it done' line. `brain release --push` -> `released 566b189 to main (fast-forward, gates green)`. `brain close` then recorded `passed: True, first_pass: True` for that session. Separately `brain run -- \"python3 -c 'import sys; print(\\\"3 failed, 10 passed\\\"); sys.exit(1)' | tee /dev/null\"` -> `ok in 0.0s`, exit 0 (/bin/sh is dash, no pipefail). gate.py:26 SKIP_RE has no xfail, skipTest, SkipTest, t.Skip, #[ignore] or @Disabled; no detector looks at removed tests or at a changed gate command; `cmd_release` never calls `diff_detectors`.",
+   "repro": "Set gates[0].command to \"false || true\", commit, then: brain gate --all; brain release   (reports ready to release)",
+   "proposed_fix": "1. `run_filtered`: when exit is 0 and one of the last 20 lines matches a failure summary (`FAILED`, `[1-9]\\d* (failed|failing|errors?)`, `errors=[1-9]`, `NO TESTS RAN`, `not ok`), set `suspect` in the digest; `print_digest` says so; `run_gates` stores it; `green_at_head` refuses a suspect record ('exited 0 but its output reports failures'). 2. New `gate.weak_command(cmd)`: reasons for `|| true`, `|| :`, `|| exit 0`, a trailing `; true`, an unquoted single pipe without `set -o pipefail`, or a command that is only `true`, `:`, `exit 0` or `echo`. `cmd_gate` and `cmd_release` print them; `green_at_head` refuses the `|| true` family and hidden pipes; bare `true` only warns (existing tests use it). 3. Extend SKIP_RE (xfail, pytest.skip(, .skipTest(, SkipTest, t.Skip(, #[ignore], @Disabled, @Ignore, --passWithNoTests) and add a removed-test detector (`^-\\s*(def test_|it\\(|test\\(|func Test|#\\[test\\])`) and a changed-gate-command detector. 4. `cmd_release` prints detector lines before pushing.",
+   "acceptance": "Tests in GateTests: test_exit_zero_with_failure_summary_is_not_green, test_gate_command_that_cannot_fail_is_refused_by_release, test_pipe_hiding_exit_code_is_flagged, test_detectors_see_removed_tests_and_xfail. All existing GateTests and the rehearsal stay green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "quality-path-03"
+  },
+  {
+   "title": "Release prints 'gates green' and pushes while `owner` and `checklist` gates are unmet",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/contract/v1.schema.json"
+   ],
+   "evidence": "contract/v1.schema.json:22 allows gate kinds `command`, `checklist` and `owner`. With gates `[{checks, command, true}, {owner-approval, owner}, {dod, checklist, file docs/dod.md}]` and docs/dod.md holding two unchecked boxes: `brain validate` -> `contract v1 valid`; `brain gate --all` -> `gate owner-approval: manual gate: needs a person`, `gate dod: manual gate: needs a person`, exit 0; `brain release --push` -> `released 7d4fa10 to main (fast-forward, gates green)`. gate.py:130-132 records exit None for both kinds and gate.py:160 `command_gates = [...kind == \"command\"]` is all `green_at_head` looks at. No test names an owner or checklist gate (grep).",
+   "repro": "Add {\"id\":\"owner-approval\",\"kind\":\"owner\"} beside a passing command gate, commit, then: brain release --run-gates --push",
+   "proposed_fix": "`run_gates`: a checklist gate reads its `file` and is exit 0 only when the file exists and has no `- [ ]` line (record the counts). An owner gate is green only when an approval record exists for the current work, written by a new `brain gate approve <id> --quote \"<his words>\"` that verifies the quote with `learn.verify_owner_quote`. `green_at_head` iterates every gate, not only command gates. As the smallest first step, `cmd_release` refuses with 'gate <id> needs a person' instead of printing 'gates green'.",
+   "acceptance": "Tests: test_release_refuses_while_an_owner_gate_is_unapproved, test_checklist_gate_is_red_with_unchecked_boxes, test_owner_gate_approval_needs_the_owners_typed_words. Fixtures under evals/fixtures still validate.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "quality-path-04"
+  },
+  {
+   "title": "`brain run` and gates: stderr lost and children left running on timeout, caller's stdin inherited, whole output held in memory, no record when killed, one-hour default above the tool's limit",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md",
+    "/home/user/Claude-Brain/memory/ml_config.json"
+   ],
+   "evidence": "Python 3.13, scratch project. (1) `brain run --timeout 2 -- \"echo start; echo oops-on-stderr >&2; sleep 12; echo end\"` -> `FAILED (exit 124) in 2.0s`; the log holds `start` and `[timed out after 2s]` but not `oops-on-stderr` (gate.py:45 uses e.stdout only); afterwards `pgrep -fa \"sleep 12|sleep 20\"` -> `9125 sleep 20`, `9218 sleep 12` still running. (2) `(sleep 6 | brain run --timeout 30 -- \"read x; echo got:[$x]\")` -> `ok in 5.9s`: the command waited on the caller's stdin. (3) 300 MB of output: peak RSS 1127 MB, and a 300,000,097-byte log left in .brain/log/run; nothing prunes that folder (grep). (4) SIGTERM to `brain gate --all` during a `sleep 47` gate: empty output, gate records before=7 after=7, run logs before=8 after=8, and `/bin/sh -c echo starting watch mode; sleep 47` plus `sleep 47` still alive. (5) gate.py:37 `timeout: int = 3600`, while a foreground Bash call is killed at 2 minutes by default and 10 at most; no skill or method file mentions a timeout (grep).",
+   "repro": "brain run --timeout 2 -- \"echo start; echo oops >&2; sleep 12\"; pgrep -fa \"sleep 12\"",
+   "proposed_fix": "Rewrite `run_filtered` around `subprocess.Popen(command, shell=True, stdin=DEVNULL, stdout=<log file>, stderr=STDOUT, start_new_session=True)`. On timeout, and on SIGTERM/SIGINT through a handler installed for the run, `os.killpg` with SIGTERM then SIGKILL, append `[timed out after Ns]` or `[killed]` to the log, and still return a digest so `run_gates` appends a record (exit 124 or 143). Build the digest by streaming the log (first three error hits, a deque for the tail) so memory stays flat; stop writing at a tunable cap (20 MB) with a truncation note; prune .brain/log/run to the newest N logs. Timeouts: `gates[i].timeout` when present (the schema leaves the gate object open), else a tunable 900 s; `brain run` default 540 s so the engine fires before the tool does. One merged stream in arrival order also closes the open item M6. Add one line to brain-build: a check longer than two minutes needs a longer tool timeout or a background run.",
+   "acceptance": "Tests in GateTests: test_timeout_kills_the_whole_process_group_and_keeps_stderr, test_run_does_not_read_the_callers_stdin, test_killed_gate_still_leaves_a_record, test_large_output_is_streamed_not_held (50 MB of output, tracemalloc peak under 20 MB), test_run_logs_are_pruned. `test_run_keeps_full_output_in_a_file_and_prints_little` stays green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "quality-path-05"
+  },
+  {
+   "title": "Pushes ignore BRAIN_NO_NETWORK, and `push_brain_records` commits and pushes every inbox file it finds (this caused a real unintended push during the audit)",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "With `BRAIN_NO_NETWORK=1` exported, `brain checkpoint --done feature --push` for a scratch project, run from my scratch copy of the brain, printed `brain records pushed to claude/optimistic-newton-sh6lcx`. `git ls-remote origin` then showed the real branch at 89b5624 `learn: session records`, adding three inbox files: two written by my hook tests under made-up session ids (`...-------------tmp-evil.jsonl`, `...-timing-test.jsonl`) and a stale copy of the live session's record. I reported it to the main session at once and removed `origin` from the copy; the main session reverted it (9e4b158). Causes: state.py:183-204 stages `learning/inbox` and `learning/radar` wholesale, with no check of which session wrote a file and no secret scan, and pushes; BRAIN_NO_NETWORK is read only in radar.py:554 and 564; a `cp -a` copy keeps the real remote.",
+   "repro": "cp -a the brain (with .git) to a scratch folder, write any file in the copy's learning/inbox/, then: BRAIN_NO_NETWORK=1 python3 <copy>/bin/brain checkpoint --push --project <managed scratch project>   (do not run this against a real remote)",
+   "proposed_fix": "Add `state.may_push(repo) -> str`: when BRAIN_NO_NETWORK (or a new BRAIN_NO_PUSH) is set and `git remote get-url origin` is not a local path or file:// URL, return 'not pushed: network use is switched off'. Use it in `push_bookkeeping`, `push_brain_records` and the push step of `gate.cmd_release`; local bare remotes, which the tests use under BRAIN_NO_NETWORK=1 in CI, stay allowed. In `push_brain_records`, run `c.find_secrets` over the staged inbox text and refuse on a hit, and name in the message the files that belong to another session. Make scratch copies for audits and evals with the remote removed.",
+   "acceptance": "Tests in tests/test_hygiene.py: test_no_network_means_no_push_to_a_network_remote (origin set to an https URL, BRAIN_NO_NETWORK=1: no push attempted and the message says so), test_local_remote_still_pushes_with_no_network_set, test_brain_push_refuses_secret_like_inbox_text. `test_brain_records_are_pushed_and_nothing_else_in_the_brain` stays green.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "quality-path-06"
+  },
+  {
+   "title": "`brain gate` exits 0 when no gate ran",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py"
+   ],
+   "evidence": "Fresh `brain init` project (gates[0].command is \"\"): `brain gate --all` -> `gate checks: no command set in .brain/project.json yet`, `exit=0`. The record written is `{\"commit\": \"HEAD\", \"dirty\": true, \"exit\": null, ...}`: before the first commit `git rev-parse HEAD` prints the literal HEAD and it is stored as the commit. gate.py:256 `return 1 if worst else 0`, and `worst` stays 0 when every gate is manual or has no command. brain-verify says 'a gate with no recorded exit code has not passed', but the exit code says otherwise to anything chaining on it.",
+   "repro": "brain init p; BRAIN_PROJECT=p brain gate --all; echo $?",
+   "proposed_fix": "`cmd_gate`: when no result has an integer exit, print 'no gate ran: set gates[].command in .brain/project.json' and return 1. `head_commit`: return \"\" when `git rev-parse --verify --quiet HEAD` fails, so the literal HEAD is never recorded.",
+   "acceptance": "Test test_gate_exits_non_zero_when_nothing_ran (empty command, and only an owner gate). Command: on a fresh init project `brain gate --all; echo $?` prints 1.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "quality-path-07"
+  },
+  {
+   "title": "After the lock, one edit removes it: the hook passes every kernel file including VERSION.json, `guard diff` exits 0 on an unlock, and Bash writes are not guarded (I-09)",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/.claude/hooks/guard_paths.py",
+    "/home/user/Claude-Brain/.claude/settings.json",
+    "/home/user/Claude-Brain/engine/guard.py",
+    "/home/user/Claude-Brain/.github/workflows/ci.yml",
+    "/home/user/Claude-Brain/tests/test_guard.py"
+   ],
+   "evidence": "Copy with `learned_zone_locked: true`. Hook exit codes: memory/items.jsonl 2; memory/models.json 0; engine/gate.py 0; CLAUDE.md 0; VERSION.json 0; .claude/hooks/guard_paths.py 0; a Bash payload `echo x >> .../memory/items.jsonl` 0 (the matcher is `Edit|Write|MultiEdit`). `brain guard path VERSION.json` says `kernel change: needs the owner` exit 2, but the hook (guard_paths.py:32 `if zone_of(rel) == \"learned\"`) does not use that. Then, locked and committed, I appended a line to engine/gate.py and set the flag back to false: `brain guard diff --base HEAD` -> `changed files: 2 kernel, ...`, `kernel files changed: merging needs the owner's override label`, `guard diff exit=0`. ci.yml has no label step. So I-09 is enforced by nothing mechanical. Not reproduced: on a case-insensitive disk `MEMORY/items.jsonl` would be read as kernel and pass (on Linux it is a different file).",
+   "repro": "Set learned_zone_locked true and commit; flip it to false; python3 bin/brain guard diff --base HEAD; echo $?   (0)",
+   "proposed_fix": "1. guard_paths.py: for a kernel path in a locked brain print the PreToolUse JSON decision `permissionDecision: \"ask\"` with reason 'kernel change: needs the owner' and exit 0 (the existing test asserts exit 0 for a kernel path, which still holds), so the owner gets a prompt on his phone. 2. `guard.check_diff`: fail when VERSION.json has the lock true at the base and false or missing now; add `strict_kernel=False` and CLI `--strict-kernel` that fails on any kernel change; CI passes it unless the pull request carries the owner's label. 3. Add a second PreToolUse entry with matcher `Bash` (entry 0 stays as tested) that asks when the command pairs a write operator (`>`, `>>`, `tee`, `sed -i`, `mv`, `cp`, `rm`, `git checkout --`, `git restore`) with a learned-zone path of this brain. 4. `zone_of`: compare case-folded prefixes.",
+   "acceptance": "Tests in tests/test_guard.py: test_unlocking_in_a_diff_fails_guard, test_guard_hook_asks_for_kernel_paths_when_locked (exit 0, stdout JSON carries permissionDecision ask), test_bash_write_to_learned_zone_is_caught, test_zone_of_ignores_case. `test_clean_change_passes` and `test_guard_hook_blocks_learned_zone_only_when_locked` stay green unchanged.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "quality-path-08"
+  },
+  {
+   "title": "Hook commands fail closed when the script path does not resolve: python3 exits 2, which blocks every edit and blocks stopping",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "/home/user/Claude-Brain/.claude/settings.json",
+    "/home/user/Claude-Brain/tests/test_guard.py"
+   ],
+   "evidence": "`CLAUDE_PROJECT_DIR=/tmp/some-other-project sh -c 'echo \"{}\" | python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py; echo $?'` -> `python3: can't open file ... [Errno 2] No such file or directory`, `guard hook exit=2`; the same for session_end.py (`stop hook exit=2`) and with the variable unset (`/.claude/hooks/guard_paths.py`, exit 2). Exit 2 is the blocking code for PreToolUse and Stop. The scripts' 'fail open, always' logic never runs because the interpreter fails first. This bites if the settings are ever applied where the project folder is not the brain, which is what ticket CB-106 (hooks installed through the cloud environment) explores. I reproduced the exit code, not a live session in that state.",
+   "repro": "CLAUDE_PROJECT_DIR=/tmp/empty sh -c 'echo \"{}\" | python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py; echo $?'",
+   "proposed_fix": "Change both commands in .claude/settings.json to test for the file first, for example `[ -f \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py ] || exit 0; python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_paths.py` (it still contains the substring `test_settings_register_both_hooks` asserts). Do the same for session_end.py.",
+   "acceptance": "New test test_hook_commands_exit_zero_when_the_script_is_missing: run each command string from settings.json through `sh -c` with CLAUDE_PROJECT_DIR pointing at an empty temporary folder and with it unset; both exit 0.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "quality-path-09"
+  },
+  {
+   "title": "The secret scanner misses 13 of 20 common credential formats",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/common.py",
+    "/home/user/Claude-Brain/engine/guard.py",
+    "/home/user/Claude-Brain/tests/test_guard.py"
+   ],
+   "evidence": "`common.find_secrets` on synthetic samples: CAUGHT sk-ant key, ghp_ token, AKIA id, xoxb token, private key header, `OPENAI_API_KEY=sk-proj-...`. Missed: GitHub fine-grained `github_pat_`, bare AWS secret, Google `AIza...`, Stripe `sk_live_` and `rk_live_` (the pattern needs `sk-`), a JWT (the form of a Supabase service-role key), `Authorization: Bearer ...`, `password = hunter2-is-my-pass` (the generic rule needs 20 characters), `postgres://admin:pw@host`, an `npm_` token, a Telegram bot token, Twilio, SendGrid. common.py:29-36 has six patterns. The scanner backs `guard diff`, `learn note`, `items check`, `validate` and `hr audit`, so rule 10 rests on it.",
+   "repro": "python3 -c \"import sys; sys.path.insert(0,'.'); from engine import common as c; print(c.find_secrets('sk_live_'+'51H8abcdEFGHijklMNOPqrstUVWX'))\"   (prints [])",
+   "proposed_fix": "Add to `common.SECRET_PATTERNS`: `github_pat_[A-Za-z0-9_]{30,}`; `AIza[0-9A-Za-z_-]{35}`; `[sr]k_(live|test)_[A-Za-z0-9]{16,}`; `eyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}`; `(?i)bearer\\s+[A-Za-z0-9._~+/-]{20,}`; `[a-z][a-z0-9+.-]*://[^/\\s:@]+:[^/\\s:@]{6,}@`; `npm_[A-Za-z0-9]{30,}`; `SG\\.[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}`; `\\b\\d{8,10}:AA[A-Za-z0-9_-]{30,}`; and `(?i)\\b(password|passwd|pwd)\\b\\s*[:=]\\s*['\"]?[^\\s'\"]{8,}`. I ran these ten over every text file in the repository: 0 matches, so they add no false positive today.",
+   "acceptance": "New table-driven test test_secret_patterns_cover_common_providers (samples built by string concatenation so the test file does not trip the scanner): at least 18 of the 20 caught. `brain lint`, `brain items check`, `brain hr audit` and `brain guard diff` stay green on the repository.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "quality-path-10"
+  },
+  {
+   "title": "`checkpoint --push` commits the manifest and project tools as bookkeeping while saying it left them, and a gate script elsewhere under .brain/ can change without making the gate stale",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "(1) In p3 I changed gates[0].command to `true` in .brain/project.json and added .brain/ext/tool.sh, then `brain checkpoint --done x --push` -> `checkpoint pushed to work; 2 other uncommitted change(s) left for their author`. `git show --stat HEAD` for the commit `chore(brain): checkpoint` lists `.brain/ext/tool.sh` and `.brain/project.json | 2 +-`; `git status --porcelain` is empty; `git show HEAD:.brain/project.json` has `\"command\": \"true\"`. state.py:164-165 runs `git add -- .brain STATUS.md NEEDS_YOU.md` and commits the same pathspec, although `is_bookkeeping` (state.py:109) says those two must not ride along. (2) Gate command `sh .brain/tests/check.sh` passed; a later commit rewrote that script to `true`; `brain release` -> `ready to release 22125c5 to main: gates are green on this commit`, because state.py:116-117 counts everything under .brain/ except project.json and ext/ as bookkeeping. (3) After `git mv .brain/newwork.sh newwork.sh` (status line `R  .brain/newwork.sh -> newwork.sh`) release still says ready: gate.py:89 reads only the old side of a rename.",
+   "repro": "Edit .brain/project.json, then: brain checkpoint --push; git show --stat HEAD; git status --porcelain",
+   "proposed_fix": "`push_bookkeeping`: pass the computed `books` list as the pathspec to `git add` and `git commit`, never the `.brain` directory. `is_bookkeeping`: an allow-list (`.brain/STATE.md`, `PLAN.md`, `DECISIONS.md`, `REQUIREMENTS.md`, `requirements.jsonl`, `CHECKLIST.md`, `HANDOVER.md`, `.brain/.gitignore`, `.brain/log/**`, `.brain/memory/**`, `STATUS.md`, `NEEDS_YOU.md`); anything else under .brain/ is work. `tree_dirty`, `push_bookkeeping` and `resume_lines`: read `git status --porcelain -z` and test both sides of a rename.",
+   "acceptance": "Tests: test_checkpoint_never_commits_the_manifest_or_ext (after the push, project.json and ext/tool.sh are still uncommitted and absent from the remote), test_a_changed_script_under_brain_makes_the_gate_stale, test_staged_rename_out_of_brain_counts_as_dirty. `test_bookkeeping_definition_is_shared_with_gates` stays green.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "quality-path-11"
+  },
+  {
+   "title": "Under release rule `pr` (or `none`), `checkpoint --push` on the release branch pushes ungated work straight to main",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/tests/test_hygiene.py"
+   ],
+   "evidence": "Scratch project p4, `brain init --release pr`, on branch main with a local bare remote, gate command `false`. I committed `feature.py` ('ungated work on main'); `brain gate --all` -> `gate checks: FAILED (exit 1)`; `brain checkpoint --done feature --push` -> `checkpoint pushed to main`; the remote's main then showed `b0e2d1a chore(brain): checkpoint` on top of `cf967cf ungated work on main`. `brain release --push` in the same state says `release rule is 'pr': ... nothing pushed`. state.py:126 `if rel.get(\"rule\") != \"main-on-green\" or branch != rel.get(\"branch\", \"main\"): return \"\"` applies the release-branch block to one rule only.",
+   "repro": "brain init p --release pr; on main: commit a work file; brain checkpoint --push; git -C <remote> log --oneline main",
+   "proposed_fix": "`state.release_branch_block`: apply the same 'only bookkeeping may be ahead' test when the rule is `pr` and the current branch is `release.branch`, with the message 'this is the branch pull requests merge into: push a work branch and open a pull request'. For rule `none`, leave the push but print one line saying the branch has no release rule.",
+   "acceptance": "Test test_checkpoint_cannot_push_work_to_the_pr_target_branch, modelled on `test_checkpoint_cannot_push_unreleased_work_to_the_release_branch`; bookkeeping-only pushes to that branch still succeed.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "quality-path-12"
+  },
+  {
+   "title": "Lint gaps: invalid option values, missing required options and two call forms pass; repeated sentences only note although the spec says fail; one transcript rule is missing; handover, memory items and HR templates are not scanned",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/lint.py",
+    "/home/user/Claude-Brain/docs/EXECUTION_PLAN.md",
+    "/home/user/Claude-Brain/memory/models.json",
+    "/home/user/Claude-Brain/tests/test_lint.py"
+   ],
+   "evidence": "I appended ten probe lines to a skill in my copy; `brain lint` reported 4 errors (`--dne`, `release --force`, `req evidnce`, `hr ... --chek`) and missed `BRAIN checkpoint --stage shipping`, `BRAIN close --outcome great --tier 9`, `BRAIN req drop R-001` (required --reason absent), `python3 Claude-Brain/bin/brain bogus --nope` and `\"$BRAIN\" req bogus` (lint.py:23 CALL needs whitespace, `;`, `&`, `|` or `(` before the name). The same sentence in three instruction files -> `note: repeated in 3 files ...`, `lint exit=0`, while EXECUTION_PLAN.md:149 lists duplicated sentences among what `brain lint` 'exits non-zero on' (lint.py:206 puts them in notes). `brain lint --transcript` prints six lines, none for 'sub-agent replies over cap' named in the same spec line. memory/models.json:24 `limits` is read by no code (grep) and its `recall_budget_tokens: 600` contradicts recall.py:46 `DEFAULT_BUDGET = 300`. lint.py:33-40 does not scan docs/NEXT_SESSION.md, hr/GUIDELINES.md, hr/rack/*.jsonl, or the item files whose text names `brain run`, `brain release --run-gates --push` and `brain recall`; running `check_commands` over them today finds 0 errors, so this is missing coverage, not a live defect.",
+   "repro": "Append the line  `BRAIN checkpoint --stage shipping`  to any SKILL.md in a copy and run: python3 bin/brain lint; echo $?   (0)",
+   "proposed_fix": "`command_tree`: keep each option's `choices` and `required`. `check_commands`: when the token after an option is a literal (no `<`, `|`, `[`, ellipsis) and the option has choices, it must be one of them; report a mention that has literal arguments but lacks a required option. CALL: also accept `/`, `$` and `\"` before the name. Add `command_files(root)` = instruction files plus docs/NEXT_SESSION.md, hr/GUIDELINES.md, hr/rack/*.jsonl, memory/*.jsonl, playbooks/*.jsonl and owner/*.jsonl, used for the command check only. Either move `check_duplicates` into errors or correct EXECUTION_PLAN 4.6 in the same commit. Add the helper-reply rule to `transcript_report` (Agent and Workflow tool results over `limits.helper_reply_tokens`), and read the `limits` values from code or delete the block.",
+   "acceptance": "Tests in tests/test_lint.py: test_invalid_choice_is_an_error, test_missing_required_option_is_an_error, test_path_and_variable_call_forms_are_checked, test_stale_command_in_a_memory_item_is_an_error, test_helper_reply_over_cap_is_reported. `test_the_real_brain_is_clean` stays green.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "quality-path-13"
+  },
+  {
+   "title": "`brain gate` prints 60 lines for five failing gates and keeps running after the first failure; a release refusal names no file (I-04)",
+   "severity": "should-fix",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/engine/contract.py"
+   ],
+   "evidence": "Five command gates, each printing 400 failing lines and exiting 1: `brain gate --all > out; wc -l -c out` -> `60 13230` (about 3,300 tokens) against I-04's 'at most about 15 lines by default'. gate.py:125-147 runs every gate whatever happened before, so a broken build is followed by every slower gate. Each digest prints the log's absolute path (about 170 characters here). Separately, after a unittest gate wrote tests/__pycache__, `brain release --push` -> `refusing: uncommitted changes. Commit, run \\`brain gate --all\\`, then release.` (gate.py:278) with no file named; following that advice literally commits the cache files. `brain init` writes no root .gitignore.",
+   "repro": "Define five failing gates that print many lines, then: brain gate --all | wc -l",
+   "proposed_fix": "`cmd_gate`: stop at the first red command gate by default (`--keep-going` runs all); print the full digest for the first failure and one line for each other gate; cap the total near 15 lines; print log paths relative to the project. `cmd_release`: name up to three dirty paths and add 'if these are build outputs, add them to .gitignore'. `contract.init`: write a small starter .gitignore for the family when the folder has none.",
+   "acceptance": "Tests: test_gate_output_stays_under_fifteen_lines_with_many_failures, test_gate_stops_at_the_first_red_gate_by_default, test_release_refusal_names_the_dirty_files.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "quality-path-14"
+  },
+  {
+   "title": "Idea: one `brain done` command that produces the done report from tool results",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/req.py",
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-verify/SKILL.md"
+   ],
+   "evidence": "Today the final claim is assembled by the lead from five separate commands (req check, gate, release, live check, NEEDS_YOU). In my probes each could say yes while another said no: release pushed with an open requirement line (R-003 in p1), and `req check` passed with no gate ever run. CLAUDE.md rule 1 asks that each claim be checked against a tool result; nothing produces that table.",
+   "proposed_fix": "Add `brain done [--json]`: runs strict `req check`, `green_at_head`, `tree_dirty`, pushed and released state (`repo_cleanliness`, releases.jsonl), the live check when a live address is set, and open NEEDS_YOU items. It prints at most 15 lines, one per requirement as verified, done but not verified, or not done, with the evidence pointer, then a single verdict; exit 0 only when everything is verified. brain-verify ends with it and the lead's final message quotes it.",
+   "acceptance": "Test test_done_report_is_red_when_any_part_is_red (matrix: open requirement, stale gate, dirty tree, unpushed commit, failed live check) and test_done_report_fits_fifteen_lines.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "quality-path-15"
+  },
+  {
+   "title": "Idea: a test-count ratchet in gate records",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py"
+   ],
+   "evidence": "In p3 the gate went from 3 tests to 1 and stayed 'ok'; the count is in the saved output (`Ran 3 tests`, later `Ran 1 test`) but nothing compares the two. With a real test runner and no pipe, a deleted test file changes nothing in the exit code.",
+   "proposed_fix": "`run_filtered` extracts a test count from the output with a few runner-neutral patterns (`Ran N tests`, `N passed`, `Tests: N passed`, `ok N` for TAP, `N tests`); `run_gates` stores it as `tests` in the record; `green_at_head` adds a warning, and with a tunable threshold a refusal, when the count on this commit is below the last green count on the release branch by more than X percent, unless a requirement line or decision records why.",
+   "acceptance": "Test test_test_count_drop_is_reported_at_gate_and_release with unittest and TAP-style outputs.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "quality-path-16"
+  },
+  {
+   "title": "Idea: seal gate records the way HR seals checks, and keep red results out of git's reach",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/engine/hr.py"
+   ],
+   "evidence": "A gate record is a plain line in a tracked file: a line `{\"gate\":\"checks\",\"exit\":0,\"commit\":\"<head>\",\"dirty\":false}` appended by hand would satisfy `green_at_head` (gate.py:157-174 trusts the latest row per gate id and never compares the recorded command with the manifest's). In p3 my own `git reset --hard` removed a red gate row, after which `close` reported `first_pass: True`. HR already seals a check's fingerprint outside the project so a hand-written `passed` is ignored.",
+   "proposed_fix": "Each record carries `command_sha` and a chain hash over the previous record; a per-session seal (same store `hr` uses) holds the last chain hash, and `green_at_head` counts only records whose chain verifies and whose `command_sha` matches the manifest's command. Keep an append-only copy of this session's red results in the seal store so `first_pass` and `rework` survive a checkout or reset.",
+   "acceptance": "Tests: test_hand_written_gate_row_is_not_green, test_red_result_survives_git_checkout_for_the_outcome.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "quality-path-17"
+  },
+  {
+   "title": "Idea: ledger units and accuracy notes (output-equivalent tokens, fallback-priced models, tiered and fast prices, active minutes)",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/ledger.py",
+    "/home/user/Claude-Brain/memory/models.json",
+    "/home/user/Claude-Brain/engine/mlearn.py"
+   ],
+   "evidence": "On the real session the outcome's `tokens_all` is 11,179,189, of which cache reads are 92.9% of tokens but 16.1% of cost and output is 0.70% of tokens but 24.4% of cost; the output-equivalent figure HR uses for wages would be 322,694 (35 times smaller). ledger.py:202-203 `_tokens` sums the four counters and mlearn.py:779-785 feeds that sum to estimate calibration and drift. An unknown model id is priced silently at `fallback_price` (ledger.py:110); the usage rows carry `speed` and `server_tool_use` fields that are not priced; docs/research/01-models.md:111 gives Haiku a higher price above 100K prompt tokens, absent from models.json. `wall_minutes` is first to last timestamp, so an owner's long pause counts as work.",
+   "proposed_fix": "Add `tokens_eq` (cost divided by the model's output price) to ledger and outcome records and use it for calibration, drift and STATUS; keep the raw sum for display. Mark a model priced by fallback in the summary line. Price `speed: fast` and the Haiku tier from fields in models.json. Record `active_minutes` (sum of gaps under five minutes) beside the wall time.",
+   "acceptance": "Tests in tests/test_ledger.py: test_output_equivalent_tokens_match_cost, test_unknown_model_is_flagged_as_fallback_priced, test_active_minutes_ignore_long_gaps.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "quality-path-18"
+  },
+  {
+   "title": "Idea: a detached gate runner for checks longer than a tool call",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/gate.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-build/SKILL.md"
+   ],
+   "evidence": "A foreground Bash call ends at 2 minutes by default and 10 at most, while a full test, build and end-to-end gate often takes longer. When I killed `brain gate` from outside it left no record and its children kept running (finding 5).",
+   "proposed_fix": "`brain gate --detach` starts the gates in their own session, writes progress to `.brain/log/gate-run.json` and returns one line at once; `brain gate --wait [seconds]` reports 'still running: gate X, N s' or the final digests. The record is written by the detached process, so a killed tool call loses nothing. `release --run-gates` uses the same runner.",
+   "acceptance": "Test test_detached_gate_writes_its_record_after_the_caller_exits.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "quality-path-19"
+  },
+  {
+   "title": "Idea: generated facts in status documents, checked by lint",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/lint.py",
+    "/home/user/Claude-Brain/docs/BUILD_STATUS.md",
+    "/home/user/Claude-Brain/engine/req.py"
+   ],
+   "evidence": "docs/BUILD_STATUS.md:9 says '21 engine modules (about 9,500 lines)' while `engine.MODULES` has 20 entries and `wc -l engine/*.py` gives 10,511; line 10 says CLAUDE.md is 5,356 bytes and `wc -c` gives 5,423. Lint checks commands, links and budgets but no number. A smaller sibling: a second row with id R-004, as a merge of two chats would leave, can never be completed through the CLI because `req.find` returns the first, and `req.load` does not reject repeated ids.",
+   "proposed_fix": "Let a document mark a number with its source, for example `<!-- fact: tests -->410<!-- /fact -->`, with a small table in lint mapping names to cheap functions (module count, bytes of CLAUDE.md, template count, test count from the last recorded gate); `brain lint` fails when a marked number differs and `brain lint --fix-facts` rewrites them. Also make `req.load` raise LedgerError on a repeated id.",
+   "acceptance": "Tests: test_marked_fact_that_drifted_is_an_error, test_duplicate_requirement_id_stops_the_ledger.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "quality-path-20"
+  }
+ ]
+}
