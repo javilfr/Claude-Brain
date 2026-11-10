@@ -13,7 +13,7 @@ The owner reads this on his phone. He wants to know what is done, what is next, 
 - `BRAIN ledger` gives this session's token use and list-price cost, by model and helper, and the share of input read from cache. Project totals come from `STATUS.md`.
 - `BRAIN release --check-live` when `release.live_url` is set in `.brain/project.json`: it says whether the live address serves the latest release. It pushes nothing.
 - `BRAIN req list` if he asks how complete the work is against his request.
-- `BRAIN budget` only if he asks about the brain's own size; `BRAIN ml report` only if he asks what the brain has learned about routing or cost.
+- `BRAIN budget` only if he asks about the brain's own size; `BRAIN ml report` only if he asks what the brain has learned about routing or cost. For "HR report" or a question about helpers and wages: `BRAIN hr report`.
 
 Do not read the plan, decisions or logs to answer; the scripts already summarise them. Do not restate the same fact twice.
 

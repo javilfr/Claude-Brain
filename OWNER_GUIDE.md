@@ -49,6 +49,12 @@ When Claude needs an API key, it either shows a secure form or adds a NEEDS_YOU.
 
 STATUS.md shows tokens used and their list-price equivalent, for the latest chat and the project so far. On your subscription you are not charged those dollars; the real limit is your plan's usage window, and the figures show how fast work uses it. Fable 5.2 and fast mode may draw on usage credits rather than plan limits, so both are kept for when they are worth it. Claude runs at most four helpers at once unless you ask for more; wide fan-out has used up usage windows before.
 
+## The HR department
+
+When a piece of work is worth giving to a helper, the brain does not improvise one. Its HR department keeps a rack of 100 agent templates, one for each kind of work (a phone-screen builder, a Spanish–English translator, a code reviewer, a deploy doctor and so on). For each task it picks the best-fitting template, the model and effort level that have worked for that kind of task, and a token wage, which is a budget for that helper. It then writes the helper's instructions from the template and the task. Two helpers hired from the same template still differ, because the task details differ.
+
+When the helper finishes, the brain runs the task's check itself, compares what the helper really used with its wage, and records the result. Over time that record changes which template gets picked and how large the wages are. Wages are shown as list-price equivalents; on a subscription they are not charges. Ask "HR report" to see which templates are used, how often they pass first time, and how accurate the wages have been.
+
 ## Undoing something the brain learned
 
 Claude opens each learning change as one pull request on the Claude-Brain repository on GitHub, described in plain words. Merge it to keep it. To undo a merged one, open that pull request and press **Revert**, then merge the revert.

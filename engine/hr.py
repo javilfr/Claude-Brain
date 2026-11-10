@@ -390,10 +390,13 @@ def tier_block(model_alias: str, effort: str, base_agent: str) -> str:
 
 
 def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: list[str], inputs: list[str], check: str,
-                  model_alias: str, effort: str, notes_path: str, extra: list[str] | None = None) -> str:
+                  model_alias: str, effort: str, notes_path: str, extra: list[str] | None = None, workdir: str = "") -> str:
     lines = [f"<task>{task.strip()}</task>"]
     if why:
         lines.append(f"Why: {why.strip()}")
+    if workdir:
+        # A helper starts in the session's folder, not in the repository.
+        lines.append(f"Work in {workdir}; paths below are relative to it.")
     if t:
         lines += ["", t["role_line"].rstrip(".") + "."]
     scope = (t or {}).get("scope_rule") or ("Read-only: change nothing." if base_agent not in WRITES else "Change only the files you own; at the edge, report instead of fixing.")
@@ -407,7 +410,7 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
     constraints += [e for e in (extra or []) if e.strip()]
     if constraints:
         lines += ["", "How:"] + [f"- {x}" for x in constraints[:6]]
-    done = (t or {}).get("done_check", "{check}")
+    done = (t or {}).get("done_check", "{check} exits 0.")
     done = done.replace("{check}", f"`{check}`" if check else "the check named in the task")
     if check and check not in done:
         done += f" Run `{check}` yourself and report its last line."
@@ -451,7 +454,7 @@ def contract_dir(project: Path | None) -> Path:
 def hire(task: str, brain_root: Path | None = None, project: Path | None = None, why: str = "", owns: list[str] | None = None,
          inputs: list[str] | None = None, check: str = "", family: str | None = None, task_class: str | None = None,
          risk: str = "standard", tier: int = 2, size: str | None = None, base_agent: str | None = None, template_id: str | None = None,
-         extra: list[str] | None = None, seed: int | None = None) -> dict:
+         extra: list[str] | None = None, seed: int | None = None, workdir_hint: str | None = None) -> dict:
     """Decide the helper for a task and write its contract and brief."""
     root = Path(brain_root or c.BRAIN_ROOT)
     hc = cfg_of(root)
@@ -491,7 +494,8 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     cid = "h-" + c.now().strftime("%Y%m%d") + "-" + hashlib.sha256(f"{c.now_iso()}|{task}|{c.session_id()}".encode()).hexdigest()[:6]
     d = contract_dir(project)
     brief_path, notes_path = d / f"{cid}.md", d / f"{cid}-notes.md"
-    brief = compose_brief(t, agent, task, why, owns or [], inputs or [], check, arm["model"], arm["effort"], str(notes_path), extra)
+    workdir = str(Path(project).resolve()) if project else (str(Path(workdir_hint).resolve()) if workdir_hint else "")
+    brief = compose_brief(t, agent, task, why, owns or [], inputs or [], check, arm["model"], arm["effort"], str(notes_path), extra, workdir)
     contract = {
         "id": cid, "at": c.now_iso(), "session": c.session_id(), "status": "open",
         "template": (t or {}).get("id"), "group": (t or {}).get("group"), "base_agent": agent, "size": size,
@@ -631,7 +635,7 @@ def cmd_hire(args) -> int:
     try:
         con = hire(args.task, project=project, why=args.why or "", owns=args.owns, inputs=args.input, check=args.check or "",
                    family=args.family, task_class=args.task_class, risk=args.risk, tier=args.tier, size=args.size,
-                   base_agent=args.agent, template_id=args.template, extra=args.also, seed=args.seed)
+                   base_agent=args.agent, template_id=args.template, extra=args.also, seed=args.seed, workdir_hint=args.workdir)
     except ValueError as e:
         print(str(e))
         return 1
@@ -790,6 +794,7 @@ def register(sub) -> None:
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")
     h.add_argument("--force", action="store_true", help="hire even when the rule says the lead should do it")
+    h.add_argument("--workdir", help="where the helper should work when no project is attached (default: the project)")
     h.add_argument("--seed", type=int)
     h.add_argument("--json", action="store_true")
     h.set_defaults(func=cmd_hire)
