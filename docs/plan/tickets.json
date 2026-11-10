@@ -17,7 +17,7 @@
       ],
       "est": 90,
       "accept": "python3 -m unittest tests.test_mlearn tests.test_route tests.test_schedule",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-081",
@@ -37,7 +37,7 @@
       ],
       "est": 90,
       "accept": "python3 -m unittest tests.test_learn tests.test_recall tests.test_ledger tests.test_guard",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-082",
@@ -51,7 +51,7 @@
       ],
       "est": 60,
       "accept": "python3 -m unittest tests.test_radar",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-083",
@@ -66,7 +66,7 @@
       ],
       "est": 80,
       "accept": "python3 -m unittest tests.test_evals",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-084",
@@ -83,7 +83,7 @@
       ],
       "est": 40,
       "accept": "python3 -m unittest tests.test_core tests.test_hygiene",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-085",
@@ -102,7 +102,7 @@
       ],
       "est": 50,
       "accept": "python3 bin/brain lint && python3 -m unittest tests.test_lint",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-086",
@@ -116,7 +116,7 @@
       ],
       "est": 20,
       "accept": "python3 -m unittest tests.test_lint",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-087",
@@ -131,7 +131,7 @@
       ],
       "est": 30,
       "accept": "python3 -m unittest tests.test_recall",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-088",
@@ -149,7 +149,7 @@
       ],
       "est": 40,
       "accept": "python3 bin/brain lint && python3 bin/brain items check",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-089",
@@ -168,7 +168,7 @@
       ],
       "est": 30,
       "accept": "python3 bin/brain lint",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-090",
@@ -181,7 +181,7 @@
       ],
       "est": 60,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
-      "status": "open"
+      "status": "doing"
     },
     {
       "id": "CB-091",

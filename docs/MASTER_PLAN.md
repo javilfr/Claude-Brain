@@ -2,6 +2,8 @@
 
 Version 1.0 · written 2026-11-10 · for Javier · built from ten independent analyst reports in `docs/research/`
 
+> **Later additions.** After this plan was written, a second research round (Hugging Face papers and community reports, ten more researchers) added a statistical learning module, an update radar, an evaluation system and an instruction lint. The operative spec for those, written for the executing agent, is `docs/EXECUTION_PLAN.md`; where the two differ, that file is current.
+
 This is the full plan for the Claude Brain: a permanent repository that sits beside any project repository in a Claude Code chat and makes Claude build that project well, cheaply and fast, and that gets better with use. It is long on purpose. The parts are ordered so you can stop after Part 1 and still know what you are getting.
 
 - **Part 1** — what you asked for, what you get, and four things I have to be straight with you about.
