@@ -31,7 +31,7 @@ Where the brain stands after the build session of 2026-11-10. Ticket state is in
 | Rack | 100 templates in ten groups, as data that is never always-loaded | `brain hr audit`: 100 templates, sound |
 | Guidelines and schema | `hr/GUIDELINES.md`, `hr/template.schema.json`, from four research memos | audit enforces the limits and wording rules |
 | Engine | hire, settle, staff, rack, audit, report; settled hires feed the learner | `tests/test_hr.py`: 48 tests |
-| Selection accuracy | 200 labelled requests, half never used for tuning | held-out: right template first 78%, in top three 86% (before tuning: 73% and 83%) |
+| Selection accuracy | 200 labelled requests, half never used for tuning | held-out: right template first 78%, in top three 86% (before tuning: 73% and 83%). **Overstated:** on a fresh set written in CB-204 the same selector scores 46% and 63% |
 | Real use in this session | two helpers hired through the engine | settled: 54,250 of a 200,000 wage with its check passed; 81,995 of 200,000 with no check |
 | Review | fresh-context review of HR (`docs/review/2026-11-10-hr-review.md`) | 2 must-fix, 10 should-fix, 13 minor: both must-fix and all should-fix items fixed with a test each; minor items fixed except those listed below |
 
@@ -39,7 +39,7 @@ Found by using it and by the review, and fixed: wages that swung back down after
 
 Open for HR:
 
-- Selection is word-based, so about one request in seven does not surface the right template in the top three. The lead sees the closest candidates and can name one.
+- Selection is word-based: on a fresh held-out set (CB-204) about one request in three does not surface the right template in the top three. The lead sees the closest candidates and can name one.
 - No template runs on the cheapest agent (scout): work that needs commands cannot, and pure reading is usually done by the lead. Four read-only templates run on the reviewer agent at the Sonnet tier instead.
 - Wage bands other than medium are starting assumptions until hires of those sizes are settled.
 - A wage is a budget that is tracked and settled, not a hard limit: Claude Code has no per-helper token cap, and writing a budget into a brief changes how current models spend.
@@ -141,3 +141,12 @@ What was wrong, and the fix (each with a test):
 | 7 | "New project:" requests said "no task verb; answer or acknowledge" | reason now names the family default |
 
 Observed, not changed: the default wage band (M, 60,000) was about 13 times what a small item used; wages calibrate from settled hires, so this should correct itself with data. No rack template fits "write a small module with tests"; noted for CB-204/CB-205.
+
+### CB-204 Template selection, measured honestly
+
+- A helper wrote `evals/hr_golden_2.jsonl` (100 requests, a quarter in Spanish, one first-choice per template) without running the selector; it was committed (28d64d3) before any change.
+- Baseline on it: top-1 46/100, top-3 63/100. The earlier held-out set (78 and 86) had been looked at during tuning and overstated accuracy.
+- Tried, measured on the old held-out set only: prefix matching for inflection and typos (no change), adding the role line (+1 top-3, -4 top-1 on dev), adding the labelled requests as example phrasings per template (top-3 86 → 90).
+- One final measurement on the new set, with examples from both old sets: top-1 46 → 54, top-3 63 → 65. The rule set in the ticket keeps a change only for at least +3 top-3 points, so **nothing was kept**. A test now holds the new set's floor (0.42 / 0.59).
+- What would help: matching on meaning rather than words, which the standard library cannot do well; or showing the lead the top three (already done) and letting outcomes (`brain hr report`) steer. Recorded as unproven, not fixed.
+- Also found: no template fits "write a labelled evaluation set" (the selector offered `owner-computer-guide`); `hr hire --template none` now gives a plain brief on purpose.

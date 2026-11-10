@@ -594,6 +594,22 @@ class RealRack(unittest.TestCase):
         self.assertGreaterEqual(top1 / len(rows), 0.74, f"top-1 {top1}")
         self.assertGreaterEqual(top3 / len(rows), 0.82, f"top-3 {top3}")
 
+    def test_selection_on_the_second_held_out_set(self):
+        """evals/hr_golden_2.jsonl: 100 requests written by a helper that never
+        ran the selector (CB-204). Measured 2026-11-10: top-1 0.46, top-3 0.63.
+        The first held-out set had been looked at while tuning and overstated
+        accuracy (0.78 / 0.86). Floors are the measured values minus a margin."""
+        rack = hr.load_rack(ROOT)
+        rows = [r for r in c.read_jsonl(ROOT / "evals" / "hr_golden_2.jsonl") if r.get("split") == "heldout2"]
+        self.assertEqual(len(rows), 100)
+        top1 = top3 = 0
+        for r in rows:
+            ids = [h["id"] for h in hr.select(r["task"], rack)]
+            top1 += bool(ids[:1] and ids[0] in r["expect"])
+            top3 += any(i in r["expect"] for i in ids[:3])
+        self.assertGreaterEqual(top1 / len(rows), 0.42, f"top-1 {top1}")
+        self.assertGreaterEqual(top3 / len(rows), 0.59, f"top-3 {top3}")
+
     def test_owner_style_requests_find_a_sensible_template(self):
         rack = hr.load_rack(ROOT)
         cases = [
