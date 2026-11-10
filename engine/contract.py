@@ -207,6 +207,7 @@ def adopt(project: Path, title: str | None = None, family: str | None = None) ->
 # ---------------------------------------------------------------- validate / migrate
 REQUIRED_FILES = (".brain/project.json", ".brain/STATE.md", ".brain/requirements.jsonl", ".brain/PLAN.md",
                   ".brain/DECISIONS.md", "NEEDS_YOU.md", "STATUS.md", "CLAUDE.md")
+VALIDATE_LINES = 12  # problems printed by `brain validate`; the rest are counted
 # Keys every manifest carries that no engine code reads yet, with the default
 # the engine writes. Setting one changes nothing, and `validate` says so
 # rather than let a manifest promise what the brain does not do.
@@ -437,11 +438,16 @@ def cmd_validate(args) -> int:
         print(why)
         return 1
     errs = validate(project)
+    if errs and errs[0].startswith("stale brain"):
+        print(errs[0])
+        return 3
     if errs:
         print(f"{project.name}: {len(errs)} problem(s)")
-        for e in errs:
+        for e in errs[:VALIDATE_LINES]:
             print(" -", e)
-        return 3 if errs[0].startswith("stale brain") else 1
+        if len(errs) > VALIDATE_LINES:
+            print(f" - … and {len(errs) - VALIDATE_LINES} more: fix these, then run `brain validate` again")
+        return 1
     print(f"{project.name}: contract v{c.load_manifest(project).get('contract')} valid")
     note = reserved_note(project)
     if note:

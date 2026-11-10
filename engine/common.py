@@ -140,7 +140,10 @@ def write_text(path: Path | str, text: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
-        os.chmod(tmp, mode)
+        try:
+            os.chmod(tmp, mode)
+        except OSError:
+            pass  # a file system without modes: the content still lands
         os.replace(tmp, p)
     except BaseException:
         try:
@@ -394,16 +397,20 @@ def locate_project(explicit: str | None = None, brain_root: Path | None = None) 
 
 
 def resolve_project(explicit: str | None = None, brain_root: Path | None = None) -> Path | None:
-    """The project a command means (see ``locate_project``), or None. A path
-    given with --project or BRAIN_PROJECT is returned even when it is not
-    managed yet, so callers such as `validate` can say what is missing."""
+    """The project a command may use (see ``locate_project``), or None: for
+    commands that also work without one (run, close, recall, hire). A project
+    on a newer contract than this brain is None here, so those commands carry
+    on without it and write nothing there. A folder given with --project or
+    BRAIN_PROJECT that is not managed is returned as it is; callers test
+    ``is_managed``."""
     found, _why = locate_project(explicit, brain_root)
-    if found is None:
-        for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
-            if cand:
-                path = Path(str(cand)).expanduser()
-                return path.resolve() if path.is_dir() else None
-    return found
+    if found is not None:
+        return None if stale_brain(found) else found
+    for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
+        if cand:
+            path = Path(str(cand)).expanduser()
+            return path.resolve() if path.is_dir() else None
+    return None
 
 
 # The types the contract declares for the keys the engine reads (the same
@@ -549,8 +556,9 @@ def add_project_arg(p) -> None:
 
 
 def need_project(args) -> Path | None:
-    """The managed, usable project for a command, or None after printing the
-    one line that says why not and what to do next."""
+    """The managed, usable project for a command that needs one, or None
+    after printing the one line that says why not and what to do next. A
+    project on a newer contract raises ``StaleBrain`` instead."""
     proj, why = locate_project(getattr(args, "project", None))
     if proj is None:
         print(why)

@@ -313,6 +313,17 @@ class ContractTests(Base):
                                     {"id": "lint", "kind": "command", "command": "true"}])
         self.assertEqual(contract.validate(p), [])
 
+    def test_validate_stays_short_however_broken_the_manifest_is(self):
+        """core-16 (output side, I-04): a badly damaged manifest must not turn
+        validate into a wall of lines."""
+        p = self.project()
+        self.set_manifest(p, gates=[{"kind": 7}] * 30)
+        code, out = self.run_cli("validate", "--project", p)
+        self.assertEqual(code, 1, out)
+        self.assertLessEqual(len(out.strip().splitlines()), 15, out)
+        self.assertIn("more", out.strip().splitlines()[-1])
+        self.assertIn("60 problem(s)", out.splitlines()[0])
+
     def test_validate_names_reserved_keys_that_were_set_but_are_not_read(self):
         """core-18 (note only): privacy.share_lessons and paths.evidence are
         written into every manifest and read by nothing; a manifest that sets
@@ -464,6 +475,8 @@ class ResolverTests(Base):
         code, out = self.run_cli("resume", "--project", "SHOP")
         self.assertEqual(code, 0, out)
         self.assertIn("T-1 in shop", out)
+        code, out = self.run_cli("req", "list", "--project", "shop-admin")  # instructions-19: with --project it lists that ledger
+        self.assertEqual(code, 0, out)
         for name in ("sho", "nosuch"):
             code, out = self.run_cli("resume", "--project", name)
             self.assertEqual(code, 1, out)
@@ -551,7 +564,8 @@ class StaleBrainTests(Base):
         self.assertEqual(sh(p, "git", "status", "--porcelain").stdout, "")
         code, out = self.run_cli("validate", "--project", p)
         self.assertEqual(code, 3, out)
-        self.assertIn("stale brain", out)
+        self.assertTrue(out.startswith("stale brain"), out)
+        self.assertEqual(len(out.strip().splitlines()), 1, out)
 
     def test_no_engine_write_reaches_a_project_with_a_newer_contract(self):
         """core-11: commands that do not pass through need_project (recall's
@@ -569,9 +583,14 @@ class StaleBrainTests(Base):
                 write()
         self.assertEqual(snapshot(p), before)
         self.assertTrue(issubclass(c.StaleBrain, OSError), "callers that already skip an unwritable log keep working")
+        # Commands that can work without a project (run, close, recall, hire)
+        # carry on without this one instead of failing half-way.
+        self.assertIsNone(c.resolve_project(str(p)))
+        self.assertEqual(c.locate_project(str(p))[0], p, "validate, migrate and doctor still find it, to say what is wrong")
         os.chdir(p)
         code, out = self.run_cli("run", "--", "true")  # typed inside the stale project: its log would go to .brain/log/run
-        self.assertNotIn("Traceback", out)
+        self.assertEqual(code, 0, out)
+        self.assertIn("ok", out)
         self.assertEqual(snapshot(p), before)
         other = self.project("other")  # a project on this brain's contract is written as before
         c.write_text(other / ".brain" / "log" / "x.txt", "x")

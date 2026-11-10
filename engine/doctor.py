@@ -130,8 +130,9 @@ def _git_problems(project: Path, at: str) -> tuple[list[tuple[str, str]], str]:
     rule, release_branch = rel.get("rule", "none"), rel.get("branch", "main")
     on_release = rule in ("main-on-green", "pr") and branch == release_branch
     if on_release:
-        out.append((f"work is on the release branch ({branch}) under rule '{rule}', where checkpoints cannot push unreleased work",
-                    f"work on another branch: `git -C {at} switch -c work`; `brain release` moves green work to {branch}"))
+        how = "`brain release` moves green work" if rule == "main-on-green" else "a pull request moves reviewed work"
+        out.append((f"work is on the release branch ({branch}) under rule '{rule}', and unreleased work must not be pushed there",
+                    f"work on another branch: `git -C {at} switch -c work`; {how} to {branch}"))
     upstream = ""
     if has_origin:
         code, upstream = _git(project, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
