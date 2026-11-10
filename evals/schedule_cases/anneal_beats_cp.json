@@ -1,0 +1,91 @@
+{
+ "_about": "Critical-path order gives 23; annealing over the order reaches the lower bound of 15.",
+ "expect": {
+  "annealed_lt_cp": true,
+  "optimal": 15
+ },
+ "agents": 3,
+ "tickets": [
+  {
+   "id": "db-schema",
+   "est": 2,
+   "deps": [],
+   "files": [
+    "packages/db/schema.ts"
+   ]
+  },
+  {
+   "id": "sync-engine",
+   "est": 5,
+   "deps": [
+    "db-schema"
+   ],
+   "files": [
+    "packages/media/store.ts",
+    "packages/sync/queue.ts"
+   ]
+  },
+  {
+   "id": "design-tokens",
+   "est": 3,
+   "deps": [],
+   "files": []
+  },
+  {
+   "id": "media-ingest",
+   "est": 7,
+   "deps": [],
+   "files": [
+    "packages/media/store.ts"
+   ]
+  },
+  {
+   "id": "ui-kit",
+   "est": 7,
+   "deps": [
+    "design-tokens"
+   ],
+   "files": []
+  },
+  {
+   "id": "migrations",
+   "est": 4,
+   "deps": [],
+   "files": [
+    "packages/db/migrate.ts",
+    "packages/db/schema.ts"
+   ]
+  },
+  {
+   "id": "offline-queue",
+   "est": 5,
+   "deps": [
+    "db-schema",
+    "design-tokens"
+   ],
+   "files": [
+    "packages/sync/queue.ts",
+    "packages/db/migrate.ts"
+   ]
+  },
+  {
+   "id": "export",
+   "est": 3,
+   "deps": [
+    "media-ingest",
+    "migrations"
+   ],
+   "files": [
+    "services/io/archive.ts"
+   ]
+  },
+  {
+   "id": "importer",
+   "est": 7,
+   "deps": [],
+   "files": [
+    "services/io/archive.ts"
+   ]
+  }
+ ]
+}

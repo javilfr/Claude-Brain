@@ -1,0 +1,88 @@
+{
+ "_about": "A dependency chain dominates: both methods reach the critical-path bound.",
+ "expect": {
+  "optimal": 10
+ },
+ "agents": 2,
+ "tickets": [
+  {
+   "id": "research",
+   "est": 2,
+   "deps": [],
+   "files": [
+    "docs/research/memo.md"
+   ]
+  },
+  {
+   "id": "outline",
+   "est": 1,
+   "deps": [
+    "research"
+   ],
+   "files": [
+    "docs/outline.md"
+   ]
+  },
+  {
+   "id": "draft",
+   "est": 4,
+   "deps": [
+    "outline"
+   ],
+   "files": [
+    "docs/report.md"
+   ]
+  },
+  {
+   "id": "figures",
+   "est": 2,
+   "deps": [
+    "outline"
+   ],
+   "files": [
+    "docs/figures"
+   ]
+  },
+  {
+   "id": "figure-map",
+   "est": 1,
+   "deps": [
+    "outline"
+   ],
+   "files": [
+    "docs/figures/map.svg"
+   ]
+  },
+  {
+   "id": "glossary",
+   "est": 2,
+   "deps": [],
+   "files": [
+    "docs/glossary.md"
+   ]
+  },
+  {
+   "id": "review",
+   "est": 2,
+   "deps": [
+    "draft",
+    "figures",
+    "figure-map"
+   ],
+   "files": [
+    "docs/report.md"
+   ]
+  },
+  {
+   "id": "pdf",
+   "est": 1,
+   "deps": [
+    "review",
+    "glossary"
+   ],
+   "files": [
+    "dist/report.pdf"
+   ]
+  }
+ ]
+}
