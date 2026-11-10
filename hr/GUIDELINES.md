@@ -21,6 +21,7 @@ Plus three to five `method` lines: concrete, checkable practices, each with its 
 | `name` | plain function name | 6 words |
 | `group` | one of the ten rack groups | |
 | `base_agent` | which of the six runtime agents carries it (sets tools and default model) | |
+| `role` | optional: take another role's model tier. Read-only work that needs commands uses `base_agent: reviewer` (it has no Edit tool) with `role: researcher`, so it runs on the cheaper tier | |
 | `families` | software, data, knowledge, language, operations | at least one |
 | `when` | the situation that calls for it, with the words a task description would use | 35 words |
 | `keywords` | retrieval terms, English and Spanish where the owner might use either | 4 to 14 |
@@ -36,7 +37,7 @@ Plus three to five `method` lines: concrete, checkable practices, each with its 
 | `risk` | trivial, standard, high, one-way-door | |
 | `sources` | research file and section, or URL | 1 to 4 |
 
-The stable body (role line, method, drift, scope rule, done check, return contract) stays within 230 words, so a rendered brief stays within 350.
+The stable body (role line, method, drift, scope rule, done check, return contract) stays within 230 words. With a short task and reason that renders to about 330 to 350 words; a long task or several extra constraints push it past that. `brain hr hire` prints a note above 350 words and refuses above 500, because a brief that long is a sign the task should be split or its detail moved to a file the brief points at.
 
 ## Writing rules
 
@@ -52,7 +53,7 @@ The stable body (role line, method, drift, scope rule, done check, return contra
 
 ## How a brief is composed
 
-`brain hr hire` renders, in this order: `<task>` (goal), why, `<scope>`, `<inputs>` (paths, never pasted content), up to five constraints from the template's method and drift, `<done_when>`, `<return>`, then a tier block chosen by model and effort:
+`brain hr hire` renders, in this order: `<task>` (goal), why, the working folder, the role line, `<scope>`, `<inputs>` (paths, never pasted content), the template's method lines and drift followed by every constraint the lead added (those are never dropped), up to two pitfalls, `<done_when>`, a tier block chosen by model and effort, a line about outside content for agents that read it, and `<return>`. With no acceptance command, `<done_when>` asks for named evidence instead of pointing at a command that does not exist.
 
 | Model and effort | Added | Left out |
 |---|---|---|
@@ -65,4 +66,4 @@ The brief is written to a file and the lead's delegation message is a pointer to
 
 ## Changing the rack
 
-Templates are kernel content: a change is an engineering change, reviewed like code, and tested with `brain hr audit`. What learns automatically is the statistics about them (which template passes first time for which class of task, and how many tokens it really uses), never their text. A template whose record turns bad is put on probation by the learner and listed in `brain hr report`; rewriting it is a person's or a reviewed session's decision. A new variant is trialled against the old one with a pre-registered paired comparison (`brain eval`).
+Templates are kernel content: a change is an engineering change, reviewed like code, and tested with `brain hr audit` and the held-out selection set (`evals/hr_golden.jsonl`; measured after tuning: right template first for 78% of held-out requests, in the top three for 86%). Because word matching misses some requests, `hire` lists the closest templates when none clearly fits, and the lead can name one with `--template`. What learns automatically is the statistics about them (which template passes first time for which class of task, and how many tokens it really uses), never their text. A template whose record turns bad is put on probation by the learner and listed in `brain hr report`; rewriting it is a person's or a reviewed session's decision. A new variant is trialled against the old one with a pre-registered paired comparison (`brain eval`).

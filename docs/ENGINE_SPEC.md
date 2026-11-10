@@ -96,7 +96,7 @@ Prints `mlearn.flaky`'s estimate for one gate in one line (`--json` available), 
 
 ## HR records
 
-- `kind: "hire"` (written by `brain hr settle`, folded by `mlearn.fold` through `hr.fold_hire`): `id`, `session`, `at`, `template`, `group`, `base_agent`, `size`, `model`, `effort`, `task_class`, `family`, `risk`, `has_check`, `explored`, `propensity`, `wage_tokens`, `actual_tokens` (both in output-equivalent tokens), `passed` (true or false only when the script ran the contract's check; otherwise null). No project name, path or task text.
-- Contracts and briefs live in the project: `<project>/.brain/log/hr/<contract>.json` and `.md`. With no managed project they go to a temporary folder.
+- `kind: "hire"` (written by `brain hr settle`, folded by `mlearn.fold` through `hr.fold_hire`): `id`, `session`, `at`, `template`, `group`, `base_agent`, `size`, `model`, `effort`, `task_class`, `family`, `risk`, `has_check`, `explored`, `propensity`, `wage_tokens`, `band_tokens`, `actual_tokens` (all in output-equivalent tokens), `passed` (true or false only when the script ran the contract's check; otherwise null), `sealed` (true when the check that ran was the one fingerprinted at hire time; only sealed results move a template's pass record). No project name, path or task text.
+- Contracts and briefs live in the project: `<project>/.brain/log/hr/<contract>.json` and `.md`. With no managed project they go to a per-session temporary folder. Check fingerprints (seals) are kept in a separate per-session temporary folder, outside the project.
 - `hr/` (templates, schema, guidelines) is kernel zone.
 

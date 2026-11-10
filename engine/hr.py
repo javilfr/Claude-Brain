@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import random
 import re
 import tempfile
@@ -29,6 +30,11 @@ RACK_SIZE = 100
 BASE_AGENTS = ("scout", "researcher", "builder", "writer", "reviewer", "redteam")
 # The role in memory/models.json that sets each base agent's default model and effort.
 ROLE_OF = {"scout": "scout", "researcher": "researcher", "builder": "builder", "writer": "writer", "reviewer": "reviewer", "redteam": "redteam"}
+ROLES = tuple(ROLE_OF)          # a template may set `role` to take another role's model tier (see hr/GUIDELINES.md)
+SIZES = ("S", "M", "L", "XL")
+RISKS = ("trivial", "standard", "high", "one-way-door")
+CONTRACT_ID = re.compile(r"^h-\d{8}-[0-9a-f]{6}(-\d+)?$")
+BRIEF_WARN, BRIEF_MAX = 350, 500  # words: above the first a note, above the second an error
 WRITES = {"builder", "writer"}                 # base agents that change files
 READS_OUTSIDE = {"researcher"}                 # base agents that read untrusted content
 STABLE_FIELDS = ("role_line", "method", "drift", "scope_rule", "done_check", "return_contract")
@@ -53,12 +59,13 @@ DEFAULT_CFG = {
 
 # Patterns a template or brief must not contain (hr/GUIDELINES.md, "Writing rules").
 BANNED = [
-    ("persona", re.compile(r"\byou are (a|an|the) (world[- ]class|expert|senior|seasoned|brilliant|elite|top)\b", re.I)),
+    ("persona", re.compile(r"\b(you are|you're|as) (a |an |the )?(world[- ]class|expert|senior|seasoned|brilliant|elite|top[- ]tier|leading)\b", re.I)),
     ("think", re.compile(r"\b(think (step by step|hard|carefully|deeply)|take your time|double[- ]check|verify twice|be (maximally |extremely )?thorough)\b", re.I)),
-    ("budget", re.compile(r"\b\d[\d,.]*\s*k?\s*tokens?\b|\b(token|context) (budget|countdown)\b", re.I)),
+    ("budget", re.compile(r"\b(\d[\d,.]*\s*k?|one|two|three|four|five|six|seven|eight|nine|ten|\w+ (hundred|thousand|million))\s*tokens?\b|\b(token|context) (budget|countdown)\b", re.I)),
 ]
 ABSOLUTE = re.compile(r"\b(never|always|must not|under no circumstances)\b", re.I)
-REASON = re.compile(r"\b(because|so that|so |since|unless|except|when|if|otherwise|:)\b|[;—]", re.I)
+# A reason is a clause that explains, not a condition: "when" and "if" do not count.
+REASON = re.compile(r"\b(because|so that|so |since|unless|except|otherwise)\b|[:;—]", re.I)
 
 VERIFY_BLOCK = ("When you change something that can be run, built or checked, run a real check that exercises the change before reporting it done. "
                 "A check that failed to start does not count. If no real check can run here, name the one you did not run and why.")
@@ -82,10 +89,27 @@ def cfg_of(brain_root: Path | None = None) -> dict:
     return out
 
 
-def load_rack(brain_root: Path | None = None, include_retired: bool = False) -> list[dict]:
+def usable(t) -> bool:
+    """A template the engine can work with at all. One broken line in the rack
+    must not stop every hire, so anything else is left out here and reported
+    by the audit."""
+    if not isinstance(t, dict) or not isinstance(t.get("id"), str) or t.get("base_agent") not in BASE_AGENTS:
+        return False
+    for k in ("when", "name", "role_line"):
+        if not isinstance(t.get(k), str):
+            return False
+    for k in ("keywords", "method", "families"):
+        if not isinstance(t.get(k), list) or not all(isinstance(x, str) for x in t[k]):
+            return False
+    return t.get("size", "M") in SIZES
+
+
+def load_rack(brain_root: Path | None = None, include_retired: bool = False, raw: bool = False) -> list[dict]:
     rack = []
     for f in sorted((Path(brain_root or c.BRAIN_ROOT) / RACK_DIR).glob("*.jsonl")):
         for t in c.read_jsonl(f):
+            if not raw and not usable(t):
+                continue
             if include_retired or t.get("status", "active") != "retired":
                 rack.append(dict(t, _file=f.name))
     return rack
@@ -133,6 +157,9 @@ def validate_template(t: dict, schema: dict) -> list[str]:
                 errs.append(f"{tid}: {name} has {len(v)} entries (allowed {rule.get('min', 0)} to {rule.get('max', 'any')})")
             if "of" in rule and any(x not in rule["of"] for x in v):
                 errs.append(f"{tid}: {name} has a value outside {rule['of']}")
+            if any(not isinstance(x, str) for x in v):
+                errs.append(f"{tid}: every {name} entry must be text")
+                continue
             if "item_max_words" in rule:
                 for x in v:
                     if _words(x) > rule["item_max_words"]:
@@ -149,6 +176,8 @@ def validate_template(t: dict, schema: dict) -> list[str]:
     for sentence in re.split(r"(?<=[.!?])\s+", body):
         if ABSOLUTE.search(sentence) and not REASON.search(sentence):
             errs.append(f"{tid}: an absolute rule has no reason in the same sentence: {c.clip(sentence, 70)}")
+    if "role" in t and t["role"] not in ROLES:
+        errs.append(f"{tid}: role '{t['role']}' is not one of {ROLES}")
     if t.get("base_agent") in ("scout", "reviewer", "redteam") and re.search(r"\b(edit|fix|rewrite|commit) (the|it|them)\b", " ".join(t.get("method", []) if isinstance(t.get("method"), list) else []), re.I):
         errs.append(f"{tid}: a read-only base agent ({t.get('base_agent')}) has a method line that changes files")
     if c.find_secrets(json.dumps(t)) or c.EMAIL_PATTERN.search(json.dumps(t)):
@@ -159,7 +188,7 @@ def validate_template(t: dict, schema: dict) -> list[str]:
 def audit(brain_root: Path | None = None) -> tuple[list[str], dict]:
     root = Path(brain_root or c.BRAIN_ROOT)
     schema = c.read_json(root / "hr" / "template.schema.json", {}) or {}
-    rack = load_rack(root, include_retired=True)
+    rack = [t for t in load_rack(root, include_retired=True, raw=True)]
     errs, seen, groups = [], {}, {}
     if not schema:
         errs.append("hr/template.schema.json is missing or not valid JSON")
@@ -168,6 +197,9 @@ def audit(brain_root: Path | None = None) -> tuple[list[str], dict]:
         if len(raw) != len(c.read_jsonl(f)):
             errs.append(f"{f.name}: a line is not valid JSON")
     for t in rack:
+        if not isinstance(t.get("id"), str):
+            errs.append(f"{t.get('_file')}: a template has no text id")
+            continue
         errs += validate_template(t, schema)
         tid = t.get("id")
         if tid in seen:
@@ -203,16 +235,21 @@ def fold_hire(state: dict, cfg: dict, r: dict) -> None:
     hc = DEFAULT_CFG if not isinstance(cfg.get("hr"), dict) else {**DEFAULT_CFG, **cfg["hr"]}
     tid, group = str(r.get("template") or "_plain"), str(r.get("group") or "_none")
     passed = r.get("passed")
-    if isinstance(passed, bool):
+    # A pass or fail counts only when this script ran the sealed check (I-17).
+    if isinstance(passed, bool) and r.get("sealed") is True:
         for table, key in ((h["t"], tid), (h["g"], group), (h["g"], "_all")):
             cell = table.setdefault(key, [0.0, 0.0, 0])
             cell[0] = cell[0] * hc["gamma"] + (1.0 if passed else 0.0)
             cell[1] = cell[1] * hc["gamma"] + (0.0 if passed else 1.0)
             cell[2] += 1
-    wage, actual = r.get("wage_tokens"), r.get("actual_tokens")
-    if isinstance(wage, (int, float)) and isinstance(actual, (int, float)) and wage > 0 and actual > 0:
-        ratio = round(actual / wage, 4)
-        for key in (f"t:{tid}", f"s:{r.get('size', 'M')}", "_all"):
+    # The ratio is real use over the size band, never over the wage: the wage
+    # already contains earlier ratios, and dividing by it would make the
+    # correction cancel itself and the wage swing back down.
+    band, actual = r.get("band_tokens", r.get("wage_tokens")), r.get("actual_tokens")
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    if num(band) and num(actual) and band > 0 and actual > 0 and r.get("size") in SIZES:
+        ratio = round(actual / band, 4)
+        for key in (f"t:{tid}", f"s:{r['size']}", "_all"):
             h["ratios"][key] = (h["ratios"].get(key, []) + [ratio])[-hc["ratio_cap"]:]
         h["settled"] += 1
 
@@ -307,6 +344,8 @@ def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | No
     if not pool:
         return []
     q = _terms(task)
+    if len(set(q)) < 2:
+        return []  # one word ("fix it") is too little to choose a specialist on
     raw = _bm25(q, [_doc(t) for t in pool])
     top = max(raw) or 1.0
     qset = set(q)
@@ -358,7 +397,9 @@ def wage(size: str, model_alias: str, tid: str | None, state: dict | None, hc: d
     band is scaled by the 80th-percentile ratio of real use to wage (the
     template's own ratios when it has enough, else its size band's, else all)."""
     h = hr_state(state if isinstance(state, dict) else {})
-    band = float(hc["bands"].get(size, hc["bands"]["M"]))
+    if size not in hc["bands"]:
+        raise ValueError(f"unknown size '{size}' (use one of {', '.join(hc['bands'])})")
+    band = float(hc["bands"][size])
     basis, factor = f"size band {size} (no settled hires yet)", 1.0
     for key, label in ((f"t:{tid}", "this template"), (f"s:{size}", f"size {size}"), ("_all", "all hires")):
         rs = h["ratios"].get(key, [])
@@ -367,7 +408,7 @@ def wage(size: str, model_alias: str, tid: str | None, state: dict | None, hc: d
             basis = f"size band {size} x {factor:.2f} from {len(rs)} settled hire(s) of {label}"
             break
     tokens = int(round(band * factor, -3))
-    return {"tokens": tokens, "cost": round(tokens * out_price(model_alias, models_cfg) / 1e6, 2), "basis": basis}
+    return {"tokens": tokens, "band": int(band), "cost": round(tokens * out_price(model_alias, models_cfg) / 1e6, 2), "basis": basis}
 
 
 def hire_or_not(material_tokens: int | None, has_check: bool, parallel: bool, hc: dict) -> tuple[bool, str]:
@@ -410,16 +451,22 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
     lines += ["", f"<scope>{owned}{scope}</scope>"]
     if inputs:
         lines.append("<inputs>Read first: " + "; ".join(inputs) + "</inputs>")
-    constraints = list((t or {}).get("method", []))[:4]
+    constraints = list((t or {}).get("method", []))
     if (t or {}).get("drift"):
         constraints.append(t["drift"])
+    # What the lead added for this task is never dropped: it is the part no template knows.
     constraints += [e for e in (extra or []) if e.strip()]
     if constraints:
-        lines += ["", "How:"] + [f"- {x}" for x in constraints[:6]]
-    done = (t or {}).get("done_check", "{check} exits 0.")
-    done = done.replace("{check}", f"`{check}`" if check else "the check named in the task")
-    if check and check not in done:
-        done += f" Run `{check}` yourself and report its last line."
+        lines += ["", "How:"] + [f"- {x}" for x in constraints]
+    if (t or {}).get("pitfalls"):
+        lines.append("Watch for: " + " ".join(p.rstrip(".") + "." for p in t["pitfalls"][:2]))
+    if check:
+        done = (t or {}).get("done_check", "{check} exits 0.").replace("{check}", f"`{check}`")
+        if check not in done:
+            done += f" Run `{check}` yourself and report its last line."
+    else:
+        # No command was given: never point at a check that does not exist.
+        done = "The outcome in the task is met, and your return names the evidence that shows it (a file and line, an output, a measurement)."
     lines += ["", f"<done_when>{done}</done_when>"]
     block = tier_block(model_alias, effort, base_agent)
     if block:
@@ -431,18 +478,21 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
     return "\n".join(lines) + "\n"
 
 
-def lint_brief(text: str, model_alias: str) -> list[str]:
+def lint_brief(text: str, model_alias: str, lead_text: str = "") -> list[str]:
+    """Problems with a rendered brief. ``lead_text`` is what the lead supplied
+    (task, why, extra constraints): wording rules apply to what HR adds, since
+    a task may legitimately be about tokens or experts."""
     errs = []
     n = _words(text)
-    if n > 350:
-        errs.append(f"brief is {n} words (limit 350)")
+    if n > BRIEF_MAX:
+        errs.append(f"brief is {n} words (limit {BRIEF_MAX}): shorten the task, the why or the extra constraints")
     for tag in ("<task>", "<scope>", "<done_when>", "<return>"):
         if tag not in text:
             errs.append(f"brief has no {tag}")
     body = text.replace(VERIFY_BLOCK, "")
+    for piece in [p for p in lead_text.split("\n") if p.strip()]:
+        body = body.replace(piece.strip(), "")
     for label, pat in BANNED:
-        if label == "think" and model_alias in ("haiku", "sonnet"):
-            continue
         if pat.search(body):
             errs.append(f"brief contains {label} wording")
     if model_alias in ("opus", "fable") and "run a real check" in text:
@@ -454,13 +504,24 @@ def lint_brief(text: str, model_alias: str) -> list[str]:
 def contract_dir(project: Path | None) -> Path:
     if project:
         return Path(project) / ".brain" / "log" / "hr"
-    return Path(tempfile.gettempdir()) / "brain-hr"
+    return Path(tempfile.gettempdir()) / "brain-hr" / re.sub(r"[^A-Za-z0-9_-]", "_", c.session_id())[:40]
+
+
+def seal_path(cid: str) -> Path:
+    """Where the fingerprint of a contract's check is kept: outside the
+    project, so the helper working in the project is not handed the file that
+    decides whether it passed."""
+    return Path(tempfile.gettempdir()) / "brain-hr-seals" / re.sub(r"[^A-Za-z0-9_-]", "_", c.session_id())[:40] / f"{cid}.seal"
+
+
+def seal_of(contract: dict) -> str:
+    return c.sha256_text(json.dumps([contract.get("id"), contract.get("check"), contract.get("template"), contract.get("session")]))
 
 
 def hire(task: str, brain_root: Path | None = None, project: Path | None = None, why: str = "", owns: list[str] | None = None,
          inputs: list[str] | None = None, check: str = "", family: str | None = None, task_class: str | None = None,
          risk: str = "standard", tier: int = 2, size: str | None = None, base_agent: str | None = None, template_id: str | None = None,
-         extra: list[str] | None = None, seed: int | None = None, workdir_hint: str | None = None) -> dict:
+         extra: list[str] | None = None, seed: int | None = None, workdir_hint: str | None = None, dry_run: bool = False) -> dict:
     """Decide the helper for a task and write its contract and brief."""
     root = Path(brain_root or c.BRAIN_ROOT)
     hc = cfg_of(root)
@@ -479,6 +540,8 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
         except Exception:
             pass
     family, task_class = family or "software", task_class or "general"
+    if risk not in RISKS:
+        raise ValueError(f"unknown risk '{risk}'")
     if template_id:
         chosen = [{"id": t["id"], "score": 1.0, "fit": 1.0, "coverage": 1.0, "multiplier": 1.0, "trials": 0, "template": t} for t in rack if t["id"] == template_id]
         if not chosen:
@@ -487,7 +550,10 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
         chosen = select(task, rack, state, hc, family, risk, base_agent)
     t = chosen[0]["template"] if chosen else None
     agent = (t or {}).get("base_agent") or base_agent or ("builder" if family == "software" else "researcher")
-    role = ROLE_OF[agent]
+    role = (t or {}).get("role") or ROLE_OF[agent]
+    # The riskier of what the lead said and what this kind of work usually is.
+    if t and t.get("risk") in RISKS and RISKS.index(t["risk"]) > RISKS.index(risk):
+        risk = t["risk"]
     default = (models_cfg.get("roles") or {}).get(role) or {"model": "sonnet", "effort": "medium"}
     arm = {"model": default["model"], "effort": default["effort"], "explored": False, "propensity": 1.0, "basis": "role default"}
     if mlearn is not None:
@@ -497,19 +563,38 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
             pass
     size = size or (t or {}).get("size") or "M"
     pay = wage(size, arm["model"], (t or {}).get("id"), state, hc, models_cfg)
-    cid = "h-" + c.now().strftime("%Y%m%d") + "-" + hashlib.sha256(f"{c.now_iso()}|{task}|{c.session_id()}".encode()).hexdigest()[:6]
     d = contract_dir(project)
+    base_id = "h-" + c.now().strftime("%Y%m%d") + "-" + hashlib.sha256(f"{c.now_iso()}|{task}|{c.session_id()}".encode()).hexdigest()[:6]
+    cid, n = base_id, 1
+    while (d / f"{cid}.json").exists():  # the same task hired twice in one second still gets its own contract
+        n += 1
+        cid = f"{base_id}-{n}"
     brief_path, notes_path = d / f"{cid}.md", d / f"{cid}-notes.md"
-    workdir = str(Path(project).resolve()) if project else (str(Path(workdir_hint).resolve()) if workdir_hint else "")
+    workdir = str(Path(project).resolve()) if project else str(Path(workdir_hint).resolve() if workdir_hint else Path.cwd().resolve())
     brief = compose_brief(t, agent, task, why, owns or [], inputs or [], check, arm["model"], arm["effort"], str(notes_path), extra, workdir)
+    lead_text = "\n".join([task, why] + list(extra or []))
+    if dry_run:
+        return {"id": "(dry run)", "template": (t or {}).get("id"), "base_agent": agent, "model": arm["model"], "effort": arm["effort"],
+                "explored": bool(arm.get("explored")), "wage_tokens": pay["tokens"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
+                "brief": "(not written)", "runners_up": [x["id"] for x in chosen[1:3]], "model_basis": arm.get("basis", ""),
+                "lint": lint_brief(brief, arm["model"], lead_text), "words": _words(brief), "needs": (t or {}).get("needs", []),
+                "closest": [] if t else [x["id"] for x in select(task, rack, state, hc, family, risk, base_agent, near=True)]}
+    # A new hire for the same task replaces this session's earlier open one
+    # (for example after picking a template from the "closest" list).
+    for old in open_contracts(project):
+        prev = c.read_json(old, {}) or {}
+        if prev.get("session") == c.session_id() and prev.get("task_sha") == c.sha256_text(task)[:16]:
+            prev["status"] = "superseded"
+            c.write_json(old, prev)
     contract = {
         "id": cid, "at": c.now_iso(), "session": c.session_id(), "status": "open",
         "template": (t or {}).get("id"), "group": (t or {}).get("group"), "base_agent": agent, "size": size,
         "model": arm["model"], "effort": arm["effort"], "explored": bool(arm.get("explored")), "propensity": arm.get("propensity", 1.0),
         "task_class": task_class, "family": family, "risk": risk, "tier": tier, "check": check, "has_check": bool(check),
-        "wage_tokens": pay["tokens"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
+        "wage_tokens": pay["tokens"], "band_tokens": pay["band"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
+        "task_sha": c.sha256_text(task)[:16], "words": _words(brief), "needs": (t or {}).get("needs", []),
         "brief": str(brief_path), "notes": str(notes_path), "workdir": workdir, "runners_up": [x["id"] for x in chosen[1:3]],
-        "lint": lint_brief(brief, arm["model"]), "model_basis": arm.get("basis", ""),
+        "lint": lint_brief(brief, arm["model"], lead_text), "model_basis": arm.get("basis", ""),
         # Word matching misses some requests (measured: right template in the
         # top three for 86% of held-out requests). When nothing passed the
         # floor, the closest templates are shown so the lead can pick one.
@@ -517,6 +602,7 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     }
     c.write_text(brief_path, brief)
     c.write_json(d / f"{cid}.json", contract)
+    c.write_text(seal_path(cid), seal_of(contract))
     return contract
 
 
@@ -552,22 +638,36 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
     contract = c.read_json(contract_path, None)
     if not isinstance(contract, dict) or not contract.get("id"):
         raise ValueError(f"{contract_path} is not a contract")
+    if contract.get("status") == "settled":
+        return contract  # already settled: nothing is run or recorded twice
     models_cfg = c.read_json(root / "memory" / "models.json", {}) or {}
     if sub_paths is None:
         _main, sub_paths = c.transcript_paths()
     usage = find_helper_usage(contract, sub_paths, models_cfg)
-    passed = contract.get("passed")
+    # The result comes only from running the check here. Whatever `passed`
+    # the file holds is ignored, and the check must be the one that was sealed
+    # at hire time: the contract sits where the helper works, so neither its
+    # result nor its command is taken on trust (I-17).
+    seal = c.read_text(seal_path(contract["id"])).strip()
+    sealed = bool(seal) and seal == seal_of(contract)
+    contract["sealed"] = sealed
+    passed = None
     where = project or (Path(contract["workdir"]) if contract.get("workdir") and Path(contract["workdir"]).is_dir() else None)
-    if contract.get("check") and where is not None and not isinstance(passed, bool):
-        from . import gate
-        r = gate.run_filtered(contract["check"], where, project)
-        passed = r["exit"] == 0
-        contract["check_exit"], contract["check_log"] = r["exit"], Path(r["log"]).name
-    contract["passed"] = passed if isinstance(passed, bool) else None
+    if contract.get("check") and where is not None:
+        if seal and not sealed:
+            contract["tampered"] = True  # the check or identity changed after hiring: do not run a command nobody approved
+        else:
+            from . import gate
+            r = gate.run_filtered(contract["check"], where, project)
+            passed = r["exit"] == 0
+            contract["check_exit"], contract["check_log"] = r["exit"], Path(r["log"]).name
+    contract["passed"] = passed
     if usage:
         contract.update({"actual_tokens": usage["actual_tokens"], "actual_cost": usage["cost"], "actual_out": usage["out_tokens"], "turns": usage["turns"],
                          "overrun": round(usage["actual_tokens"] / contract["wage_tokens"], 2) if contract.get("wage_tokens") else None})
-    contract["status"] = "settled" if usage or isinstance(passed, bool) else "unmatched"
+    if not usage and passed is None:
+        return dict(contract, status="unmatched")  # stays open on disk, so a later settle can still find the helper
+    contract["status"] = "settled"
     contract["settled_at"] = c.now_iso()
     c.write_json(contract_path, contract)
     if contract["status"] == "settled":
@@ -577,8 +677,8 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
                "size": contract.get("size"), "model": contract.get("model"), "effort": contract.get("effort"),
                "task_class": contract.get("task_class"), "family": contract.get("family"), "risk": contract.get("risk"),
                "has_check": contract.get("has_check"), "explored": contract.get("explored"), "propensity": contract.get("propensity"),
-               "wage_tokens": contract.get("wage_tokens"), "actual_tokens": contract.get("actual_tokens"),
-               "passed": contract.get("passed")}
+               "wage_tokens": contract.get("wage_tokens"), "band_tokens": contract.get("band_tokens"),
+               "actual_tokens": contract.get("actual_tokens"), "passed": contract.get("passed"), "sealed": sealed}
         inbox = root / "learning" / "inbox" / f"{c.today()}-{c.session_id()}.jsonl"
         have = {r.get("id") for r in c.read_jsonl(inbox)}
         if rec["id"] not in have:  # settling twice records once
@@ -588,7 +688,7 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
 
 def settle_open(project: Path | None, brain_root: Path | None = None, sub_paths: list[Path] | None = None) -> str:
     """Settle every open contract of this session; one summary line, or ""."""
-    paths = [p for p in open_contracts(project) if (c.read_json(p, {}) or {}).get("session") == c.session_id()]
+    paths = open_contracts(project, mine_only=True)
     if not paths:
         return ""
     done = [settle(p, brain_root=brain_root, project=project, sub_paths=sub_paths) for p in paths]
@@ -599,9 +699,14 @@ def settle_open(project: Path | None, brain_root: Path | None = None, sub_paths:
             + (f", {failed} failed its check" if failed else ""))
 
 
-def open_contracts(project: Path | None) -> list[Path]:
+def open_contracts(project: Path | None, mine_only: bool = False) -> list[Path]:
     d = contract_dir(project)
-    return [p for p in sorted(d.glob("h-*.json")) if (c.read_json(p, {}) or {}).get("status") == "open"]
+    out = []
+    for p in sorted(d.glob("h-*.json")):
+        con = c.read_json(p, {}) or {}
+        if con.get("status") == "open" and (not mine_only or con.get("session") == c.session_id()):
+            out.append(p)
+    return out
 
 
 def report_lines(brain_root: Path | None = None) -> list[str]:
@@ -640,13 +745,16 @@ def cmd_hire(args) -> int:
     if not go and not args.force:
         print(f"do not hire: {reason}")
         return 0
-    if project is not None and len(open_contracts(project)) >= hc["hire"]["max_helpers"] and not args.force:
-        print(f"do not hire yet: {hc['hire']['max_helpers']} contracts are already open; settle one first (brain hr settle)")
+    # The cap counts this session's own open contracts, with or without a
+    # project; another session's leftovers never block a hire.
+    if not args.dry_run and len(open_contracts(project, mine_only=True)) >= hc["hire"]["max_helpers"] and not args.force:
+        print(f"do not hire yet: {hc['hire']['max_helpers']} contracts of this session are open; settle one first (brain hr settle), or drop one (brain hr settle <id> --abandon)")
         return 1
     try:
         con = hire(args.task, project=project, why=args.why or "", owns=args.owns, inputs=args.input, check=args.check or "",
                    family=args.family, task_class=args.task_class, risk=args.risk, tier=args.tier, size=args.size,
-                   base_agent=args.agent, template_id=args.template, extra=args.also, seed=args.seed, workdir_hint=args.workdir)
+                   base_agent=args.agent, template_id=args.template, extra=args.also, seed=args.seed, workdir_hint=args.workdir,
+                   dry_run=args.dry_run)
     except ValueError as e:
         print(str(e))
         return 1
@@ -662,6 +770,10 @@ def cmd_hire(args) -> int:
     print(f"wage: {con['wage_tokens']:,} output-equivalent tokens (about ${con['wage_cost']:.2f} at list price) · {con['wage_basis']}")
     print(f"brief: {con['brief']}")
     print(f"delegate with: agent {con['base_agent']}, model {con['model']}, effort {con['effort']}, message: \"Follow the brief at {con['brief']} (contract {con['id']}).\"")
+    if con.get("needs"):
+        print("the brief assumes you supplied: " + "; ".join(con["needs"]) + " (add what is missing with --input or --also)")
+    if con.get("words", 0) > BRIEF_WARN and not con["lint"]:
+        print(f"note: the brief is {con['words']} words; briefs read best under {BRIEF_WARN}")
     for e in con["lint"]:
         print("brief problem:", e)
     if not go:
@@ -674,7 +786,19 @@ def cmd_settle(args) -> int:
     if project is not None and not c.is_managed(project):
         project = None
     d = contract_dir(project)
-    paths = [d / f"{args.contract}.json"] if args.contract else open_contracts(project)
+    if args.contract and not CONTRACT_ID.match(args.contract):
+        print("that is not a contract id (they look like h-20261110-1a2b3c)")
+        return 1
+    if args.abandon:
+        if not args.contract or not (d / f"{args.contract}.json").is_file():
+            print("name an existing contract to abandon")
+            return 1
+        con = c.read_json(d / f"{args.contract}.json", {}) or {}
+        con["status"] = "abandoned"
+        c.write_json(d / f"{args.contract}.json", con)
+        print(f"{args.contract}: abandoned; nothing recorded")
+        return 0
+    paths = [d / f"{args.contract}.json"] if args.contract else open_contracts(project, mine_only=True)
     if not paths:
         print("no open contract to settle")
         return 0
@@ -693,10 +817,12 @@ def cmd_settle(args) -> int:
                 print(f"{p.stem}: --passed ignored; a result counts only when a check command produced it (hire with --check)")
         con = settle(p, project=project)
         if con["status"] == "unmatched":
-            print(f"{con['id']}: no helper transcript mentions this contract and no check ran; left open")
+            print(f"{con['id']}: no helper transcript mentions this contract yet and no check could run; still open (settle again later, or --abandon)")
             continue
-        use = f"used {con['actual_tokens']:,} of {con['wage_tokens']:,} ({con['overrun']:.2f}x)" if con.get("actual_tokens") else "usage not found on this machine"
-        res = "check passed" if con.get("passed") is True else "CHECK FAILED" if con.get("passed") is False else "no check result"
+        over = f" ({con['overrun']:.2f}x)" if isinstance(con.get("overrun"), (int, float)) else ""
+        use = f"used {con['actual_tokens']:,} of {con['wage_tokens']:,}{over}" if con.get("actual_tokens") else "usage not found on this machine"
+        res = ("check passed" if con.get("passed") is True else "CHECK FAILED" if con.get("passed") is False
+               else "CHECK NOT RUN: the contract was changed after hiring" if con.get("tampered") else "no check result")
         flag = " · OVER WAGE" if (con.get("overrun") or 0) > hc["overrun_flag"] else ""
         print(f"{con['id']}: {con.get('template') or 'plain'} on {con['model']} · {use}{flag} · {res}")
         if con.get("passed") is False:
@@ -768,7 +894,7 @@ def cmd_staff(args) -> int:
         agent = (tpl or {}).get("base_agent", "builder")
         model = ((models_cfg.get("roles") or {}).get(ROLE_OF[agent]) or {}).get("model", "sonnet")
         pay = wage(t.get("size") or (tpl or {}).get("size") or "M", model, (tpl or {}).get("id"), state, hc, models_cfg)
-        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), True, hc)
+        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), bool(t.get("parallel", True)), hc)
         rows.append((str(t.get("id")), (tpl or {}).get("id") or "plain", agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
         total += pay["tokens"] if go else 0
     if not rows:
@@ -780,10 +906,10 @@ def cmd_staff(args) -> int:
         print(f"… {len(rows) - 12} more ticket(s)")
     cost_total = sum(r[5] for r in rows)
     line = f"payroll: {total:,} output-equivalent tokens (about ${cost_total:.2f}) for {sum(r[6] for r in rows)} helper(s)"
-    if args.budget:
+    if args.budget is not None:
         line += f" · budget {args.budget:,}: " + ("within budget" if total <= args.budget else f"OVER by {total - args.budget:,}; drop or shrink tickets, or let the lead do the small ones")
     print(line)
-    return 1 if args.budget and total > args.budget else 0
+    return 1 if args.budget is not None and total > args.budget else 0
 
 
 def register(sub) -> None:
@@ -807,7 +933,8 @@ def register(sub) -> None:
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")
     h.add_argument("--force", action="store_true", help="hire even when the rule says the lead should do it")
-    h.add_argument("--workdir", help="where the helper should work when no project is attached (default: the project)")
+    h.add_argument("--workdir", help="where the helper should work when no project is attached (default: the current folder)")
+    h.add_argument("--dry-run", action="store_true", help="show the choice and wage; write no contract or brief")
     h.add_argument("--seed", type=int)
     h.add_argument("--json", action="store_true")
     h.set_defaults(func=cmd_hire)
@@ -815,6 +942,7 @@ def register(sub) -> None:
     c.add_project_arg(t)
     t.add_argument("contract", nargs="?", help="contract id (default: every open contract)")
     t.add_argument("--passed", type=int, choices=(0, 1), help="ignored: results come from the check command")
+    t.add_argument("--abandon", action="store_true", help="drop a contract that will not be used; nothing is recorded")
     t.set_defaults(func=cmd_settle)
     r = s.add_parser("rack", help="list the template rack, search it, or show one template")
     r.add_argument("--search")

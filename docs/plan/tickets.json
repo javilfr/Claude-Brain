@@ -206,7 +206,7 @@
       ],
       "est": 40,
       "accept": "test -f docs/research/round3/02-archetypes.md",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-121",
@@ -220,7 +220,7 @@
       ],
       "est": 30,
       "accept": "python3 bin/brain hr audit",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-122",
@@ -233,7 +233,7 @@
       ],
       "est": 120,
       "accept": "python3 bin/brain hr audit",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-123",
@@ -249,7 +249,7 @@
       ],
       "est": 120,
       "accept": "python3 -m unittest tests.test_hr tests.test_mlearn tests.test_learn",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-124",
@@ -266,7 +266,7 @@
       ],
       "est": 30,
       "accept": "python3 bin/brain lint",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-125",
@@ -280,7 +280,7 @@
       ],
       "est": 60,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain hr audit",
-      "status": "open"
+      "status": "done"
     }
   ],
   "live_checks": [

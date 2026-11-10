@@ -124,7 +124,7 @@ class Selection(Base):
         state = {}
         cfg = {"hr": {}}
         for i in range(8):
-            hr.fold_hire(state, cfg, {"template": "phone-ui-builder-two", "group": "build", "passed": False})
+            hr.fold_hire(state, cfg, {"template": "phone-ui-builder-two", "group": "build", "passed": False, "sealed": True})
         ranked = hr.select("Build the settings screen for the phone layout", rack, state)
         self.assertEqual(ranked[0]["id"], "phone-ui-builder")
         self.assertTrue(hr.on_probation(hr.hr_state(state), hr.DEFAULT_CFG, "phone-ui-builder-two", "build"))
@@ -133,7 +133,7 @@ class Selection(Base):
     def test_two_failures_do_not_put_a_template_on_probation(self):
         state = {}
         for _ in range(2):
-            hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "build", "passed": False})
+            hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "build", "passed": False, "sealed": True})
         self.assertFalse(hr.on_probation(hr.hr_state(state), hr.DEFAULT_CFG, "t", "build"))
 
     def test_untried_template_is_not_boosted_on_risky_work(self):
@@ -142,11 +142,15 @@ class Selection(Base):
 
     def test_only_a_check_result_moves_the_pass_record(self):
         state = {}
-        hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "passed": None, "wage_tokens": 1000, "actual_tokens": 900})
-        hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "passed": "yes"})
+        hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "size": "M", "passed": None, "band_tokens": 1000, "actual_tokens": 900})
+        hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "passed": "yes", "sealed": True})
+        hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "passed": True})                    # not sealed: a claim
+        hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "passed": True, "sealed": "yes"})   # not really sealed
         h = hr.hr_state(state)
         self.assertEqual(h["t"], {})
         self.assertEqual(h["ratios"]["t:t"], [0.9])
+        hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "passed": True, "sealed": True})
+        self.assertEqual(hr.hr_state(state)["t"]["t"][2], 1)
 
 
 class Wage(Base):
@@ -157,7 +161,7 @@ class Wage(Base):
         self.assertAlmostEqual(cold["cost"], 0.60)
         state = {}
         for ratio in (1.4, 1.5, 1.6, 1.5, 1.7, 1.5):
-            hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "size": "M", "wage_tokens": 1000, "actual_tokens": int(1000 * ratio)})
+            hr.fold_hire(state, {"hr": {}}, {"template": "t", "group": "g", "size": "M", "band_tokens": 1000, "actual_tokens": int(1000 * ratio)})
         warm = hr.wage("M", "sonnet", "t", state, hr.DEFAULT_CFG, models)
         self.assertGreater(warm["tokens"], 85000)
         self.assertIn("6 settled", warm["basis"])
@@ -167,7 +171,7 @@ class Wage(Base):
     def test_calibration_is_bounded(self):
         state = {}
         for _ in range(6):
-            hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "S", "wage_tokens": 1000, "actual_tokens": 90000})
+            hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "S", "band_tokens": 1000, "actual_tokens": 90000})
         w = hr.wage("S", "haiku", "t", state, hr.DEFAULT_CFG, c.read_json(self.b / "memory" / "models.json"))
         self.assertLessEqual(w["tokens"], 60000)  # at most three times the band
 
@@ -270,7 +274,7 @@ class Contracts(Base):
     def test_settled_hires_flow_through_the_real_fold(self):
         cfg = mlearn.config(self.b)
         recs = [{"kind": "hire", "id": f"r{i}", "at": f"2026-11-10T10:0{i}:00Z", "session": "s", "template": "phone-ui-builder", "group": "build",
-                 "size": "M", "passed": i != 0, "wage_tokens": 60000, "actual_tokens": 50000 + i * 1000} for i in range(6)]
+                 "size": "M", "passed": i != 0, "sealed": True, "wage_tokens": 60000, "band_tokens": 60000, "actual_tokens": 50000 + i * 1000} for i in range(6)]
         state = mlearn.fold(mlearn.empty_state(), recs, cfg)
         again = mlearn.fold(state, recs, cfg)
         self.assertEqual(json.dumps(state, sort_keys=True), json.dumps(again, sort_keys=True))  # idempotent per record id
@@ -330,6 +334,219 @@ class LeadVersusHelpers(Base):
         self.assertIn("1 of 1 contract(s) settled", line)
         self.assertEqual(len(hr.open_contracts(p)), 1)
         self.assertEqual(c.read_json(p / ".brain" / "log" / "hr" / f"{mine['id']}.json")["status"], "settled")
+
+
+class ReviewFindings(Base):
+    """One test per defect the independent HR review reproduced."""
+
+    def helper_transcript(self, contract_id: str, out_tokens: int) -> Path:
+        return Contracts.helper_transcript(self, contract_id, out_tokens)
+
+    def test_wage_does_not_swing_back_when_real_use_is_steady(self):
+        """M1: with real use steady at 90k on a 60k band, the wage must rise and stay risen."""
+        models = c.read_json(self.b / "memory" / "models.json")
+        state, wages = {}, []
+        for i in range(60):
+            w = hr.wage("M", "sonnet", "t", state, hr.DEFAULT_CFG, models)
+            wages.append(w["tokens"])
+            hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "M", "band_tokens": w["band"], "wage_tokens": w["tokens"], "actual_tokens": 90000})
+        self.assertEqual(wages[0], 60000)
+        self.assertTrue(all(w == 90000 for w in wages[6:]), wages)
+
+    def test_a_pass_written_into_the_contract_file_is_ignored(self):
+        """M2a: the helper cannot pass itself by editing the contract."""
+        p = self.project()
+        con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="false")
+        cpath = p / ".brain" / "log" / "hr" / f"{con['id']}.json"
+        forged = c.read_json(cpath)
+        forged["passed"] = True
+        c.write_json(cpath, forged)
+        done = hr.settle(cpath, brain_root=self.b, project=p, sub_paths=[self.helper_transcript(con["id"], 100)])
+        self.assertIs(done["passed"], False)
+        self.assertEqual(done["check_exit"], 1)
+
+    def test_a_check_changed_after_hiring_is_not_run_and_counts_for_nothing(self):
+        """M2b: swapping the check for one that always passes is detected."""
+        p = self.project()
+        con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="false")
+        cpath = p / ".brain" / "log" / "hr" / f"{con['id']}.json"
+        forged = c.read_json(cpath)
+        forged["check"] = "true"
+        c.write_json(cpath, forged)
+        done = hr.settle(cpath, brain_root=self.b, project=p, sub_paths=[self.helper_transcript(con["id"], 100)])
+        self.assertIsNone(done["passed"])
+        self.assertTrue(done["tampered"])
+        rec = c.read_jsonl(next((self.b / "learning" / "inbox").glob("*.jsonl")))[0]
+        self.assertFalse(rec["sealed"])
+        state = {}
+        hr.fold_hire(state, {"hr": {}}, rec)
+        self.assertEqual(hr.hr_state(state)["t"], {})
+
+    def run_cli(self, *argv):
+        import importlib.machinery
+        import importlib.util
+        loader = importlib.machinery.SourceFileLoader("brain_cli_hr", str(ROOT / "bin" / "brain"))
+        spec = importlib.util.spec_from_loader("brain_cli_hr", loader)
+        mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(mod)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = mod.main(list(argv))
+        return code, buf.getvalue()
+
+    def test_cap_counts_this_sessions_contracts_with_or_without_a_project(self):
+        """S1: the four-helper cap applies with no project; other sessions' leftovers do not block."""
+        os.environ["TMPDIR"] = str(Path(self._tmp.name) / "tmp")
+        Path(os.environ["TMPDIR"]).mkdir()
+        import tempfile as _t
+        _t.tempdir = None
+        try:
+            os.environ["BRAIN_SESSION_ID"] = "crashed-session"
+            for i in range(4):
+                self.run_cli("hr", "hire", f"Build screen number {i} for the phone layout", "--check", "true", "--parallel")
+            os.environ["BRAIN_SESSION_ID"] = "sess-hr"
+            codes = [self.run_cli("hr", "hire", f"Build another screen {i} for the phone layout", "--check", "true", "--parallel")[0] for i in range(5)]
+            self.assertEqual(codes[:4], [0, 0, 0, 0])
+            self.assertEqual(codes[4], 1)
+            code, out = self.run_cli("hr", "hire", "Build one more screen for the phone layout", "--check", "true", "--parallel", "--dry-run")
+            self.assertEqual(code, 0)
+            self.assertIn("dry run", out)
+        finally:
+            _t.tempdir = None
+
+    def test_an_early_settle_leaves_the_contract_open_for_a_later_one(self):
+        """S2: settling before the helper's transcript exists must not lose the hire."""
+        p = self.project()
+        con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p)
+        cpath = p / ".brain" / "log" / "hr" / f"{con['id']}.json"
+        self.assertEqual(hr.settle(cpath, brain_root=self.b, project=p, sub_paths=[])["status"], "unmatched")
+        self.assertEqual(len(hr.open_contracts(p)), 1)
+        later = hr.settle(cpath, brain_root=self.b, project=p, sub_paths=[self.helper_transcript(con["id"], 500)])
+        self.assertEqual(later["status"], "settled")
+
+    def test_same_task_hired_twice_in_one_second_gets_two_contracts(self):
+        """S3 (and the replacement rule): ids never collide; the earlier one is superseded."""
+        os.environ["BRAIN_NOW"] = "2026-11-10T10:00:00Z"
+        p = self.project()
+        a = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="true")
+        b = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="true")
+        self.assertNotEqual(a["id"], b["id"])
+        self.assertTrue(Path(a["brief"]).is_file() and Path(b["brief"]).is_file())
+        self.assertEqual(c.read_json(p / ".brain" / "log" / "hr" / f"{a['id']}.json")["status"], "superseded")
+        self.assertEqual(len(hr.open_contracts(p)), 1)
+
+    def test_every_constraint_the_lead_adds_reaches_the_brief(self):
+        """S4: lead-supplied lines are never dropped."""
+        extras = [f"EXTRA-{i} because reason {i}." for i in range(4)]
+        five = tpl("x", method=[f"Method line {i} because of reason {i}." for i in range(5)])
+        text = hr.compose_brief(five, "builder", "Do it.", "", [], [], "true", "opus", "high", "n", extras)
+        for e in extras:
+            self.assertIn(e, text)
+        self.assertIn("Method line 4", text)
+
+    def test_brief_length_is_a_note_then_an_error(self):
+        """S5: the word limit is real: a note above 350, an error above 500."""
+        ok = hr.compose_brief(self.rack[0], "builder", "Do it.", "", [], [], "true", "opus", "high", "n")
+        self.assertEqual(hr.lint_brief(ok, "opus"), [])
+        huge = hr.compose_brief(self.rack[0], "builder", "word " * 480, "", [], [], "true", "opus", "high", "n")
+        self.assertTrue(any("limit 500" in e for e in hr.lint_brief(huge, "opus")))
+
+    def test_without_a_check_the_brief_points_at_no_phantom_command(self):
+        """S6."""
+        text = hr.compose_brief(self.rack[0], "builder", "Do it.", "", [], [], "", "opus", "high", "n")
+        self.assertNotIn("check named in the task", text)
+        self.assertNotIn("{check}", text)
+        self.assertIn("names the evidence", text)
+        with_check = hr.compose_brief(tpl("y", done_check="The screen matches the spec."), "builder", "Do it.", "", [], [], "make ok", "opus", "high", "n")
+        self.assertIn("Run `make ok` yourself", with_check)
+
+    def test_one_malformed_template_does_not_break_hiring_and_the_audit_reports_it(self):
+        """S8."""
+        bad = [{"when": "no id at all"}, {"id": "int-keys", "base_agent": "builder", "name": "x", "when": "x", "role_line": "x", "keywords": [1, 2], "method": ["a"], "families": ["software"]}, "not an object"]
+        (self.b / "hr" / "rack" / "broken.jsonl").write_text("".join(json.dumps(x) + "\n" for x in bad))
+        con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=self.project(), check="true")
+        self.assertEqual(con["template"], "phone-ui-builder")
+        errs = " | ".join(hr.audit(self.b)[0])
+        self.assertIn("no text id", errs)
+        self.assertIn("every keywords entry must be text", errs)
+
+    def test_audit_really_validates_templates(self):
+        """S10: the audit must fail on a template that breaks a writing rule."""
+        c.write_jsonl(self.b / "hr" / "rack" / "all.jsonl", [tpl("phone-ui-builder", role_line="You are an expert senior engineer.")])
+        self.assertTrue(any("persona" in e for e in hr.audit(self.b)[0]))
+
+    def test_template_role_sets_the_model_tier_and_risk_is_never_lowered(self):
+        """S9 and m10: read-only work can run on the reviewer agent at a cheaper tier; a template's risk counts."""
+        rack = self.rack + [tpl("repo-map", name="Repo Mapper", group="discovery", base_agent="reviewer", role="researcher", risk="high",
+                                keywords=["map", "repo", "unfamiliar", "entry", "structure"], when="An unfamiliar repo must be mapped before a change.")]
+        c.write_jsonl(self.b / "hr" / "rack" / "all.jsonl", rack)
+        con = hr.hire("Map this unfamiliar repo structure and entry points", brain_root=self.b, project=self.project(), check="true")
+        self.assertEqual((con["template"], con["base_agent"], con["model"]), ("repo-map", "reviewer", "sonnet"))
+        self.assertEqual(con["risk"], "high")
+        self.assertTrue(any("role 'wizard'" in e for e in hr.validate_template(tpl("z", role="wizard"), self.schema)))
+
+    def test_small_things_the_review_listed(self):
+        models = c.read_json(self.b / "memory" / "models.json")
+        with self.assertRaises(ValueError):                                    # m6
+            hr.wage("XXL", "sonnet", "t", {}, hr.DEFAULT_CFG, models)
+        self.assertEqual(hr.select("fix it", self.rack), [])                   # m5
+        state = {}
+        hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": None, "band_tokens": True, "actual_tokens": 5})   # m7
+        self.assertEqual(hr.hr_state(state)["ratios"], {})
+        for bad in ("You're an expert engineer.", "As a world-class engineer, build it.", "Use five thousand tokens at most."):  # m3
+            self.assertTrue(hr.validate_template(tpl("q", role_line="Builds screens.", scope_rule=bad), self.schema), bad)
+        self.assertTrue(any("absolute rule" in e for e in hr.validate_template(tpl("q", scope_rule="Always commit when you like."), self.schema)))
+        brief = hr.compose_brief(self.rack[0], "builder", "Cut the system prompt below 2,000 tokens.", "", [], [], "true", "sonnet", "medium", "n",
+                                 ["Think step by step is banned in our prompts, so remove it."])
+        self.assertEqual(hr.lint_brief(brief, "sonnet", "Cut the system prompt below 2,000 tokens.\n\nThink step by step is banned in our prompts, so remove it."), [])  # m4
+        self.assertTrue(hr.lint_brief(brief + "\nThink step by step.", "sonnet"))   # m2
+        code, out = self.run_cli("hr", "settle", "../../etc/passwd")            # m8
+        self.assertEqual(code, 1)
+        self.assertIn("not a contract id", out)
+
+    def test_selection_details_the_mutations_removed(self):
+        """S10: clamp, family penalty and discount each have a visible effect."""
+        state = {}
+        for _ in range(40):
+            hr.fold_hire(state, {"hr": {}}, {"template": "phone-ui-builder", "group": "build", "passed": True, "sealed": True})
+        h = hr.hr_state(state)
+        self.assertLessEqual(hr.performance_multiplier(h, hr.DEFAULT_CFG, "phone-ui-builder", "build"), 1.3)
+        self.assertLess(h["t"]["phone-ui-builder"][0], 34)   # 40 passes, discounted: old results fade
+        same = hr.select("Build the settings screen for the phone layout", self.rack, family="software")[0]["score"]
+        other = hr.select("Build the settings screen for the phone layout", self.rack, family="language")[0]["score"]
+        self.assertLess(other, same)
+        ro = tpl("ro", base_agent="reviewer", method=["Read the diff and fix the bugs you find because that is fastest.", "b because c.", "d because e."])
+        self.assertTrue(any("read-only base agent" in e for e in hr.validate_template(ro, self.schema)))
+        opus_bad = hr.compose_brief(self.rack[0], "builder", "Do it.", "", [], [], "true", "opus", "high", "n") + "\n" + hr.VERIFY_BLOCK
+        self.assertTrue(any("over-verifies" in e for e in hr.lint_brief(opus_bad, "opus")))
+
+    def test_config_overlay_and_ratio_window(self):
+        cfgfile = self.b / "memory" / "ml_config.json"
+        data = c.read_json(cfgfile)
+        data["hr"] = {"bands": {"M": 77000}, "hire": {"max_helpers": 2}}
+        c.write_json(cfgfile, data)
+        hc = hr.cfg_of(self.b)
+        self.assertEqual((hc["bands"]["M"], hc["bands"]["S"], hc["hire"]["max_helpers"]), (77000, 20000, 2))
+        state = {}
+        for i in range(50):
+            hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "M", "band_tokens": 1000, "actual_tokens": 1000})
+        self.assertEqual(len(hr.hr_state(state)["ratios"]["_all"]), hr.DEFAULT_CFG["ratio_cap"])
+
+    def test_staff_and_report_run_end_to_end(self):
+        plan = Path(self._tmp.name) / "plan.json"
+        plan.write_text(json.dumps({"tickets": [
+            {"id": "T-1", "title": "Build the settings screen for the phone layout", "accept": "true"},
+            {"id": "T-2", "title": "Translate the home page to Spanish", "accept": ""},
+            {"id": "T-3", "title": "Done already", "status": "done"}]}))
+        code, out = self.run_cli("hr", "staff", str(plan), "--budget", "0")
+        self.assertEqual(code, 1)
+        self.assertIn("T-2", out)
+        self.assertIn("lead does it", out)
+        self.assertNotIn("T-3", out)
+        self.assertIn("OVER", out)
+        code, out = self.run_cli("hr", "report")
+        self.assertEqual(code, 0)
+        self.assertIn("rack:", out)
 
 
 class RealRack(unittest.TestCase):

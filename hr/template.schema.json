@@ -6,6 +6,7 @@
     "name": {"type": "string", "max_words": 6},
     "group": {"type": "string", "enum": ["discovery", "planning", "build", "quality-ops", "data", "writing", "language", "design", "review", "support"]},
     "base_agent": {"type": "string", "enum": ["scout", "researcher", "builder", "writer", "reviewer", "redteam"]},
+    "role": {"type": "string", "enum": ["scout", "researcher", "builder", "writer", "reviewer", "redteam"], "optional": true},
     "families": {"type": "list", "of": ["software", "data", "knowledge", "language", "operations"], "min": 1},
     "when": {"type": "string", "max_words": 35},
     "keywords": {"type": "list", "min": 4, "max": 14},
