@@ -1,0 +1,100 @@
+{"task": "I want to start a little app for booking my yoga classes, just get the bare bones up and online first before we add anything.", "expect": ["web-app-scaffolder"], "split": "heldout2"}
+{"task": "Can you make the sign up page look right on my phone, it's all squished over to the left right now.", "expect": ["phone-first-ui-builder"], "split": "heldout2"}
+{"task": "My customers want to put the app on their home screen and still use it when there's no signal down at the market.", "expect": ["pwa-offline-engineer"], "split": "heldout2"}
+{"task": "Make me a simple memory card game my kids can play on the iPad, start small please.", "expect": ["game-builder"], "split": "heldout2"}
+{"task": "I need a little thing I can run that renames all my holiday photos by date, and it shouldn't mess anything up if I run it twice.", "expect": ["cli-script-builder"], "split": "heldout2"}
+{"task": "My son wants a big castle in his Minecraft world, he plays it on the Switch I think.", "expect": ["minecraft-structure-builder"], "split": "heldout2"}
+{"task": "Quiero que conviertas mis apuntes de historia en una ap para que mi hija estudie con preguntas.", "expect": ["learning-app-builder"], "split": "heldout2"}
+{"task": "Necesito que la app enseñe el tiempo que va a hacer sacándolo de alguna página de fuera, y que no se quede en blanco si esa página falla.", "expect": ["api-integration-builder"], "split": "heldout2"}
+{"task": "Tengo un montón de documentos de la asociación de vecinos y quiero que salgan como una web sencilla.", "expect": ["content-site-builder"], "split": "heldout2"}
+{"task": "El codigo esta echo un lío, ordénalo un poco pero que todo siga funcionando igual que antes.", "expect": ["refactor-engineer"], "split": "heldout2"}
+{"task": "Every morning I want it to grab the new orders from the shop and tidy them into one table, without going over what the shop allows.", "expect": ["data-pipeline-builder", "routine-builder"], "split": "heldout2"}
+{"task": "Here's a whole year of sales from the bakery, tell me what's interesting in there.", "expect": ["exploratory-analyst"], "split": "heldout2"}
+{"task": "My friend swears sales go up when it rains, can you check if that's actually true or just a feeling.", "expect": ["statistical-tester"], "split": "heldout2"}
+{"task": "Make me a couple of graphs of the monthly visiters that I can actually read on my phone.", "expect": ["chart-maker"], "split": "heldout2"}
+{"task": "I need a spreadsheet for the club money where the totals work them selves out and it tells me if something doesn't add up.", "expect": ["spreadsheet-engineer"], "split": "heldout2"}
+{"task": "I've got a list of birds we spotted on the farm, can you match them up with the proper species names from the official bird records.", "expect": ["biodiversity-data-integrator"], "split": "heldout2"}
+{"task": "Tengo la lista de socios que manda el banco y la mía y no cuadran, dime quién falta en cada una.", "expect": ["data-reconciler"], "split": "heldout2"}
+{"task": "Quiero añadir el teléfono a todos los clientes que ya están guardados sin perder nada de lo que hay.", "expect": ["schema-migration-engineer"], "split": "heldout2"}
+{"task": "¿Podrías probar si el ordenador puede adivinar qué clientes van a volver, y compararlo con algo muy simple?", "expect": ["ml-experiment-runner"], "split": "heldout2"}
+{"task": "Quiero poder preguntarle cosas a todos los manuales de la empresa y que me encuentre la respuesta buena.", "expect": ["rag-index-builder"], "split": "heldout2"}
+{"task": "Before anyone starts on the new look, write down on one page what we want it to feel like.", "expect": ["design-brief-author"], "split": "heldout2"}
+{"task": "Show me three different looks for the home page as pictures so I can choose one.", "expect": ["visual-option-generator"], "split": "heldout2"}
+{"task": "The logo sits a tiny bit to low next to the menu, nudge it up so they line up exactly.", "expect": ["visual-polish-measurer"], "split": "heldout2"}
+{"task": "Get a fresh pair of eyes on the screens and tell me honestly how they score against what we agreed.", "expect": ["design-critic"], "split": "heldout2"}
+{"task": "When people upload photos they come out sideways and massive, sort that out but keep the originals.", "expect": ["image-pipeline-engineer"], "split": "heldout2"}
+{"task": "Give me a few name ideas for my dog walking business, numbered so I can pick one.", "expect": ["name-and-copy-options"], "split": "heldout2"}
+{"task": "Quiero que todos los colores y botones de la app salgan de un mismo sitio y que nadie ponga colores a mano.", "expect": ["design-system-builder"], "split": "heldout2"}
+{"task": "Me gustaría que las tarjetas se deslicen suavecito al cambiar de pantalla, como en la app del banco.", "expect": ["motion-builder"], "split": "heldout2"}
+{"task": "Convierte mis lecciones de inglés en audios, pero primero mándame uno de prueba para escucharlo.", "expect": ["audio-lesson-producer"], "split": "heldout2"}
+{"task": "Hazme un dibujo de cómo va un pedido desde que el cliente compra hasta que le llega, que se vea bien en el móvil.", "expect": ["diagram-maker"], "split": "heldout2"}
+{"task": "I inherited this project from a freelancer and have no idea what's where, give me a one page map of it.", "expect": ["repo-cartographer"], "split": "heldout2"}
+{"task": "Look up the official instructions for the version of the map thing we use and tell me what catches people out.", "expect": ["docs-snapshotter"], "split": "heldout2"}
+{"task": "Try out these three weather services for real and tell me which ones actually work.", "expect": ["api-live-prober"], "split": "heldout2"}
+{"task": "Help me choose between Shopify, Squarespace and Wix for my shop and just tell me which one to go with.", "expect": ["option-comparer"], "split": "heldout2"}
+{"task": "Find out properly whether a four day week works for small shops, and say where each bit came from.", "expect": ["deep-researcher"], "split": "heldout2"}
+{"task": "We did something about a newsletter back in the spring, can you find what that was and when.", "expect": ["history-digger"], "split": "heldout2"}
+{"task": "Can Claude on the phone app run things by them selves on a schedule, check what the help pages say today.", "expect": ["claude-product-answerer"], "split": "heldout2"}
+{"task": "Mira qué otras apps de reservas para peluquerías hay y de qué se queja más la gente.", "expect": ["competitor-teardown"], "split": "heldout2"}
+{"task": "Necesito datos de precios de la vivienda en mi ciudad, dime haber de dónde sacarlos y enséñame un trocito.", "expect": ["dataset-source-finder"], "split": "heldout2"}
+{"task": "Te paso una lista de enlaces, guarda de cada uno las partes importantes tal cual vienen escritas.", "expect": ["source-harvester"], "split": "heldout2"}
+{"task": "Translate my mum's recipe from Spanish into English for my friends in London.", "expect": ["es-en-translator"], "split": "heldout2"}
+{"task": "Tidy up this letter to the council so it reads better but still sounds like me.", "expect": ["copy-editor"], "split": "heldout2"}
+{"task": "Make a list of the wine words we use in both English and Spanish so every translation uses the same ones.", "expect": ["glossary-builder"], "split": "heldout2"}
+{"task": "I paid someone to translate my website, can you check if they did a good job without just taking their word for it.", "expect": ["back-translation-checker"], "split": "heldout2"}
+{"task": "Write the next blog post sounding like my grandad, I've got some of his old letters you can go by.", "expect": ["voice-matcher"], "split": "heldout2"}
+{"task": "I recorded myself talking about the trip, turn it into proper writing but don't change what I said.", "expect": ["transcript-cleaner"], "split": "heldout2"}
+{"task": "Escríbeme un texto para la web en español de México, cercano pero serio, que no parezca traducido del inglés.", "expect": ["es-original-writer"], "split": "heldout2"}
+{"task": "Quiero que la app tenga todos los botones y mensajes también en catalán y que no se quede ninguno sin poner.", "expect": ["ui-string-localiser"], "split": "heldout2"}
+{"task": "Quiero la web en español y en inglés, y que las dos tengan siempre las mismas páginas.", "expect": ["bilingual-site-publisher"], "split": "heldout2"}
+{"task": "Traduce el contrato de alquiler al inglés sin perder las palabras legales exactas.", "expect": ["legal-terms-translator"], "split": "heldout2"}
+{"task": "Go through my long voice note and pull out each separate thing I asked for, one per line.", "expect": ["requirements-extractor"], "split": "heldout2"}
+{"task": "For each thing I want the app to do, tell me how we'll know it's actually done.", "expect": ["acceptance-test-designer"], "split": "heldout2"}
+{"task": "I haven't made up my mind on loads of the details, just pick sensible ones and only ask me what really matters.", "expect": ["ambiguity-resolver"], "split": "heldout2"}
+{"task": "Should we keep everything in one place or split it up into parts, write down what we chose and why.", "expect": ["architecture-decider"], "split": "heldout2"}
+{"task": "Break this plan into small jobs that different helpers can do at the same time without treading on each other.", "expect": ["ticket-slicer"], "split": "heldout2"}
+{"task": "I've got a list of forty ideas, tell me which five to do first and show me how you decided.", "expect": ["backlog-prioritiser"], "split": "heldout2"}
+{"task": "El concurso tiene una lista de criterios, dime en qué parte del proyecto cumplimos cada uno.", "expect": ["rubric-mapper"], "split": "heldout2"}
+{"task": "Lo que hicimos para la tienda de mi hermana quiero poder repetirlo para otras tiendas como si fuera una plantilla.", "expect": ["blueprint-extractor"], "split": "heldout2"}
+{"task": "Quiero pasar la web de un proveedor a otro, planea los pasos y cómo volver atrás si algo sale mal.", "expect": ["migration-planner"], "split": "heldout2"}
+{"task": "¿Se puede hacer que la app le lea la mente a los clientes? y si no, dime qué podemos hacer que se parezca.", "expect": ["feasibility-reframer"], "split": "heldout2"}
+{"task": "It keeps going red every time it tries to build, find out what's actually wrong and fix it.", "expect": ["build-failure-diagnoser"], "split": "heldout2"}
+{"task": "The website still shows last week's prices even though we changed them, why is that.", "expect": ["deploy-doctor"], "split": "heldout2"}
+{"task": "Everything's working now, put it live and make sure the real site is showing the new version.", "expect": ["release-to-main-engineer"], "split": "heldout2"}
+{"task": "Yesterday's change broke the checkout, put it back how it was on Monday.", "expect": ["rollback-restorer"], "split": "heldout2"}
+{"task": "The shop page takes ages to open on my phone, make it quicker and show me the before and after.", "expect": ["performance-profiler"], "split": "heldout2"}
+{"task": "Sometimes the basket empties it self, I don't know when exactly, can you catch it happening and fix it.", "expect": ["bug-reproducer"], "split": "heldout2"}
+{"task": "Quiero pruebas que vayan haciendo clic por la web como si fueran un cliente con el móvil.", "expect": ["e2e-test-author"], "split": "heldout2"}
+{"task": "¿Cuánto del programa está probado de verdad y qué es lo más peligroso que se ha quedado sin probar?", "expect": ["coverage-analyst"], "split": "heldout2"}
+{"task": "Revisa si mi web la puede usar bien una persona ciega o que ve poco, pero no cambies nada todavía.", "expect": ["accessibility-auditor"], "split": "heldout2"}
+{"task": "Las piezas de fuera que usa la app están muy viejas, ponlas al día poco a poco sin romper nada.", "expect": ["dependency-upgrader"], "split": "heldout2"}
+{"task": "Go down my list of what I asked for and check for yourself that each one is really there.", "expect": ["requirement-verifier"], "split": "heldout2"}
+{"task": "Check every claim in this article about our town's history before I send it to the paper.", "expect": ["fact-checker"], "split": "heldout2"}
+{"task": "Look over the changes the other helper made and tell me if they really do what they said they would.", "expect": ["code-reviewer"], "split": "heldout2"}
+{"task": "Could somebody get into the members area or see other people's stuff, check it properly.", "expect": ["security-reviewer"], "split": "heldout2"}
+{"task": "I think I might of pasted my bank password somewhere in the project, can you find it without showing it to me.", "expect": ["secret-scanner"], "split": "heldout2"}
+{"task": "Imagine the launch next month went badly, what probably went wrong and how could we spot it early.", "expect": ["premortem-redteam"], "split": "heldout2"}
+{"task": "La app lee los correos de los clientes y se los pasa a la inteligencia artificial, ¿podría alguien colar órdenes ahí dentro?", "expect": ["injection-auditor", "security-reviewer"], "split": "heldout2"}
+{"task": "El escrito cita varios artículos del código civil, comprueba que dicen de verdad lo que pone.", "expect": ["legal-citation-verifier"], "split": "heldout2"}
+{"task": "¿Estamos guardando datos personales de la gente o usando fotos que no son nuestras sin permiso?", "expect": ["privacy-licence-reviewer"], "split": "heldout2"}
+{"task": "Sigue las instrucciones de instalación tal cual en un ordenador limpio y dime dónde se atasca.", "expect": ["clean-clone-verifier"], "split": "heldout2"}
+{"task": "I have to stop for today, write down where we've got to so tomorrow we can pick it straight back up.", "expect": ["session-handover-writer"], "split": "heldout2"}
+{"task": "If you need me to change something in the website settings, tell me exactly what to tap on my phone.", "expect": ["needs-you-composer"], "split": "heldout2"}
+{"task": "Walk me through putting the thing on my laptop, one bit at a time that I can copy and paste.", "expect": ["owner-computer-guide"], "split": "heldout2"}
+{"task": "Clean up all those old branches and tell me what's left, but don't delete anything important.", "expect": ["git-repo-operator"], "split": "heldout2"}
+{"task": "Every Sunday night I want it to send me the week's bookings by itself, and make it easy to switch off.", "expect": ["routine-builder"], "split": "heldout2"}
+{"task": "I'm spending too much on this, find out which helpers cost the most and where we could save.", "expect": ["token-cost-auditor"], "split": "heldout2"}
+{"task": "Claude ya no me hace caso a las instrucciones que le dejé puestas, arréglalo y demuéstrame que vuelve a funcionar.", "expect": ["setup-repairer"], "split": "heldout2"}
+{"task": "Antes y después de cambiar cómo elige a los ayudantes, pasa las pruebas de siempre y avísame si sale peor.", "expect": ["eval-regression-runner"], "split": "heldout2"}
+{"task": "De todo lo que salió mal este mes, saca unas cuantas reglas para que no vuelva a pasar.", "expect": ["lesson-distiller"], "split": "heldout2"}
+{"task": "Tengo un proyecto nuevo, conéctalo con el cerebro y comprueba que ha quedado bien enganchado.", "expect": ["project-bootstrapper"], "split": "heldout2"}
+{"task": "Write me a twenty page guide for new volunteers, chapter by chapter.", "expect": ["long-form-drafter"], "split": "heldout2"}
+{"task": "Take all fifty of the old blog posts and make each one shorter, and tell me how each one went.", "expect": ["batch-article-rewriter"], "split": "heldout2"}
+{"task": "Turn all my notes about the allotment into proper pages by topic with a list at the front.", "expect": ["knowledge-base-compiler"], "split": "heldout2"}
+{"task": "Keep one list of the official opening times and prices and make sure every leaflet matches it.", "expect": ["canonical-facts-keeper"], "split": "heldout2"}
+{"task": "Make the price list into a PDF people can download, and check every page looks right.", "expect": ["document-producer"], "split": "heldout2"}
+{"task": "I need some slides for the meeting with the bank on Thursday.", "expect": ["deck-builder"], "split": "heldout2"}
+{"task": "Escríbeme algo para decidir si abrimos una segunda tienda, que en la primera hoja ya sepa qué hacer.", "expect": ["strategy-memo-writer"], "split": "heldout2"}
+{"task": "¿Puedo subalquilar el local según la ley española? investígalo y dime hasta dónde llega tu respuesta.", "expect": ["legal-research-analyst"], "split": "heldout2"}
+{"task": "Ordéname por fechas todo lo que pasó con el casero y de dónde sale cada cosa.", "expect": ["case-chronology-builder"], "split": "heldout2"}
+{"task": "Escribe las instrucciones para un ayudante nuevo que conteste a los clientes, solo lo que de verdad necesite saber.", "expect": ["agent-spec-writer"], "split": "heldout2"}
