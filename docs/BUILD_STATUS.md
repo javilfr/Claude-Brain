@@ -156,14 +156,14 @@ Observed, not changed: the default wage band (M, 60,000) was about 13 times what
 | Question | Observed in this session | Verdict |
 |---|---|---|
 | Does the PreToolUse hook in `.claude/settings.json` fire? | With `learned_zone_locked` set to true for one probe, a Write to `memory/_hook_probe.txt` was refused by the hook with its own message; the file was not created. The lock was then restored (VERSION.json unchanged in git) | **fires** in a one-repository session |
-| Does the Stop hook fire? | Not observable inside one turn: this session ran as a single long turn. Its trace is a `ledger` record for the session in `learning/inbox/`; check at the next turn | open |
-| Do a skill's frontmatter hooks fire? | No brain skill declares hooks (`grep hooks: .claude/skills/*/SKILL.md` finds none) | nothing to check; not used |
+| Does the Stop hook fire? | At the end of the session's first turn a `ledger` record for this session appeared in `learning/inbox/` (22:01:33Z), written by `session_end.py` | **fires** in a one-repository session |
+| Do a skill's frontmatter hooks fire? | No brain skill declares hooks (`grep hooks: .claude/skills/*/SKILL.md` finds none). The official skills page documents a `hooks` field that registers on invocation for the rest of the session (`docs/research/round4/03-platform.md`) | not used by the brain; documented |
 | Do helpers honour model? | Six helpers: transcripts show claude-sonnet-5-5 for the three hired on Sonnet, claude-opus-5-5 for the three hired on Opus | **honoured** |
 | Do helpers honour effort? | Helper context prefix records `effortValue` high for the reviewer (hired high) and medium for builders and writers (hired medium) | **honoured** |
 | Do helpers skip the handbook (`omitClaudeMd: true`)? | No helper prefix (2.2–11 KB) contains the brain's CLAUDE.md text | **honoured** |
-| Does changing effort mid-session keep the prompt cache? | This session cannot change its own effort | not testable here; needs the owner to switch effort in a live chat (CB-112 stays open) |
+| Does changing effort mid-session keep the prompt cache? | This session cannot change its own effort. The official caching page (read in this session) says it keeps the cache with an API key or subscription on Fable 5.1+, Opus 5.5, Sonnet 5.5 and Haiku 5.5, and recomputes everything elsewhere | **documented**; recorded as a fact through `brain learn note --trust external` |
 
-These are observations, not facts from an official page, so none was recorded through `brain learn note --trust external`.
+The hook and helper rows are observations, not facts from an official page, so only the cache behaviour (and the five-minute cache of subagents) was recorded through `brain learn note --trust external`.
 
 ### CB-205 Template quality pass
 
