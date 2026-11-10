@@ -15,7 +15,7 @@ If you are the owner, start with **[OWNER_GUIDE.md](OWNER_GUIDE.md)**: how to st
 | `bin/brain`, `engine/` | The command-line engine (Python standard library only) |
 | `method/` | Lifecycle, routing, efficiency, quality and model guidance, and `dod/` definitions of done, read on demand |
 | `playbooks/` | Practice per family of work (`.jsonl` items, with generated `.md` views) |
-| `hr/` | The HR department's rack of 100 agent templates (`rack/*.jsonl`), their schema, and the guidelines for writing them. `brain hr hire` picks one for a task, sets the model, effort and token wage, and writes the helper's brief |
+| `hr/` | The HR department's rack of 100 agent templates (`rack/*.jsonl`), their schema, and the guidelines for writing them. `brain hr hire` lists candidates (a template is used only when named), sets the model, effort and token wage, and writes the helper's brief |
 | `contract/` | The versioned `.brain/` schema, project template and migrations |
 | `memory/`, `owner/`, `stats/`, `learning/` | The learned zone: rules, facts, model data and radar sources, the owner's standing instructions, the token ledger, the learning inbox and radar state |
 | `evals/`, `tests/` | Evaluation tasks, seeded defects, recall and routing sets, contract fixtures and unit tests |

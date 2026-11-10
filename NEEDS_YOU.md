@@ -15,7 +15,7 @@ RESOLVED: 2026-11-10 — you approved it in chat and `main` was fast-forwarded t
 
 - **Why:** this is what makes "only changed by its own learning systems" a rule that GitHub enforces, not just a convention. With it, a change reaches `main` only through a pull request whose checks pass.
 - **How:** github.com → **javilfr/Claude-Brain** → **Settings** → **Branches** → **Add branch ruleset** (or **Add rule**) → branch name `main` → tick **Require a pull request before merging** and **Require status checks to pass**, then choose the check named **brain** → **Create**. Do this only after the check has gone green once (item 7): requiring a check that cannot run would block every merge.
-- **Meanwhile:** nothing on GitHub stops a direct change. The same checks pass when run inside a session (310+ tests, self-test, lint).
+- **Meanwhile:** nothing on GitHub stops a direct change. The same checks pass when run inside a session (430+ tests, self-test, lint).
 
 ## 3. Choose your default model for new chats (no clicks now; a habit)
 
@@ -47,3 +47,10 @@ RESOLVED: 2026-11-10 — you approved it in chat and `main` was fast-forwarded t
 - **Why it matters:** until the check can run, GitHub cannot enforce anything (item 2), and a red cross will show on every push even though nothing is wrong.
 - **How:** github.com → your profile picture → **Settings** → **Billing and licensing** → look for a failed payment or a spending limit of $0 for **Actions**, and fix or raise it. Private repositories use included free minutes first.
 - **Meanwhile:** checks are run inside each session before anything is pushed, and the results are in `docs/BUILD_STATUS.md`.
+
+## 8. Only if you use Claude Code **Projects** (nothing to do otherwise)
+
+- **What I found:** in a thread started from a Claude Code Project, only each repository's `CLAUDE.md` is loaded; the brain's skills and helper definitions are not (official page checked 2026-11-10). In an ordinary chat with the two repositories selected, everything loads as before.
+- **What I changed:** the brain's `CLAUDE.md` now tells Claude, when its skills are missing, to read them from the brain's files directly and to use a general helper instead. Nothing breaks; helpers lose their preset limits on tools.
+- **Better, if you use Projects a lot:** start brain work from an ordinary chat (claude.ai/code → new session → select both repositories), not from a Project thread.
+- **Meanwhile:** Project threads work with the fallback; it has not yet been tried live.

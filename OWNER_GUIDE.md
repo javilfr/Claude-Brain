@@ -51,9 +51,9 @@ STATUS.md shows tokens used and their list-price equivalent, for the latest chat
 
 ## The HR department
 
-When a piece of work is worth giving to a helper, the brain does not improvise one. Its HR department keeps a rack of 100 agent templates, one for each kind of work (a phone-screen builder, a Spanish–English translator, a code reviewer, a deploy doctor and so on). For each task it picks the best-fitting template, the model and effort level that have worked for that kind of task, and a token wage, which is a budget for that helper. It then writes the helper's instructions from the template and the task. Two helpers hired from the same template still differ, because the task details differ.
+When a piece of work is worth giving to a helper, the brain does not improvise one. Its HR department keeps a rack of 100 agent templates, one for each kind of work (a phone-screen builder, a Spanish–English translator, a code reviewer, a deploy doctor and so on). For each task it picks the model and effort level that have worked for that kind of task and a token wage, which is a budget for that helper, and lists the templates that look closest. A template is used only when Claude names one that plainly fits: in a test on 2026-11-10, letting the brain choose templates by itself made helpers do slightly worse than plain instructions, mostly because it chose the wrong one. Without a template, the helper gets plain, short instructions written from the task.
 
-When the helper finishes, the brain runs the task's check itself, compares what the helper really used with its wage, and records the result. Over time that record changes which template gets picked and how large the wages are. Wages are shown as list-price equivalents; on a subscription they are not charges. Ask "HR report" to see which templates are used, how often they pass first time, and how accurate the wages have been.
+When the helper finishes, the brain runs the task's check itself, compares what the helper really used with its wage, and records the result. Over time that record changes which model is used and how large the wages are. Wages are shown as list-price equivalents; on a subscription they are not charges. Ask "HR report" to see which templates are used, how often they pass first time, and how accurate the wages have been.
 
 ## Undoing something the brain learned
 
