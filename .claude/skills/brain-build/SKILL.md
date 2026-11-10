@@ -13,11 +13,11 @@ A helper starts cold, so hire one only for work that is self-contained, bulky ne
 
 `BRAIN hr hire "<the goal, as an outcome>" --why "<reason and who uses it>" --owns <path> --input <file to read first> --check "<acceptance command>" [--parallel] [--material-tokens <rough size>]`
 
-It answers "do not hire" when the work is small or has no check. Otherwise it picks the best of the 100 templates in the rack for the task, the model and effort (from learned results, with safe defaults), and a token wage, and writes the full brief to a file. Delegate exactly as its last line says: the named agent, model and effort, with the one-line message pointing at the brief. Do not retype the brief; that pointer is the saving. No two running helpers own the same file, and at most four run at once.
+It answers "do not hire" when the work is small or has no check. Otherwise it picks the best of the 100 templates in the rack for the task, the model and effort (from learned results, with safe defaults), and a token wage, and writes the full brief to a file. Delegate exactly as its last line says: the named agent, model and effort, with the one-line message pointing at the brief. Do not retype the brief; that pointer is the saving. No two running helpers own the same file, and at most four run at once. Helpers that run side by side against a shared interface each get the file that defines it as `--input`; one brief without it builds a different interface.
 
 Add `--also "<constraint, with its reason>"` for anything only this task needs. If no template fits, HR says so and writes a plain brief. `BRAIN hr rack --search "<task>"` shows candidates; `--template <id>` forces one.
 
-When the helper returns, `BRAIN hr settle` runs the acceptance command itself and compares real token use with the wage (`BRAIN close` also settles whatever is still open). A failed check goes back to the same helper once with the failing output, then up one step in the escalation order in `memory/models.json`.
+When the helper returns, settle it before you repair anything, so the outcome recorded is the helper's: `BRAIN hr settle` runs the acceptance command itself and compares real token use with the wage (`BRAIN close` also settles whatever is still open). A failed check goes back to the same helper once with the failing output, then up one step in the escalation order in `memory/models.json`.
 
 ## Checks and escalation
 

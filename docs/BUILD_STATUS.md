@@ -144,3 +144,37 @@ Observations from this session's own tool results and transcripts. None is recor
 | Does an effort change keep the prompt cache? | **Not testable by the session.** Effort is changed by the person (`/effort`), not by a tool. Stays open as CB-112 | — |
 
 Also seen: `brain hr hire` chose `rag-index-builder` for "Review all 100 HR templates … (biodiversity, ML experiments, RAG index …)", because listed domain nouns outweighed the verb. Passed to CB-204 as a test case.
+
+### CB-202 End-to-end trial (scratch project `tipcalc`, local bare remote)
+
+Flow run as the lead: `boot` (bootstrap) → `init` → four ledger lines (one implied) → `PLAN.md` and a three-ticket file → `plan schedule` (one wave, 2.5x) → `hr staff` → two hires through `hr hire`, run in parallel on sonnet → gate → `hr settle` → `req check` (4/4) → `release --run-gates --push` (fast-forward to `main` on the remote, gates green) → `checkpoint --push` → `resume` → `boot "Continue"` (mode work, 4/4 done) → `handover` (correctly refused: the brain had uncommitted helper work). The README was the lead's own work.
+
+Measured (`brain ledger`, whole session so far): two trial helpers used 4,831 and 4,029 tokens against wages of 20,000 and 60,000; the session's main conversation read 98% of its input from cache.
+
+| Found | Fixed |
+|---|---|
+| `boot` and `detect` ignored `--project` and `BRAIN_PROJECT`, so a project outside the brain's folder was invisible | Both take `--project` and honour `BRAIN_PROJECT`; test `test_explicit_project_outside_the_brains_folder` (fails on the old code) |
+| The typo rule matched one real word to another: `tests` read as Spanish `tesis`, so "a calculator in Python with tests" routed as `knowledge.longform` | A word the vocabularies know is never a slip for another; Python/CLI words added; two routing rows; routing set 109/109 (one row fails on the old code) |
+| A new project with no verb said "no task verb; answer or acknowledge" | Says "names a whole deliverable" |
+| Evidence from earlier in the session was refused: the session start was taken from the project's open-session marker, written only when a command first touched the project | The earlier of marker and transcript start; test `test_marker_written_late_does_not_hide_earlier_logs` (fails on the old code) |
+| Parallel briefs: the T1 brief lacked the plan file, so `split()` returned a tuple where the plan said a dict; T2's tests failed 5 of 9; the lead repaired it | `brain-build` now says parallel helpers sharing an interface each get its file as `--input`; lesson recorded through `brain learn note` |
+| `hr settle` runs the check when called, so a repair made before settling is credited to the helper (T2 reported failure, settle recorded a pass) | `brain-build` now says settle before repairing; the recorded T2 outcome is wrong and is listed here |
+| Selection: four misses (template review → rag-index-builder; CLI script → "none fits" though cli-script-builder was closest; "write tests" → a reviewer on opus, effort high; README → repo-cartographer) | Passed to CB-204 as dev cases |
+| `cli-script-builder` made a pure calculator grow `--dry-run` and `--self-test` | Passed to CB-205 |
+| `hr report` still counts consolidated hires as waiting | Passed to CB-204 (owner of `engine/hr.py` this session) |
+
+Not exercised: a deploy with a live address (none for a CLI), `close` for the trial project (one session holds one ledger; `close` runs once, for the brain, at the end).
+
+### CB-204 Template selection (helper `h-20261110-73b7df`, checked by the lead)
+
+A new held-out set `evals/hr_golden_2.jsonl` (100 requests, one per template) was written and measured before `engine/hr.py` changed; the rule (new-set top-3 up 3+ points, no class lower on any set) was written down first in `docs/review/selection-2026-11-10.md`. Not a `brain eval prereg` file: that command takes only `evals/tasks` ids.
+
+| Set | Before (top-1 / top-3) | After (lead's re-run) |
+|---|---|---|
+| New held-out (`hr_golden_2`) | 87 / 90 | 99 / 100 |
+| Old dev | 100 / 100 | 100 / 100 |
+| Old held-out | 78 / 86 | 80 / 88 |
+
+Changes: accent folding and light Spanish stemming; an accept path when most known words match; a 0.7 penalty when the leading verb asks for the other kind of role (review → not a builder or writer; write/build → not a reviewer); `hr report` no longer counts folded hires as waiting (test added). Selection time rose from about 10 to about 50 ms per request.
+
+Still open, measured by the lead on the original live texts (the helper checked paraphrases): a long technical brief still dilutes the fit. "Write tipcalc.py … argparse CLI …" gives "none fits" (cli-script-builder is first but below the floor); "Write tests/… with unittest …" still ranks requirement-verifier first (0.44 against coverage-analyst 0.42); "Review all 100 HR templates …" ranks dataset-source-finder. The new set was written by a helper that had read the rack, so it is easier than real speech. For lead-written briefs, `--template` remains the way; this is not tuned further on the held-out set.

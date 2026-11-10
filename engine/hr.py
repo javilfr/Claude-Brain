@@ -21,6 +21,7 @@ import os
 import random
 import re
 import tempfile
+import unicodedata
 from pathlib import Path
 
 from . import common as c
@@ -316,20 +317,51 @@ def _bm25(query: list[str], docs: list[list[str]]) -> list[float]:
     return scores
 
 
+_ES_SUFFIXES = ("aciones", "acion", "mente", "ando", "iendo", "ado", "ido", "ar", "er", "ir", "es", "as", "os", "an", "en", "a", "o", "s")
+
+
+def _fold(text: str) -> str:
+    """Lower-case with accents removed, so 'diseño' and 'diseno' are one word."""
+    return "".join(ch for ch in unicodedata.normalize("NFD", text) if not unicodedata.combining(ch)).lower()
+
+
 def _stem(w: str) -> str:
+    w = _fold(w)
     for suf in ("ations", "ation", "ing", "ers", "er", "ed", "es", "s"):
         if len(w) > len(suf) + 3 and w.endswith(suf):
             return w[: -len(suf)]
     return w
 
 
+def _stem_es(w: str) -> str:
+    """Spanish verb forms (refactoriza, refactorizar) and plurals meet at one stem."""
+    for suf in _ES_SUFFIXES:
+        if len(w) > len(suf) + 4 and w.endswith(suf):
+            return w[: -len(suf)]
+    return w
+
+
 def _terms(text: str) -> list[str]:
-    return [_stem(w) for w in c.words(text)]
+    return [_stem_es(_stem(w)) for w in c.words(text)]
 
 
 def _doc(t: dict) -> list[str]:
     # Keywords count three times and the name twice: they are the curated signal.
     return _terms(" ".join([t.get("when", "")] + [t.get("name", "")] * 2 + [" ".join(t.get("keywords", []))] * 3))
+
+
+_REVIEW_VERBS = {"review", "audit", "verify", "inspect", "revisa", "revisar", "audita", "verifica", "comprueba"}
+_MAKE_VERBS = {"write", "build", "create", "make", "add", "implement", "escribe", "crea", "construye", "hazme", "haz", "implementa"}
+
+
+def _lead_verb(task: str) -> str:
+    """The first review or make verb near the start of the request: in an instruction
+    it names the job, and the job decides the role however many nouns follow."""
+    for w in re.findall(r"[a-zA-ZñÑáéíóúÁÉÍÓÚ]+", task or "")[:4]:
+        w = _fold(w)
+        if w in _REVIEW_VERBS or w in _MAKE_VERBS:
+            return w
+    return ""
 
 
 def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | None = None, family: str | None = None,
@@ -349,11 +381,17 @@ def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | No
     raw = _bm25(q, [_doc(t) for t in pool])
     top = max(raw) or 1.0
     qset = set(q)
+    vocab = [set(_doc(t)) for t in rack if t.get("status", "active") != "retired"]
+    # Words no template knows (names, fillers) say nothing about the role, so
+    # they do not count against a template's coverage.
+    verb = _lead_verb(task)
+    known = qset & set().union(*vocab)
     out = []
     for t, s in zip(pool, raw):
         if s <= 0:
             continue
         coverage = len(qset & set(_doc(t))) / max(1, len(qset))
+        known_cov = len(qset & set(_doc(t))) / max(1, len(known))
         fit = 0.6 * (s / top) + 0.4 * coverage
         if family and family not in t.get("families", []):
             fit *= 0.8
@@ -361,15 +399,20 @@ def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | No
         _a, _b, n = pass_posterior(h, hc, t["id"], t.get("group", ""))
         if risk in ("high", "one-way-door") and n < hc["novelty_min_trials"]:
             mult = min(mult, 0.95)  # proven templates first when the stakes are high
+        if verb in _REVIEW_VERBS and t.get("base_agent") in ("builder", "writer"):
+            mult *= 0.7  # "Review the RAG index templates" asks for a reviewer, not the index builder
+        elif verb in _MAKE_VERBS and t.get("base_agent") in ("reviewer", "redteam"):
+            mult *= 0.7  # "Write the tests" asks for someone who makes things
         if on_probation(h, hc, t["id"], t.get("group", "")):
             mult *= 0.8
-        out.append({"id": t["id"], "score": round(fit * mult, 4), "fit": round(fit, 4), "coverage": round(coverage, 3),
+        out.append({"id": t["id"], "score": round(fit * mult, 4), "fit": round(fit, 4), "coverage": round(coverage, 3), "known_coverage": round(known_cov, 3),
                     "matched": len(qset & set(_doc(t))),
                     "multiplier": round(mult, 3), "trials": n, "template": t})
     out.sort(key=lambda x: (-x["score"], x["id"]))
     # A long task description shares only a small fraction of its words with
     # any template, so the floor also accepts three or more distinct matches.
-    passing = [x for x in out if x["coverage"] >= hc["fit_floor"] or x["matched"] >= 3]
+    passing = [x for x in out if x["coverage"] >= hc["fit_floor"] or x["matched"] >= 3
+               or (len(vocab) >= 20 and x["known_coverage"] >= hc.get("known_floor", 0.2))]
     if near:
         return out[:k]  # the closest, floor or not: for showing, never for choosing
     return passing[:k]
@@ -712,14 +755,18 @@ def open_contracts(project: Path | None, mine_only: bool = False) -> list[Path]:
 def report_lines(brain_root: Path | None = None) -> list[str]:
     root = Path(brain_root or c.BRAIN_ROOT)
     hc = cfg_of(root)
+    seen: set = set()
     try:
         from . import mlearn
-        h = hr_state(mlearn.load(root))
+        st = mlearn.load(root)
+        h = hr_state(st)
+        seen = set(st.get("seen") or [])
     except Exception:
         h = hr_state({})
     rack = {t["id"]: t for t in load_rack(root)}
     lines = [f"rack: {len(rack)} templates · settled hires folded into learning: {h['settled']}"]
-    waiting = sum(1 for f in (root / "learning" / "inbox").glob("*.jsonl") for r in c.read_jsonl(f) if r.get("kind") == "hire")
+    waiting = sum(1 for f in (root / "learning" / "inbox").glob("*.jsonl") for r in c.read_jsonl(f)
+                  if r.get("kind") == "hire" and r.get("id") not in seen)  # folded records stay in the inbox
     if waiting:
         lines.append(f"{waiting} settled hire(s) are recorded in the inbox and count once the next consolidation runs (say \"Consolidate\")")
     if not h["t"] and not h["settled"]:

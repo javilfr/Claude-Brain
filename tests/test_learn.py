@@ -821,6 +821,18 @@ class EvidenceResolutionTest(NoteCommandCase):
                 self.assertEqual(code, 1, out)
         self.assertNotIn('"note"', self.inbox_text())
 
+    def test_marker_written_late_does_not_hide_earlier_logs(self):
+        # A project created mid-session gets its open-session marker when a
+        # command first touches it; the session itself began at the transcript's
+        # first timestamp (10:00), so a 10:05 run log from before the marker
+        # (11:00) is still this session's evidence. The 2026-11-09 log is not.
+        log = self.proj / ".brain" / "log"
+        c.write_json(log / "open-session.json", {"session": "sess-n", "at": "2026-11-10T11:00:00Z"})
+        code, out = self.note(self.TEXT + " run", evidence=[f"run:{self.new_run.name}"], project=self.proj)
+        self.assertEqual(code, 0, out)
+        code, out = self.note(self.TEXT + " old", evidence=[f"run:{self.old_run.name}"], project=self.proj)
+        self.assertEqual(code, 1, out)
+
     def test_without_a_project_only_owner_and_review_evidence(self):
         self.assertEqual(self.note(self.TEXT, evidence=["gate:checks"])[0], 1)
         self.assertEqual(self.note(self.TEXT, evidence=[f"review:{self.work / 'review.md'}"])[0], 0)

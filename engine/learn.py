@@ -381,17 +381,22 @@ def _gate_rows(project: Path, sid: str) -> list[dict]:
 
 
 def _session_start(project: Path, sid: str) -> str:
-    """When this session began: its open-session marker, else the first
-    timestamp of its transcript; "" when neither is known."""
+    """When this session began: the earlier of its open-session marker and the
+    first timestamp of its transcript; "" when neither is known. The marker is
+    written when a command first touches the project, which can be well after
+    the session started (a project created mid-session), so it alone would
+    refuse this session's own earlier run logs as evidence."""
+    found = []
     marker = c.read_json(Path(project) / ".brain" / "log" / "open-session.json", {}) or {}
     if isinstance(marker, dict) and marker.get("session") == sid and marker.get("at"):
-        return str(marker["at"])
+        found.append(str(marker["at"]))
     main, _ = c.transcript_paths(sid)
     if main is not None and Path(main).is_file():
         for row in c.iter_jsonl_stream(main):
             if isinstance(row.get("timestamp"), str) and row["timestamp"]:
-                return row["timestamp"]
-    return ""
+                found.append(row["timestamp"])
+                break
+    return min(found, key=lambda t: re.sub(r"[^0-9]", "", t)[:14]) if found else ""
 
 
 RUN_LOG_RE = re.compile(r"^(\d{8})-(\d{6})-[0-9a-f]{4,64}\.log$")

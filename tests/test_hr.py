@@ -256,6 +256,18 @@ class Contracts(Base):
         hr.settle(cpath, brain_root=self.b, project=p, sub_paths=[mine])
         self.assertEqual(len(c.read_jsonl(inbox[0])), 1, "settling twice records once")
 
+    def test_report_does_not_call_folded_hires_pending(self):
+        p = self.project()
+        con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="true")
+        cpath = p / ".brain" / "log" / "hr" / f"{con['id']}.json"
+        hr.settle(cpath, brain_root=self.b, project=p, sub_paths=[self.helper_transcript(con["id"], 30000)])
+        self.assertTrue(any("recorded in the inbox" in x for x in hr.report_lines(self.b)))
+        rec = c.read_jsonl(next((self.b / "learning" / "inbox").glob("*.jsonl")))
+        st = mlearn.fold(mlearn.load(self.b), rec, mlearn.config(self.b))
+        (self.b / "stats").mkdir(exist_ok=True)
+        (self.b / "stats" / "ml.json").write_text(json.dumps(st))
+        self.assertFalse(any("recorded in the inbox" in x for x in hr.report_lines(self.b)))
+
     def test_failed_check_is_recorded_as_failed_whatever_anyone_claims(self):
         p = self.project()
         con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="false")
@@ -577,6 +589,20 @@ class RealRack(unittest.TestCase):
             top3 += any(i in r["expect"] for i in ids[:3])
         self.assertGreaterEqual(top1 / len(rows), 0.74, f"top-1 {top1}")
         self.assertGreaterEqual(top3 / len(rows), 0.82, f"top-3 {top3}")
+
+    def test_the_leading_verb_sets_the_role_and_a_script_request_finds_the_cli_builder(self):
+        rack = hr.load_rack(ROOT)
+        first = lambda task: (hr.select(task, rack) or [{"id": None, "template": {}}])[0]
+        review = first("Review all 100 HR templates against the guidelines, checking wording and keywords (biodiversity, ML experiments, RAG index, spreadsheets, statistics)")
+        self.assertNotEqual(review["id"], "rag-index-builder")
+        self.assertEqual(first("Write tipcalc.py: split(amount, tip, people) and an argparse CLI 'tipcalc.py AMOUNT [--tip PCT] [--people N]', standard library only")["id"], "cli-script-builder")
+        for task in ("Write tests/test_tipcalc.py with unittest against the interface, CLI output checked through subprocess",
+                     "README: Write README.md: what it does, usage examples, how to run tests"):
+            self.assertNotIn(first(task)["template"].get("base_agent"), ("reviewer", "redteam"), task)
+
+    def test_spanish_without_accents_meets_accented_keywords(self):
+        rack = hr.load_rack(ROOT)
+        self.assertEqual(hr.select("necesito un glosario de terminologia para que no cambien las palabras", rack)[0]["id"], "glossary-builder")
 
     def test_owner_style_requests_find_a_sensible_template(self):
         rack = hr.load_rack(ROOT)
