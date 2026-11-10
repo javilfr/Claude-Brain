@@ -1,200 +1,200 @@
-{"task": "what does this repo do and where is the login code", "expect": ["repo-cartographer"], "split": "dev"}
-{"task": "use the latest version of the Supabase docs for this", "expect": ["docs-snapshotter"], "split": "dev"}
-{"task": "does this API have a free tier and what is the rate limit", "expect": ["api-live-prober"], "split": "dev"}
-{"task": "compare Vite and Next, pros and cons, which is better", "expect": ["option-comparer"], "split": "dev"}
-{"task": "go deep and research what the evidence says about spaced repetition", "expect": ["deep-researcher"], "split": "dev"}
-{"task": "look at similar apps, what do the competitors do", "expect": ["competitor-teardown"], "split": "dev"}
-{"task": "like last time, what did we do before on that app", "expect": ["history-digger"], "split": "dev"}
-{"task": "can Claude Code use hooks with MCP servers", "expect": ["claude-product-answerer"], "split": "dev"}
-{"task": "find open data on bird sightings, where can I get it", "expect": ["dataset-source-finder"], "split": "dev"}
-{"task": "read all these PDFs and pull out the key points", "expect": ["source-harvester"], "split": "dev"}
-{"task": "I want a new app, here is a long dictated list of everything I need", "expect": ["requirements-extractor"], "split": "dev"}
-{"task": "what does done mean here, write the acceptance criteria", "expect": ["acceptance-test-designer"], "split": "dev"}
-{"task": "I am not sure if it should be offline or online, maybe both", "expect": ["ambiguity-resolver"], "split": "dev"}
-{"task": "which stack and database should we pick, structure of the app", "expect": ["architecture-decider"], "split": "dev"}
-{"task": "break down the build into phases and tickets so we can work in parallel", "expect": ["ticket-slicer"], "split": "dev"}
-{"task": "here is the course rubric, make sure we have everything on it", "expect": ["rubric-mapper"], "split": "dev"}
-{"task": "make a blueprint so another topic can reuse this same kind of app", "expect": ["blueprint-extractor"], "split": "dev"}
-{"task": "migrate the site to another host, port it over", "expect": ["migration-planner"], "split": "dev"}
-{"task": "too many ideas, what should we do first, prioritise the roadmap", "expect": ["backlog-prioritiser"], "split": "dev"}
-{"task": "can you train a model on my phone or transfer it to Xbox", "expect": ["feasibility-reframer"], "split": "dev"}
-{"task": "start a new web app with Vite and React and deploy on Vercel", "expect": ["web-app-scaffolder"], "split": "dev"}
-{"task": "make the screens work well on iPhone, mobile first, safe area", "expect": ["phone-first-ui-builder"], "split": "dev"}
-{"task": "it has to install on the home screen and work offline without signal", "expect": ["pwa-offline-engineer"], "split": "dev"}
-{"task": "integrate the plant API, key and quota, with a fallback", "expect": ["api-integration-builder"], "split": "dev"}
-{"task": "make a game with levels and score I can play on my phone", "expect": ["game-builder"], "split": "dev"}
-{"task": "turn this book into a study app with quiz and flashcards", "expect": ["learning-app-builder"], "split": "dev"}
-{"task": "write a script that renames files in batch, stdlib only", "expect": ["cli-script-builder"], "split": "dev"}
-{"task": "make a wiki website from all these markdown pages", "expect": ["content-site-builder"], "split": "dev"}
-{"task": "build a castle in Minecraft for my Xbox world", "expect": ["minecraft-structure-builder"], "split": "dev"}
-{"task": "refactor this, split this file and reduce duplication", "expect": ["refactor-engineer"], "split": "dev"}
-{"task": "the build failed, error in the log, red CI", "expect": ["build-failure-diagnoser"], "split": "dev"}
-{"task": "the site still shows the old version, 404 on Vercel", "expect": ["deploy-doctor"], "split": "dev"}
-{"task": "ship it, release to main and deploy", "expect": ["release-to-main-engineer"], "split": "dev"}
-{"task": "go back, undo everything, revert to the earlier version", "expect": ["rollback-restorer"], "split": "dev"}
-{"task": "write end to end Playwright tests at iPhone size", "expect": ["e2e-test-author"], "split": "dev"}
-{"task": "what is untested, check the test coverage", "expect": ["coverage-analyst"], "split": "dev"}
-{"task": "the app is slow and laggy on phone, Lighthouse score is bad", "expect": ["performance-profiler"], "split": "dev"}
-{"task": "check accessibility, contrast and screen reader support", "expect": ["accessibility-auditor"], "split": "dev"}
-{"task": "the packages are outdated, npm audit shows a vulnerability, upgrade", "expect": ["dependency-upgrader"], "split": "dev"}
-{"task": "it is broken on my phone sometimes, weird behaviour, find out why", "expect": ["bug-reproducer"], "split": "dev"}
-{"task": "build a pipeline that scrapes and ingests the data every day", "expect": ["data-pipeline-builder"], "split": "dev"}
-{"task": "analyse this CSV, what is in it, any patterns", "expect": ["exploratory-analyst"], "split": "dev"}
-{"task": "is the difference significant, compare the two groups, A/B result", "expect": ["statistical-tester"], "split": "dev"}
-{"task": "make a chart of these numbers, a graph for a dashboard", "expect": ["chart-maker"], "split": "dev"}
-{"task": "make an Excel spreadsheet with formulas to track the budget", "expect": ["spreadsheet-engineer"], "split": "dev"}
-{"task": "the numbers do not match between these two files, merge and dedupe them", "expect": ["data-reconciler"], "split": "dev"}
-{"task": "change the database schema, rename the field, old exports must still open", "expect": ["schema-migration-engineer"], "split": "dev"}
-{"task": "identify species from the photos with GBIF and eBird", "expect": ["biodiversity-data-integrator"], "split": "dev"}
-{"task": "train a classifier and compare the models accuracy", "expect": ["ml-experiment-runner"], "split": "dev"}
-{"task": "make my files searchable by an AI with embeddings, a knowledge base", "expect": ["rag-index-builder"], "split": "dev"}
-{"task": "write a long guide, a book with chapters, five thousand words", "expect": ["long-form-drafter"], "split": "dev"}
-{"task": "rewrite all 60 articles and expand each to 800 words", "expect": ["batch-article-rewriter"], "split": "dev"}
-{"task": "turn my notes into an organised knowledge base", "expect": ["knowledge-base-compiler"], "split": "dev"}
-{"task": "be accurate about my travel dates and names, keep the itinerary consistent", "expect": ["canonical-facts-keeper"], "split": "dev"}
-{"task": "give me a PDF or Word document to download, a brochure", "expect": ["document-producer"], "split": "dev"}
-{"task": "make slides, a PowerPoint deck to present this", "expect": ["deck-builder"], "split": "dev"}
-{"task": "write a strategy memo with a recommendation for the business plan", "expect": ["strategy-memo-writer"], "split": "dev"}
-{"task": "is this legal in Spain, what does the BOE say, my rights", "expect": ["legal-research-analyst"], "split": "dev"}
-{"task": "make a timeline of events from these messages, what happened when", "expect": ["case-chronology-builder"], "split": "dev"}
-{"task": "write a team of sub-agents and a skill file for this workflow", "expect": ["agent-spec-writer"], "split": "dev"}
-{"task": "traduce this text to English", "expect": ["es-en-translator"], "split": "dev"}
-{"task": "escribe un texto en español para mis clientes", "expect": ["es-original-writer"], "split": "dev"}
-{"task": "proofread this and fix the grammar, make it clearer", "expect": ["copy-editor"], "split": "dev"}
-{"task": "make a glossary so the same term is used everywhere", "expect": ["glossary-builder"], "split": "dev"}
-{"task": "check the translation, does it say the same as the original", "expect": ["back-translation-checker"], "split": "dev"}
-{"task": "add a language switch to the app, translate the UI strings", "expect": ["ui-string-localiser"], "split": "dev"}
-{"task": "publish the site in English and Spanish with a language toggle", "expect": ["bilingual-site-publisher"], "split": "dev"}
-{"task": "traduce este contrato al inglés, términos legales", "expect": ["legal-terms-translator"], "split": "dev"}
-{"task": "write it in my voice, same tone as my travel journal", "expect": ["voice-matcher"], "split": "dev"}
-{"task": "clean up this voice note transcript into proper text", "expect": ["transcript-cleaner"], "split": "dev"}
-{"task": "redesign the app, make it look more premium, a design brief", "expect": ["design-brief-author"], "split": "dev"}
-{"task": "propose 5 logo ideas and palette options, I will choose", "expect": ["visual-option-generator"], "split": "dev"}
-{"task": "the button is not exactly centred, spacing is off, make it larger", "expect": ["visual-polish-measurer"], "split": "dev"}
-{"task": "review the design, does it look good before we ship", "expect": ["design-critic"], "split": "dev"}
-{"task": "set up a design system with tokens and a component library", "expect": ["design-system-builder"], "split": "dev"}
-{"task": "handle hero photos, upload, thumbnails, HEIC and rotation", "expect": ["image-pipeline-engineer"], "split": "dev"}
-{"task": "add a smooth animation and transition, recreate this effect", "expect": ["motion-builder"], "split": "dev"}
-{"task": "turn the lesson text into audio with a narration voice", "expect": ["audio-lesson-producer"], "split": "dev"}
-{"task": "draw a diagram, a flowchart of how the system works", "expect": ["diagram-maker"], "split": "dev"}
-{"task": "what should we call it, give me name and tagline ideas", "expect": ["name-and-copy-options"], "split": "dev"}
-{"task": "is it really done, verify everything against my request", "expect": ["requirement-verifier"], "split": "dev"}
-{"task": "fact check the figures and dates in this document", "expect": ["fact-checker"], "split": "dev"}
-{"task": "review this branch for bugs, look over my diff", "expect": ["code-reviewer"], "split": "dev"}
-{"task": "check security of the login and the public share link", "expect": ["security-reviewer"], "split": "dev"}
-{"task": "did I paste an API key anywhere, scan for secrets before the push", "expect": ["secret-scanner"], "split": "dev"}
-{"task": "what could go wrong before we delete production data", "expect": ["premortem-redteam"], "split": "dev"}
-{"task": "the agent reads web content, check for prompt injection and tool permissions", "expect": ["injection-auditor"], "split": "dev"}
-{"task": "check the citations of laws in this legal text", "expect": ["legal-citation-verifier"], "split": "dev"}
-{"task": "can we use this font and photo, GDPR and licence check", "expect": ["privacy-licence-reviewer"], "split": "dev"}
-{"task": "does it work from scratch on a clean checkout, test the install steps", "expect": ["clean-clone-verifier"], "split": "dev"}
-{"task": "write a handover so I can continue in a new chat", "expect": ["session-handover-writer"], "split": "dev"}
-{"task": "I need to give a key, write what only I can do as click steps", "expect": ["needs-you-composer"], "split": "dev"}
-{"task": "how do I run this on my Mac, the terminal gives an error", "expect": ["owner-computer-guide"], "split": "dev"}
-{"task": "fix the merge conflict and clean up the branches in the repo", "expect": ["git-repo-operator"], "split": "dev"}
-{"task": "run this every morning automatically, a routine to remind me", "expect": ["routine-builder"], "split": "dev"}
-{"task": "my hook is not firing and the skill is not loading, fix settings", "expect": ["setup-repairer"], "split": "dev"}
-{"task": "too expensive, why so many tokens, make it cheaper", "expect": ["token-cost-auditor"], "split": "dev"}
-{"task": "did the change make it worse, run a regression evaluation", "expect": ["eval-regression-runner"], "split": "dev"}
-{"task": "what did we learn, write the lessons after this project", "expect": ["lesson-distiller"], "split": "dev"}
-{"task": "set up the brain on this repo, initialise and adopt it", "expect": ["project-bootstrapper"], "split": "dev"}
-{"task": "expláname este repo, qué hace y dónde está cada cosa", "expect": ["repo-cartographer"], "split": "heldout"}
-{"task": "check the docs for the current version of this library, new API breaking changes", "expect": ["docs-snapshotter"], "split": "heldout"}
-{"task": "quota and pricing of that service api, can we pull data from it", "expect": ["api-live-prober"], "split": "heldout"}
-{"task": "should we use Firebase or Supabase, pricing and pros cons", "expect": ["option-comparer"], "split": "heldout"}
-{"task": "research this topic properly with sources, find out everything", "expect": ["deep-researcher"], "split": "heldout"}
-{"task": "what do other apps in this space do, reviews complain about", "expect": ["competitor-teardown"], "split": "heldout"}
-{"task": "that app from before, what did we do in the previous chat", "expect": ["history-digger"], "split": "heldout"}
-{"task": "does Claude support skills and what are the usage limits", "expect": ["claude-product-answerer"], "split": "heldout"}
-{"task": "where can I find a public dataset on weather", "expect": ["dataset-source-finder"], "split": "heldout"}
-{"task": "collect these links and summarise every page for later", "expect": ["source-harvester"], "split": "heldout"}
-{"task": "mira, tengo muchas cosas que quiero en un proyecto nuevo, aquí va todo", "expect": ["requirements-extractor"], "split": "heldout"}
-{"task": "how will we know it works, prove it works with clear tests", "expect": ["acceptance-test-designer"], "split": "heldout"}
-{"task": "two ways to read this, I cant decide, need to ask me", "expect": ["ambiguity-resolver"], "split": "heldout"}
-{"task": "database choice and architecture, ADR, costly to change later", "expect": ["architecture-decider"], "split": "heldout"}
-{"task": "plan the build in tickets, what can run in parallel", "expect": ["ticket-slicer"], "split": "heldout"}
-{"task": "checklist of deliverables from the grader, cover all of them", "expect": ["rubric-mapper"], "split": "heldout"}
-{"task": "same kind of app for another topic, template from this one", "expect": ["blueprint-extractor"], "split": "heldout"}
-{"task": "rewrite the system on a new framework, move everything over", "expect": ["migration-planner"], "split": "heldout"}
-{"task": "roadmap, what matters most among all these ideas", "expect": ["backlog-prioritiser"], "split": "heldout"}
-{"task": "can it run on my phone, I need a service that I dont have", "expect": ["feasibility-reframer"], "split": "heldout"}
-{"task": "scaffold a React web app, Vite, push to Vercel", "expect": ["web-app-scaffolder"], "split": "heldout"}
-{"task": "iphone layout, tap targets and the notch", "expect": ["phone-first-ui-builder"], "split": "heldout"}
-{"task": "service worker and manifest so it works without internet", "expect": ["pwa-offline-engineer"], "split": "heldout"}
-{"task": "connect to an outside webhook and API key, with quota handling", "expect": ["api-integration-builder"], "split": "heldout"}
-{"task": "make a fun game with score, keep improving it", "expect": ["game-builder"], "split": "heldout"}
-{"task": "lessons and quizzes from the textbook I uploaded", "expect": ["learning-app-builder"], "split": "heldout"}
-{"task": "a little command line tool to process many files", "expect": ["cli-script-builder"], "split": "heldout"}
-{"task": "publish these docs pages as a static site", "expect": ["content-site-builder"], "split": "heldout"}
-{"task": "mcstructure for a house in minecraft", "expect": ["minecraft-structure-builder"], "split": "heldout"}
-{"task": "clean up the code without changing behavior, rename across files", "expect": ["refactor-engineer"], "split": "heldout"}
-{"task": "stack trace from the build, tests fail in CI", "expect": ["build-failure-diagnoser"], "split": "heldout"}
-{"task": "vercel is not deploying my env variable, still old version", "expect": ["deploy-doctor"], "split": "heldout"}
-{"task": "push to main and release", "expect": ["release-to-main-engineer"], "split": "heldout"}
-{"task": "I want the earlier version back, cancel the last changes", "expect": ["rollback-restorer"], "split": "heldout"}
-{"task": "screenshot regression test in the browser", "expect": ["e2e-test-author"], "split": "heldout"}
-{"task": "improve the tests, which parts have no tests", "expect": ["coverage-analyst"], "split": "heldout"}
-{"task": "bundle size too big, LCP slow", "expect": ["performance-profiler"], "split": "heldout"}
-{"task": "WCAG keyboard navigation, Dynamic Type", "expect": ["accessibility-auditor"], "split": "heldout"}
-{"task": "upgrade major version of dependencies, outdated warning", "expect": ["dependency-upgrader"], "split": "heldout"}
-{"task": "it doesnt work on my phone, hard to say when", "expect": ["bug-reproducer"], "split": "heldout"}
-{"task": "ETL job to harvest data daily", "expect": ["data-pipeline-builder"], "split": "heldout"}
-{"task": "summarise the numbers in this spreadsheet file, what patterns", "expect": ["exploratory-analyst"], "split": "heldout"}
-{"task": "correlation between these variables, statistical test", "expect": ["statistical-tester"], "split": "heldout"}
-{"task": "visualise this data as a plot", "expect": ["chart-maker"], "split": "heldout"}
-{"task": "xlsx tracker with formulas", "expect": ["spreadsheet-engineer"], "split": "heldout"}
-{"task": "combine datasets, they disagree, reconcile", "expect": ["data-reconciler"], "split": "heldout"}
-{"task": "migrate the database, change the shape of the stored data", "expect": ["schema-migration-engineer"], "split": "heldout"}
-{"task": "PlantNet species identification and taxonomy", "expect": ["biodiversity-data-integrator"], "split": "heldout"}
-{"task": "fine-tune a model, benchmark accuracy", "expect": ["ml-experiment-runner"], "split": "heldout"}
-{"task": "retrieval over my documents, any AI can search them", "expect": ["rag-index-builder"], "split": "heldout"}
-{"task": "detailed report, many chapters, long", "expect": ["long-form-drafter"], "split": "heldout"}
-{"task": "expand every page to the same style, all pages", "expect": ["batch-article-rewriter"], "split": "heldout"}
-{"task": "organise my notes into reference material", "expect": ["knowledge-base-compiler"], "split": "heldout"}
-{"task": "keep my names and dates exactly right everywhere", "expect": ["canonical-facts-keeper"], "split": "heldout"}
-{"task": "produce a docx for download", "expect": ["document-producer"], "split": "heldout"}
-{"task": "make a presentation pptx", "expect": ["deck-builder"], "split": "heldout"}
-{"task": "proposal with recommendation, a business memo", "expect": ["strategy-memo-writer"], "split": "heldout"}
-{"task": "ley y jurisprudencia, mis derechos, es legal", "expect": ["legal-research-analyst"], "split": "heldout"}
-{"task": "chronology of the case, case file timeline", "expect": ["case-chronology-builder"], "split": "heldout"}
-{"task": "write a skill file and CLAUDE.md for an agent workflow", "expect": ["agent-spec-writer"], "split": "heldout"}
-{"task": "translate to Spanish please", "expect": ["es-en-translator"], "split": "heldout"}
-{"task": "redacta una carta en español", "expect": ["es-original-writer"], "split": "heldout"}
-{"task": "edit this text, tighten and make it clearer", "expect": ["copy-editor"], "split": "heldout"}
-{"task": "terminology list, consistent technical terms", "expect": ["glossary-builder"], "split": "heldout"}
-{"task": "blind check of the translation back to the original", "expect": ["back-translation-checker"], "split": "heldout"}
-{"task": "i18n string table for the interface", "expect": ["ui-string-localiser"], "split": "heldout"}
-{"task": "both editions English and Spanish, hreflang", "expect": ["bilingual-site-publisher"], "split": "heldout"}
-{"task": "translate this sentencia, legal terms", "expect": ["legal-terms-translator"], "split": "heldout"}
-{"task": "sound like the author, match this style", "expect": ["voice-matcher"], "split": "heldout"}
-{"task": "dictated voice note, turn it into clean prose", "expect": ["transcript-cleaner"], "split": "heldout"}
-{"task": "make it look better, book-centric redesign", "expect": ["design-brief-author"], "split": "heldout"}
-{"task": "logo ideas and icon options for me to pick", "expect": ["visual-option-generator"], "split": "heldout"}
-{"task": "make this exactly centred, pixel misaligned", "expect": ["visual-polish-measurer"], "split": "heldout"}
-{"task": "critic for the UI before shipping the visual change", "expect": ["design-critic"], "split": "heldout"}
-{"task": "consistent styles in code, tokens", "expect": ["design-system-builder"], "split": "heldout"}
-{"task": "photos upload, EXIF, image size, thumbnails", "expect": ["image-pipeline-engineer"], "split": "heldout"}
-{"task": "micro-interaction, animate this", "expect": ["motion-builder"], "split": "heldout"}
-{"task": "podcast style narration, text to speech", "expect": ["audio-lesson-producer"], "split": "heldout"}
-{"task": "architecture picture, map of the system", "expect": ["diagram-maker"], "split": "heldout"}
-{"task": "tagline and button text options", "expect": ["name-and-copy-options"], "split": "heldout"}
-{"task": "verify everything is done before final report", "expect": ["requirement-verifier"], "split": "heldout"}
-{"task": "sources for this claim, verify the figures", "expect": ["fact-checker"], "split": "heldout"}
-{"task": "PR review, look this diff over before merge", "expect": ["code-reviewer"], "split": "heldout"}
-{"task": "auth, uploads and payments, exposed data", "expect": ["security-reviewer"], "split": "heldout"}
-{"task": "token pasted in a file, check before commit", "expect": ["secret-scanner"], "split": "heldout"}
-{"task": "publish or delete, high stakes, premortem", "expect": ["premortem-redteam"], "split": "heldout"}
-{"task": "MCP tool permissions, untrusted text into the prompt", "expect": ["injection-auditor"], "split": "heldout"}
-{"task": "check these case citations before I deliver", "expect": ["legal-citation-verifier"], "split": "heldout"}
-{"task": "geotag privacy and licence of the dataset", "expect": ["privacy-licence-reviewer"], "split": "heldout"}
-{"task": "fresh machine, install steps must work", "expect": ["clean-clone-verifier"], "split": "heldout"}
-{"task": "get everything ready to continue later, context is almost full", "expect": ["session-handover-writer"], "split": "heldout"}
-{"task": "something only I can do blocks you, account or payment", "expect": ["needs-you-composer"], "split": "heldout"}
-{"task": "windows error, how do I run it on my computer", "expect": ["owner-computer-guide"], "split": "heldout"}
-{"task": "branch merge conflict housekeeping", "expect": ["git-repo-operator"], "split": "heldout"}
-{"task": "cron schedule, automate, remind me every week", "expect": ["routine-builder"], "split": "heldout"}
-{"task": "permission denied, MCP not connecting, settings", "expect": ["setup-repairer"], "split": "heldout"}
-{"task": "token use, why so costly", "expect": ["token-cost-auditor"], "split": "heldout"}
-{"task": "evaluate whether the routing and templates got worse", "expect": ["eval-regression-runner"], "split": "heldout"}
-{"task": "post-mortem, lessons at close", "expect": ["lesson-distiller"], "split": "heldout"}
-{"task": "pair this repo with the brain for the first time", "expect": ["project-bootstrapper"], "split": "heldout"}
+{"task": "I just inherited this project, help me get my head around it", "expect": ["repo-cartographer"], "split": "dev"}
+{"task": "need the newest way to call the Stripe thing, my memory of it is old", "expect": ["docs-snapshotter"], "split": "dev"}
+{"task": "is that weather service free or do they cut you off after some calls", "expect": ["api-live-prober"], "split": "dev"}
+{"task": "should I go with Postgres or Mongo, give me both sides", "expect": ["option-comparer"], "split": "dev"}
+{"task": "dig into whether cold showers really help, with real studies", "expect": ["deep-researcher"], "split": "dev"}
+{"task": "see what the other plant apps are doing and what users hate", "expect": ["competitor-teardown"], "split": "dev"}
+{"task": "remember that thing we did on the recipes app before, redo it", "expect": ["history-digger"], "split": "dev"}
+{"task": "can my Claude do scheduled stuff and how much does Max cost", "expect": ["claude-product-answerer"], "split": "dev"}
+{"task": "where do I get free numbers about house prices in Spain", "expect": ["dataset-source-finder"], "split": "dev"}
+{"task": "read these twenty PDFs and give me the short version of each", "expect": ["source-harvester"], "split": "dev"}
+{"task": "ok so I want an app, and also reminders, and also dark mode, and a login, and sharing, and", "expect": ["requirements-extractor"], "split": "dev"}
+{"task": "how do we prove the quiz works when it is finished", "expect": ["acceptance-test-designer"], "split": "dev"}
+{"task": "dont know if the scores should reset each week or not, you decide what to ask me", "expect": ["ambiguity-resolver"], "split": "dev"}
+{"task": "which tech should the whole thing be built on, I cant change it later", "expect": ["architecture-decider"], "split": "dev"}
+{"task": "cut this big idea into pieces so several can work at once", "expect": ["ticket-slicer"], "split": "dev"}
+{"task": "my teacher gave me this marking sheet, cover every line of it", "expect": ["rubric-mapper"], "split": "dev"}
+{"task": "make what we built for birds reusable for butterflies", "expect": ["blueprint-extractor"], "split": "dev"}
+{"task": "move my blog off Wordpress onto something simpler", "expect": ["migration-planner"], "split": "dev"}
+{"task": "I have like thirty ideas, which ones first", "expect": ["backlog-prioritiser"], "split": "dev"}
+{"task": "can you make a Nintendo game from my phone", "expect": ["feasibility-reframer"], "split": "dev"}
+{"task": "start a fresh website project from zero and put it online", "expect": ["web-app-scaffolder"], "split": "dev"}
+{"task": "the buttons are too small for my thumb on the iPhone", "expect": ["phone-first-ui-builder"], "split": "dev"}
+{"task": "want to tap the icon on my home screen and use it on the plane", "expect": ["pwa-offline-engineer"], "split": "dev"}
+{"task": "pull the plant ID service into the app and have a backup if it runs out", "expect": ["api-integration-builder"], "split": "dev"}
+{"task": "make a little quiz game where it gets harder every level", "expect": ["game-builder"], "split": "dev"}
+{"task": "make a trainer app out of this textbook with questions to practice", "expect": ["learning-app-builder"], "split": "dev"}
+{"task": "tool that goes through a folder and fixes all the filenames", "expect": ["cli-script-builder"], "split": "dev"}
+{"task": "put all my notes online as a little website", "expect": ["content-site-builder"], "split": "dev"}
+{"task": "I want a tower in Minecraft on my Xbox", "expect": ["minecraft-structure-builder"], "split": "dev"}
+{"task": "tidy up the code, same behaviour, its a mess", "expect": ["refactor-engineer"], "split": "dev"}
+{"task": "vercel says build failed and the log is full of red", "expect": ["build-failure-diagnoser"], "split": "dev"}
+{"task": "I changed it but my phone still shows the old page", "expect": ["deploy-doctor"], "split": "dev"}
+{"task": "go live with it now", "expect": ["release-to-main-engineer"], "split": "dev"}
+{"task": "this is the worst it has been, take me back to yesterday", "expect": ["rollback-restorer"], "split": "dev"}
+{"task": "test the whole flow in a real browser at phone size", "expect": ["e2e-test-author"], "split": "dev"}
+{"task": "which parts of the code have no tests at all", "expect": ["coverage-analyst"], "split": "dev"}
+{"task": "the page takes forever to load on my phone", "expect": ["performance-profiler"], "split": "dev"}
+{"task": "can blind people use this app", "expect": ["accessibility-auditor"], "split": "dev"}
+{"task": "the libraries are old and npm complains", "expect": ["dependency-upgrader"], "split": "dev"}
+{"task": "the thing is broken sometimes, on my phone only, not sure how", "expect": ["bug-reproducer"], "split": "dev"}
+{"task": "every night grab prices from those shops and clean them", "expect": ["data-pipeline-builder"], "split": "dev"}
+{"task": "what is in this big file of numbers, tell me what stands out", "expect": ["exploratory-analyst"], "split": "dev"}
+{"task": "did the new button really make more people sign up or is it luck", "expect": ["statistical-tester"], "split": "dev"}
+{"task": "turn these figures into a picture I can show", "expect": ["chart-maker"], "split": "dev"}
+{"task": "make me a sheet in Excel to follow my spending", "expect": ["spreadsheet-engineer"], "split": "dev"}
+{"task": "two lists of customers dont agree, join them without duplicates", "expect": ["data-reconciler"], "split": "dev"}
+{"task": "we are changing how entries are stored but old backups must open", "expect": ["schema-migration-engineer"], "split": "dev"}
+{"task": "photos of flowers and birds, name the species with open databases", "expect": ["biodiversity-data-integrator"], "split": "dev"}
+{"task": "teach a computer to tell apart cats and dogs and see which method wins", "expect": ["ml-experiment-runner"], "split": "dev"}
+{"task": "let ChatGPT or any AI answer questions from my folder of documents", "expect": ["rag-index-builder"], "split": "dev"}
+{"task": "write me a whole guide, like 40 pages", "expect": ["long-form-drafter"], "split": "dev"}
+{"task": "take each of the 60 pages and make it longer in the same style", "expect": ["batch-article-rewriter"], "split": "dev"}
+{"task": "my chat messages are a mess, make a proper reference out of them", "expect": ["knowledge-base-compiler"], "split": "dev"}
+{"task": "my passport dates and hotel names must be right in every file", "expect": ["canonical-facts-keeper"], "split": "dev"}
+{"task": "give me a file I can download and print, nicely formatted", "expect": ["document-producer"], "split": "dev"}
+{"task": "I need ten slides for tomorrow", "expect": ["deck-builder"], "split": "dev"}
+{"task": "write a proposal for my boss on what we should do next", "expect": ["strategy-memo-writer"], "split": "dev"}
+{"task": "can my landlord do this under Spanish law", "expect": ["legal-research-analyst"], "split": "dev"}
+{"task": "from these emails put the events in order", "expect": ["case-chronology-builder"], "split": "dev"}
+{"task": "write instructions for a set of Claude agents that do my chores", "expect": ["agent-spec-writer"], "split": "dev"}
+{"task": "pasa este párrafo al inglés", "expect": ["es-en-translator"], "split": "dev"}
+{"task": "escríbeme un correo para el cliente", "expect": ["es-original-writer"], "split": "dev"}
+{"task": "make this email sound better, not too long", "expect": ["copy-editor"], "split": "dev"}
+{"task": "list of terms so I use the same word every time", "expect": ["glossary-builder"], "split": "dev"}
+{"task": "someone translated this, did they keep the meaning", "expect": ["back-translation-checker"], "split": "dev"}
+{"task": "the app should work in German too", "expect": ["ui-string-localiser"], "split": "dev"}
+{"task": "the website in two languages, with a button to switch", "expect": ["bilingual-site-publisher"], "split": "dev"}
+{"task": "traduce la cláusula del contrato para mi socio inglés", "expect": ["legal-terms-translator"], "split": "dev"}
+{"task": "write this like I normally write", "expect": ["voice-matcher"], "split": "dev"}
+{"task": "this is me talking into the phone, make it normal text", "expect": ["transcript-cleaner"], "split": "dev"}
+{"task": "the app looks old, give it a new feel", "expect": ["design-brief-author"], "split": "dev"}
+{"task": "give me some options for the app icon, I will pick", "expect": ["visual-option-generator"], "split": "dev"}
+{"task": "the title is a bit off to the left, fix it by a few pixels", "expect": ["visual-polish-measurer"], "split": "dev"}
+{"task": "tell me honestly if the screens look good", "expect": ["design-critic"], "split": "dev"}
+{"task": "all the colours and sizes should come from one place", "expect": ["design-system-builder"], "split": "dev"}
+{"task": "users upload pictures and they come out sideways and huge", "expect": ["image-pipeline-engineer"], "split": "dev"}
+{"task": "make the card slide in nicely", "expect": ["motion-builder"], "split": "dev"}
+{"task": "read the lesson out loud as audio", "expect": ["audio-lesson-producer"], "split": "dev"}
+{"task": "show me how the parts connect in a picture", "expect": ["diagram-maker"], "split": "dev"}
+{"task": "what should I call my app", "expect": ["name-and-copy-options"], "split": "dev"}
+{"task": "did you actually finish everything I asked", "expect": ["requirement-verifier"], "split": "dev"}
+{"task": "the figures in my report, are they true", "expect": ["fact-checker"], "split": "dev"}
+{"task": "take a look at my changes before I merge them", "expect": ["code-reviewer"], "split": "dev"}
+{"task": "people share links to private stuff, is that safe", "expect": ["security-reviewer"], "split": "dev"}
+{"task": "did I leave my password in the code somewhere", "expect": ["secret-scanner"], "split": "dev"}
+{"task": "I am about to wipe the old database, what might go wrong", "expect": ["premortem-redteam"], "split": "dev"}
+{"task": "the assistant reads random web pages and has tools, is that risky", "expect": ["injection-auditor"], "split": "dev"}
+{"task": "this lawyer text quotes laws, are they real", "expect": ["legal-citation-verifier"], "split": "dev"}
+{"task": "the photos have location, can I post them", "expect": ["privacy-licence-reviewer"], "split": "dev"}
+{"task": "will my setup steps work on someone elses laptop", "expect": ["clean-clone-verifier"], "split": "dev"}
+{"task": "I am out of space in this chat, pack it up for the next one", "expect": ["session-handover-writer"], "split": "dev"}
+{"task": "I need you to wait for my card before this can go on, say what I do", "expect": ["needs-you-composer"], "split": "dev"}
+{"task": "Windows says something red when I run your command", "expect": ["owner-computer-guide"], "split": "dev"}
+{"task": "two people changed the same file and now git is angry", "expect": ["git-repo-operator"], "split": "dev"}
+{"task": "every Monday send me a summary without me asking", "expect": ["routine-builder"], "split": "dev"}
+{"task": "Claude stopped using my skill and the permission popup is weird", "expect": ["setup-repairer"], "split": "dev"}
+{"task": "this session cost a lot, why", "expect": ["token-cost-auditor"], "split": "dev"}
+{"task": "we changed the way you pick helpers, is it worse now", "expect": ["eval-regression-runner"], "split": "dev"}
+{"task": "now that it is finished, what should we remember", "expect": ["lesson-distiller"], "split": "dev"}
+{"task": "connect this brain to my new project", "expect": ["project-bootstrapper"], "split": "dev"}
+{"task": "what is this codebase, where does the main thing live", "expect": ["repo-cartographer"], "split": "heldout"}
+{"task": "check how the current version of Tailwind works before you write it", "expect": ["docs-snapshotter"], "split": "heldout"}
+{"task": "that map service, how many free requests and can we use their data", "expect": ["api-live-prober"], "split": "heldout"}
+{"task": "Netlify against Vercel, which one for me", "expect": ["option-comparer"], "split": "heldout"}
+{"task": "look into this properly and give me proper sources", "expect": ["deep-researcher"], "split": "heldout"}
+{"task": "who else sells this and what do customers say about them", "expect": ["competitor-teardown"], "split": "heldout"}
+{"task": "we did something similar in another chat, find what we did", "expect": ["history-digger"], "split": "heldout"}
+{"task": "which Claude model should I use for what, and are there limits", "expect": ["claude-product-answerer"], "split": "heldout"}
+{"task": "look for a free list of airports I can download", "expect": ["dataset-source-finder"], "split": "heldout"}
+{"task": "go through these links and make notes for later", "expect": ["source-harvester"], "split": "heldout"}
+{"task": "long voice message with ten wishes for a new project, sort them out", "expect": ["requirements-extractor"], "split": "heldout"}
+{"task": "write the checks that say when the feature is finished", "expect": ["acceptance-test-designer"], "split": "heldout"}
+{"task": "could mean two things, tell me which and ask", "expect": ["ambiguity-resolver"], "split": "heldout"}
+{"task": "database or files, serverless or server, help me decide", "expect": ["architecture-decider"], "split": "heldout"}
+{"task": "make a plan with steps, what can go side by side", "expect": ["ticket-slicer"], "split": "heldout"}
+{"task": "here is a list of what the course wants, check we hit each one", "expect": ["rubric-mapper"], "split": "heldout"}
+{"task": "want a copy of this app for a different subject", "expect": ["blueprint-extractor"], "split": "heldout"}
+{"task": "switch the whole thing from JavaScript to something else", "expect": ["migration-planner"], "split": "heldout"}
+{"task": "so many things to do, what is most worth my time", "expect": ["backlog-prioritiser"], "split": "heldout"}
+{"task": "can you make the app send a text to my Garmin watch", "expect": ["feasibility-reframer"], "split": "heldout"}
+{"task": "new Next app and publish it", "expect": ["web-app-scaffolder"], "split": "heldout"}
+{"task": "make everything work with one hand on the phone", "expect": ["phone-first-ui-builder"], "split": "heldout"}
+{"task": "works with no signal and I can add it to the home screen", "expect": ["pwa-offline-engineer"], "split": "heldout"}
+{"task": "call an outside service with a key and handle when I run out of calls", "expect": ["api-integration-builder"], "split": "heldout"}
+{"task": "make a small arcade game and keep making it better", "expect": ["game-builder"], "split": "heldout"}
+{"task": "a course app from this PDF with flashcards", "expect": ["learning-app-builder"], "split": "heldout"}
+{"task": "quick script to resize a hundred files", "expect": ["cli-script-builder"], "split": "heldout"}
+{"task": "my markdown notes should become a docs site", "expect": ["content-site-builder"], "split": "heldout"}
+{"task": "build a Minecraft house for me", "expect": ["minecraft-structure-builder"], "split": "heldout"}
+{"task": "split this huge file without breaking anything", "expect": ["refactor-engineer"], "split": "heldout"}
+{"task": "tests are red and I dont know why, here is the error", "expect": ["build-failure-diagnoser"], "split": "heldout"}
+{"task": "deployed but the site gives a 404", "expect": ["deploy-doctor"], "split": "heldout"}
+{"task": "send it to production", "expect": ["release-to-main-engineer"], "split": "heldout"}
+{"task": "undo what you just did, it was better before", "expect": ["rollback-restorer"], "split": "heldout"}
+{"task": "record a browser test that clicks through checkout", "expect": ["e2e-test-author"], "split": "heldout"}
+{"task": "tell me how good my tests are", "expect": ["coverage-analyst"], "split": "heldout"}
+{"task": "Lighthouse says it is slow, make it faster", "expect": ["performance-profiler"], "split": "heldout"}
+{"task": "colour contrast and keyboard use, check please", "expect": ["accessibility-auditor"], "split": "heldout"}
+{"task": "update all dependencies, security warnings", "expect": ["dependency-upgrader"], "split": "heldout"}
+{"task": "something weird happens on my iPhone, cant describe it", "expect": ["bug-reproducer"], "split": "heldout"}
+{"task": "build something that collects data again and again from a website", "expect": ["data-pipeline-builder"], "split": "heldout"}
+{"task": "what story does this CSV tell", "expect": ["exploratory-analyst"], "split": "heldout"}
+{"task": "is the correlation real, test it", "expect": ["statistical-tester"], "split": "heldout"}
+{"task": "a bar chart of monthly sales", "expect": ["chart-maker"], "split": "heldout"}
+{"task": "a spreadsheet to track my budget with formulas", "expect": ["spreadsheet-engineer"], "split": "heldout"}
+{"task": "these two exports have the same people spelled differently, combine them", "expect": ["data-reconciler"], "split": "heldout"}
+{"task": "rename a column in the database but old files must keep working", "expect": ["schema-migration-engineer"], "split": "heldout"}
+{"task": "identify bird species from observations and match names across databases", "expect": ["biodiversity-data-integrator"], "split": "heldout"}
+{"task": "compare a few models on this data and report accuracy", "expect": ["ml-experiment-runner"], "split": "heldout"}
+{"task": "make documents searchable so an AI can find the right passage", "expect": ["rag-index-builder"], "split": "heldout"}
+{"task": "write a long book chapter by chapter", "expect": ["long-form-drafter"], "split": "heldout"}
+{"task": "change the tone of all these articles at once", "expect": ["batch-article-rewriter"], "split": "heldout"}
+{"task": "turn the pile of notes into a clean knowledge base", "expect": ["knowledge-base-compiler"], "split": "heldout"}
+{"task": "dates in my itinerary must match everywhere", "expect": ["canonical-facts-keeper"], "split": "heldout"}
+{"task": "make a Word file with a cover page", "expect": ["document-producer"], "split": "heldout"}
+{"task": "build a PowerPoint for the investors", "expect": ["deck-builder"], "split": "heldout"}
+{"task": "memo arguing we should switch suppliers, with a recommendation", "expect": ["strategy-memo-writer"], "split": "heldout"}
+{"task": "estoy en un lío legal en España, qué dice la ley", "expect": ["legal-research-analyst"], "split": "heldout"}
+{"task": "build a timeline of what happened in the case from the files", "expect": ["case-chronology-builder"], "split": "heldout"}
+{"task": "write a sub-agent and a skill that do my weekly report", "expect": ["agent-spec-writer"], "split": "heldout"}
+{"task": "translate this page to English, keep it natural", "expect": ["es-en-translator"], "split": "heldout"}
+{"task": "escribe una descripción para la tienda en español", "expect": ["es-original-writer"], "split": "heldout"}
+{"task": "fix the typos and make it flow, same meaning", "expect": ["copy-editor"], "split": "heldout"}
+{"task": "we keep calling the same thing by different names, make a glossary", "expect": ["glossary-builder"], "split": "heldout"}
+{"task": "verify this translation by translating back", "expect": ["back-translation-checker"], "split": "heldout"}
+{"task": "add Spanish to the app strings", "expect": ["ui-string-localiser"], "split": "heldout"}
+{"task": "ship English and Spanish pages for the site", "expect": ["bilingual-site-publisher"], "split": "heldout"}
+{"task": "traduce la sentencia, mantén los términos legales", "expect": ["legal-terms-translator"], "split": "heldout"}
+{"task": "make it sound like my old posts", "expect": ["voice-matcher"], "split": "heldout"}
+{"task": "clean the speech to text mess into a paragraph", "expect": ["transcript-cleaner"], "split": "heldout"}
+{"task": "give the app a brand new look, premium", "expect": ["design-brief-author"], "split": "heldout"}
+{"task": "suggest some colour schemes for me to choose between", "expect": ["visual-option-generator"], "split": "heldout"}
+{"task": "centre this icon exactly, it is two pixels off", "expect": ["visual-polish-measurer"], "split": "heldout"}
+{"task": "independent opinion on the look of the screens before release", "expect": ["design-critic"], "split": "heldout"}
+{"task": "shared styles for buttons and colours across the app", "expect": ["design-system-builder"], "split": "heldout"}
+{"task": "handle iPhone photos, thumbnails and orientation", "expect": ["image-pipeline-engineer"], "split": "heldout"}
+{"task": "add a transition when the page changes", "expect": ["motion-builder"], "split": "heldout"}
+{"task": "make a voice track for the lesson", "expect": ["audio-lesson-producer"], "split": "heldout"}
+{"task": "draw the flow of the whole system", "expect": ["diagram-maker"], "split": "heldout"}
+{"task": "need a catchy line for the homepage", "expect": ["name-and-copy-options"], "split": "heldout"}
+{"task": "check the whole job against my original request", "expect": ["requirement-verifier"], "split": "heldout"}
+{"task": "are those dates and numbers in the document correct", "expect": ["fact-checker"], "split": "heldout"}
+{"task": "review this branch for bugs", "expect": ["code-reviewer"], "split": "heldout"}
+{"task": "could someone steal accounts through the sign up", "expect": ["security-reviewer"], "split": "heldout"}
+{"task": "check no tokens or keys are in the repo before I push", "expect": ["secret-scanner"], "split": "heldout"}
+{"task": "what are the risks before we publish this one-way thing", "expect": ["premortem-redteam"], "split": "heldout"}
+{"task": "a chatbot that browses sites, check how it could be tricked", "expect": ["injection-auditor"], "split": "heldout"}
+{"task": "check the cases quoted in this legal opinion exist", "expect": ["legal-citation-verifier"], "split": "heldout"}
+{"task": "do I need permission to use these images and fonts", "expect": ["privacy-licence-reviewer"], "split": "heldout"}
+{"task": "fresh install, do the steps really work", "expect": ["clean-clone-verifier"], "split": "heldout"}
+{"task": "handover note, I will continue tomorrow", "expect": ["session-handover-writer"], "split": "heldout"}
+{"task": "there is a step only I can do, list it with clicks", "expect": ["needs-you-composer"], "split": "heldout"}
+{"task": "how do I open the terminal on my Mac and run this", "expect": ["owner-computer-guide"], "split": "heldout"}
+{"task": "tidy the branches and move these files in git", "expect": ["git-repo-operator"], "split": "heldout"}
+{"task": "run the backup every night on its own", "expect": ["routine-builder"], "split": "heldout"}
+{"task": "the hook is silent and MCP wont connect", "expect": ["setup-repairer"], "split": "heldout"}
+{"task": "why did the session burn so many tokens", "expect": ["token-cost-auditor"], "split": "heldout"}
+{"task": "did the update make things worse, compare before and after", "expect": ["eval-regression-runner"], "split": "heldout"}
+{"task": "write up what we learned from this project", "expect": ["lesson-distiller"], "split": "heldout"}
+{"task": "adopt this repo into the brain for the first time", "expect": ["project-bootstrapper"], "split": "heldout"}

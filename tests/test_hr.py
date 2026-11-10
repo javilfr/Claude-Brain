@@ -339,6 +339,22 @@ class RealRack(unittest.TestCase):
                                         ["path/b"], "make check", model, effort, ".brain/log/hr/notes.md")
                 self.assertEqual(hr.lint_brief(text, model), [], (t["id"], model))
 
+    def test_selection_on_the_held_out_requests_does_not_get_worse(self):
+        """evals/hr_golden.jsonl: 100 requests the keywords were tuned on (dev)
+        and 100 they were not (heldout). Measured after tuning on 2026-11-10:
+        heldout top-1 0.78, top-3 0.86 (dev is 1.00 by construction and proves
+        nothing). The floor is the measured value minus a small margin."""
+        rack = hr.load_rack(ROOT)
+        rows = [r for r in c.read_jsonl(ROOT / "evals" / "hr_golden.jsonl") if r.get("split") == "heldout"]
+        self.assertEqual(len(rows), 100)
+        top1 = top3 = 0
+        for r in rows:
+            ids = [h["id"] for h in hr.select(r["task"], rack)]
+            top1 += bool(ids[:1] and ids[0] in r["expect"])
+            top3 += any(i in r["expect"] for i in ids[:3])
+        self.assertGreaterEqual(top1 / len(rows), 0.74, f"top-1 {top1}")
+        self.assertGreaterEqual(top3 / len(rows), 0.82, f"top-3 {top3}")
+
     def test_owner_style_requests_find_a_sensible_template(self):
         rack = hr.load_rack(ROOT)
         cases = [

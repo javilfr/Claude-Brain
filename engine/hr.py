@@ -502,7 +502,7 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
         "model": arm["model"], "effort": arm["effort"], "explored": bool(arm.get("explored")), "propensity": arm.get("propensity", 1.0),
         "task_class": task_class, "family": family, "risk": risk, "tier": tier, "check": check, "has_check": bool(check),
         "wage_tokens": pay["tokens"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
-        "brief": str(brief_path), "notes": str(notes_path), "runners_up": [x["id"] for x in chosen[1:3]],
+        "brief": str(brief_path), "notes": str(notes_path), "workdir": workdir, "runners_up": [x["id"] for x in chosen[1:3]],
         "lint": lint_brief(brief, arm["model"]), "model_basis": arm.get("basis", ""),
     }
     c.write_text(brief_path, brief)
@@ -547,9 +547,10 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
         _main, sub_paths = c.transcript_paths()
     usage = find_helper_usage(contract, sub_paths, models_cfg)
     passed = contract.get("passed")
-    if contract.get("check") and project is not None and not isinstance(passed, bool):
+    where = project or (Path(contract["workdir"]) if contract.get("workdir") and Path(contract["workdir"]).is_dir() else None)
+    if contract.get("check") and where is not None and not isinstance(passed, bool):
         from . import gate
-        r = gate.run_filtered(contract["check"], project, project)
+        r = gate.run_filtered(contract["check"], where, project)
         passed = r["exit"] == 0
         contract["check_exit"], contract["check_log"] = r["exit"], Path(r["log"]).name
     contract["passed"] = passed if isinstance(passed, bool) else None
