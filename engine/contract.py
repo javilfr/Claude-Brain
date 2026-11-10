@@ -113,7 +113,13 @@ def ensure_stub(project: Path, title: str, made: list[str]) -> None:
         made.append("CLAUDE.md (pointer block added above existing content)")
 
 
-def init(project: Path, title: str, family: str, manifest_overrides: dict | None = None) -> list[str]:
+ROOT_GITIGNORE = ("# Written by Claude Brain at init; edit freely.\n"
+                  ".env\n.env.*\n!.env.example\n*.pem\n*.key\n"
+                  "__pycache__/\n*.pyc\n.venv/\nnode_modules/\ndist/\nbuild/\n.next/\n.DS_Store\n")
+
+
+def init(project: Path, title: str, family: str, manifest_overrides: dict | None = None,
+         root_ignore: bool = True) -> list[str]:
     """Install the contract. Returns the list of things created (empty when
     everything was already there)."""
     project = Path(project)
@@ -137,6 +143,11 @@ def init(project: Path, title: str, family: str, manifest_overrides: dict | None
     _create(b / "ext" / "README.md", "# Project extensions\n\nSkills, agents, tools and playbook overrides that belong only to this project. They add to the brain's defaults for this project; they cannot change the contract.\n", made, project)
     _create(b / "log" / ".gitkeep", "", made, project)
     _create(b / ".gitignore", "cache/\nlog/run/\n", made, project)
+    # Seen in the first live trial: with no root ignore file, build caches were
+    # committed on the first release. Secrets files are ignored for the same reason
+    # keys are never committed (core rule 10).
+    if root_ignore:  # a new project only: adopt never adds files to an existing codebase
+        _create(project / ".gitignore", ROOT_GITIGNORE, made, project)
     _create(project / "NEEDS_YOU.md", c.read_text(TEMPLATE / "NEEDS_YOU.md"), made, project)
     _create(project / "STATUS.md", f"# Status: {title}\n\nNothing has been built yet. Say what you want in the chat to begin.\n", made, project)
     ensure_stub(project, title, made)
@@ -193,7 +204,7 @@ def adopt(project: Path, title: str | None = None, family: str | None = None) ->
     gate_cmd = s["commands"].get("check_full") or s["commands"].get("check_fast") or ""
     over["gates"] = [{"id": "checks", "kind": "command", "command": gate_cmd}]
     old_handbook = len(c.read_text(project / "CLAUDE.md").encode())
-    made = init(project, title or project.name, family or s["family"], over)
+    made = init(project, title or project.name, family or s["family"], over, root_ignore=False)
     s["old_handbook_bytes"] = old_handbook
     if old_handbook > OLD_HANDBOOK_LIMIT and "Slim the old handbook" not in c.read_text(project / "NEEDS_YOU.md"):
         with open(project / "NEEDS_YOU.md", "a", encoding="utf-8") as f:
@@ -314,6 +325,8 @@ def cmd_init(args) -> int:
     print(f"contract v{c.CONTRACT_VERSION} in {project.name}: " + (f"created {len(made)} file(s)" if made else "already complete, nothing changed"))
     for e in errs:
         print(" -", e)
+    if made and not errs:
+        print("next: one `brain req add` per sentence of the request, then the brain-plan skill")
     return 1 if errs else 0
 
 

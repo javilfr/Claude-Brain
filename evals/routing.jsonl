@@ -105,3 +105,4 @@
 {"text": "ok so I want the whole thing, app, website and the learning course, built in waves", "tier": 3}
 {"text": "Continue with the next ticket", "tier": 2, "class": "resume", "trigger": true}
 {"text": "sigue con lo siguiente", "tier": 2, "class": "resume", "trigger": true}
+{"text": "New project: a command-line tip calculator in Python that splits a bill between people, with tests", "tier": 2, "class": "software.feature", "trigger": true}

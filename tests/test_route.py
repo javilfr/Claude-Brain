@@ -58,6 +58,14 @@ class Classify(unittest.TestCase):
     def test_manifest_family_default(self):
         self.assertEqual(route.classify("make it shorter", {"family": "language"})["family"], "language")
 
+    def test_a_vocabulary_word_is_never_read_as_a_slip_for_another(self):
+        # Seen live: 'tests' fuzzy-matched Spanish 'tesis' and a Python CLI was routed as long-form writing.
+        got = route.classify("New project: a command-line tip calculator in Python that splits a bill, with tests")
+        self.assertEqual((got["family"], got["task_class"]), ("software", "software.feature"))
+        self.assertTrue(route._close("tesis", "tesis"))
+        self.assertFalse(route._close("tests", "tesis"))
+        self.assertTrue(route._close("tseis", "tesis"))  # a real slip still matches
+
     def test_typo_tolerance(self):
         self.assertEqual(route.classify("contniue")["task_class"], "resume")
         self.assertEqual(route.classify("trnaslate the whole website to japanese")["family"], "language")

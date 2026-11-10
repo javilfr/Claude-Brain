@@ -39,11 +39,18 @@ def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", _fold(text))
 
 
+KNOWN_WORDS: set[str] = set()  # every vocabulary word; filled at the end of the module
+
+
 def _close(a: str, b: str) -> bool:
     """Equal, or one edit apart (insert, delete, substitute or swap two
-    neighbours) for words of five letters or more: dictation and typing slips."""
+    neighbours) for words of five letters or more: dictation and typing slips.
+    A word that is itself in a vocabulary is never read as a slip for another
+    one ('tests' is not a misspelt 'tesis')."""
     if a == b:
         return True
+    if a in KNOWN_WORDS:
+        return False
     if min(len(a), len(b)) < 5 or abs(len(a) - len(b)) > 1:
         return False
     if len(a) == len(b):
@@ -159,7 +166,8 @@ FAMILY_WORDS = {
                        "backend, frontend, code, bug, crash, deploy, vercel, react, button, boton, css, ui, screen, "
                        "pantalla, page, component, login, game, juego, minecraft, mod, repo, repository, branch, main, "
                        "typescript, javascript, html, database, server, extension, plugin, bot, agents, feature, field, fields, campo, "
-                       "tests, dark mode, layout, font"),
+                       "tests, dark mode, layout, font, python, cli, command line, script, library, package, "
+                       "calculator, calculadora, programa, program"),
 }
 FAMILY_ORDER = ("language", "data", "operations", "knowledge", "software")
 CLASS_WORDS = [  # (family, class, words) checked in order; first hit wins
@@ -458,3 +466,21 @@ def register(sub) -> None:
     p.add_argument("--json", action="store_true")
     c.add_project_arg(p)
     p.set_defaults(func=cmd_route)
+
+
+def _collect_known() -> None:
+    def walk(v):
+        if isinstance(v, tuple) and v and all(isinstance(w, str) for w in v):
+            KNOWN_WORDS.update(v)
+        elif isinstance(v, (list, tuple, set)):
+            for x in v:
+                walk(x)
+        elif isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+    for name, val in list(globals().items()):
+        if name.isupper() and name != "KNOWN_WORDS":
+            walk(val)
+
+
+_collect_known()

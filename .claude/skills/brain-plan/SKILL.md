@@ -13,7 +13,7 @@ The outcome is three things a later session can resume from: a requirements ledg
 
 ## 2. Requirements ledger
 
-Every sentence of the request becomes at least one line, written with `BRAIN req add --quote "<his exact words>" --passes-when "<what a script, screenshot or source shows>" --check "<command>"`. The ledger is `.brain/requirements.jsonl`; `.brain/REQUIREMENTS.md` is generated from it, so never edit that file. `--quote` holds only his words: for an implied or ambiguous item, quote the sentence it comes from and put the assumption in `--passes-when`, then record the assumption in `.brain/DECISIONS.md`. Every line has its "passes when" before work starts, because the check is what lets cheaper models try first and escalation work. `BRAIN req list` shows the lines; a line that is cut is `BRAIN req drop <id> --reason "…"`, which he will see.
+Every sentence of the request becomes at least one line, written with `BRAIN req add --quote "<his exact words>" --passes-when "<what a script, screenshot or source shows>" --check "<command>"`. The ledger is `.brain/requirements.jsonl`; `.brain/REQUIREMENTS.md` is generated from it, so never edit that file. `--quote` holds only his words. For a need the request implies but does not say, add `--implied --assumption "<what you assumed and why>"`, which keeps the line marked as not his words; then record the assumption in `.brain/DECISIONS.md`. Every line has its "passes when" before work starts, because the check is what lets cheaper models try first and escalation work. `BRAIN req list` shows the lines; a line that is cut is `BRAIN req drop <id> --reason "…"`, which he will see.
 
 ## 3. The plan
 

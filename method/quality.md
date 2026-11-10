@@ -4,7 +4,7 @@ Checks that run beat a model rereading its own work, reviewers need fresh contex
 
 ## Requirements ledger
 
-At size 2 and above, every sentence the owner wrote becomes at least one line in `.brain/requirements.jsonl` (through `BRAIN req add`; `.brain/REQUIREMENTS.md` is generated from it): his exact words, a "passes when" written before work starts, and at the end a pointer to evidence (a gate log, a screenshot, a `path:line`, a source). Checking against his exact words, not the plan, catches plans that missed something. `BRAIN req check` fails while any line lacks evidence; nothing else calls it, so run it before reporting done and before a handover. An empty ledger passes, which is why every sentence must be entered.
+At size 2 and above, every sentence the owner wrote becomes at least one line in `.brain/requirements.jsonl` (through `BRAIN req add`; `.brain/REQUIREMENTS.md` is generated from it): his exact words, a "passes when" written before work starts, and at the end a pointer to evidence (a gate log, a screenshot, a `path:line`, a source). Checking against his exact words, not the plan, catches plans that missed something. `BRAIN req evidence <id> … --done` runs the line's check when it is a command and refuses on failure; `BRAIN req check --run` fails while any line lacks evidence or a done line's command check fails now. Nothing else calls it, so run it before reporting done and before a handover. An empty ledger fails only at project size once building has started, which is why every sentence must be entered.
 
 The claim-audit rule in `CLAUDE.md` nearly eliminated invented status reports in Anthropic's tests.
 
@@ -18,4 +18,4 @@ Where taste decides, real alternatives and a separate choice beat asking for "cr
 
 ## What scripts catch, and what they do not
 
-Of 21 catalogued ways work is wrongly reported finished, the scripts catch a few: `release` treats a gate with no recorded exit code, or one recorded on an earlier commit, as not passed; `gate` flags added skip markers and TODO or not-implemented stubs in the diff; `req check` flags ledger lines without evidence. Nothing checks deleted tests, broken links, word counts or screenshot freshness yet, so those rest on the definitions of done and the reviewer.
+Of 21 catalogued ways work is wrongly reported finished, the scripts catch a few: `release` treats a gate with no recorded exit code, or one recorded on an earlier commit, as not passed; `gate` flags added skip markers and TODO or not-implemented stubs in the diff; `req check` flags ledger lines without evidence, and `--run` re-runs their command checks. Nothing checks deleted tests, broken links, word counts or screenshot freshness yet, so those rest on the definitions of done and the reviewer.

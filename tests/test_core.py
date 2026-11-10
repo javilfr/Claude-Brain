@@ -71,6 +71,9 @@ class ContractTests(Base):
         p = self.project()
         before = {f: f.read_bytes() for f in p.rglob("*") if f.is_file() and ".git" not in f.parts}
         self.assertEqual(contract.init(p, "Other Title", "data"), [])
+        ignore = (p / ".gitignore").read_text()
+        for pattern in (".env", "__pycache__/", "node_modules/"):  # first live trial committed build caches
+            self.assertIn(pattern, ignore.splitlines())
         after = {f: f.read_bytes() for f in p.rglob("*") if f.is_file() and ".git" not in f.parts}
         self.assertEqual(before, after)
 
@@ -211,6 +214,25 @@ class DetectTests(Base):
         self.assertEqual(d["mode"], "choose")
         self.assertEqual(Path(d["project"]).name, "second")  # most recently active
         self.assertEqual(detect.detect(self.brain, named="fresh")["mode"], "work")
+
+    def test_explicit_project_wins_over_siblings_like_every_other_command(self):
+        git_repo(self.ws / "beside")
+        elsewhere = git_repo(Path(self.enterContext(tempfile.TemporaryDirectory())) / "scratch")
+        d = detect.detect(self.brain, project=str(elsewhere))
+        self.assertEqual((d["mode"], Path(d["project"]).name), ("bootstrap", "scratch"))
+        os.environ["BRAIN_PROJECT"] = str(elsewhere)
+        try:
+            self.assertEqual(Path(detect.detect(self.brain)["project"]).name, "scratch")
+        finally:
+            os.environ.pop("BRAIN_PROJECT")
+        old = os.getcwd()
+        os.chdir(elsewhere)
+        try:  # run from inside a repository: that repository is the project
+            self.assertEqual(Path(detect.detect(self.brain)["project"]).name, "scratch")
+        finally:
+            os.chdir(old)
+        # run from inside the brain: the folders beside it decide, as before
+        self.assertEqual(Path(detect.detect(self.brain)["project"]).name, "beside")
 
     def test_boot_is_short_and_shows_position(self):
         p = self.project()
@@ -369,6 +391,29 @@ class ReqTests(Base):
         self.run_cli("req", "add", "--quote", "one  thing")
         self.run_cli("req", "add", "--quote", "one thing")
         self.assertEqual(len(req.load(p)), 1)
+
+    def test_done_runs_a_command_check_and_refuses_when_it_fails(self):
+        # Seen in the first live trial: typed evidence marked a line done with a claim nobody had run.
+        p = self.project()
+        os.environ["BRAIN_PROJECT"] = str(p)
+        (p / "flag").write_text("x")
+        self.run_cli("req", "add", "--quote", "keep the flag", "--passes-when", "flag exists", "--check", "test -f flag")
+        self.run_cli("req", "add", "--quote", "looks nice", "--passes-when", "owner likes it", "--check", "screenshot on the phone")
+        code, out = self.run_cli("req", "evidence", "R-001", "I made it", "--done")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(any(e.startswith("check exit 0") for e in req.load(p)[0]["evidence"]))
+        self.assertEqual(self.run_cli("req", "evidence", "R-002", "photo 3", "--done")[0], 0)  # prose: not run
+        (p / "flag").unlink()
+        code, out = self.run_cli("req", "check")
+        self.assertEqual(code, 0)  # plain check reads the ledger only
+        code, out = self.run_cli("req", "check", "--run")
+        self.assertEqual(code, 1)
+        self.assertIn("R-001: marked done but its check now fails", out)
+        self.run_cli("req", "add", "--quote", "never true", "--passes-when", "f", "--check", "test -f nothing")
+        code, out = self.run_cli("req", "evidence", "R-003", "trust me", "--done")
+        self.assertEqual(code, 1)
+        self.assertIn("not marked done; its check failed", out)
+        self.assertEqual(req.load(p)[2]["status"], "open")
 
     def test_done_without_evidence_is_a_problem(self):
         rows = [{"id": "R-001", "quote": "q", "passes_when": "w", "status": "done", "evidence": []}]

@@ -145,6 +145,37 @@ def cmd_set(args) -> int:
     return 0
 
 
+RUNNABLE = ("python", "python3", "pytest", "npm", "npx", "node", "make", "bash", "sh", "test", "grep", "ls",
+            "cargo", "go", "uv", "pnpm", "yarn", "deno", "bun", "curl", "git", "diff", "cmp", "jq")
+CHECK_TIMEOUT = 600  # seconds for one line's check
+
+
+def runnable(check: str) -> bool:
+    """A check is run when it starts like a command; prose methods such as
+    'screenshot on the phone' are evidence the lead attaches by hand."""
+    import shlex
+    import shutil
+    try:
+        first = shlex.split(check)[0] if check.strip() else ""
+    except ValueError:
+        return False
+    return bool(first) and (first in RUNNABLE or first.startswith("./") or shutil.which(first) is not None)
+
+
+def run_line_check(project: Path, r: dict) -> tuple[bool, str] | None:
+    """Run a line's check in the project folder. None when it is not runnable."""
+    import subprocess
+    chk = (r.get("check") or "").strip()
+    if not runnable(chk):
+        return None
+    try:
+        p = subprocess.run(chk, shell=True, cwd=project, capture_output=True, text=True, timeout=CHECK_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return False, f"check timed out after {CHECK_TIMEOUT}s: {c.clip(chk, 120)}"
+    tail = (p.stdout + p.stderr).strip().splitlines()[-1:] or [""]
+    return p.returncode == 0, f"check exit {p.returncode} on {c.today()}: {c.clip(chk, 120)} · {c.clip(tail[0], 80)}"
+
+
 def cmd_evidence(args) -> int:
     project = c.need_project(args)
     if not project:
@@ -162,6 +193,16 @@ def cmd_evidence(args) -> int:
         if not r.get("passes_when"):
             print(f"{r['id']}: cannot mark done without a 'passes when'")
             return 1
+        # A line whose check is a command is done only when that command passes
+        # now: typed evidence alone let a wrong claim through in the first live trial.
+        ran = run_line_check(project, r)
+        if ran is not None:
+            ok, line = ran
+            if not ok:
+                print(f"{r['id']}: not marked done; its check failed — {line}")
+                save(project, rows)
+                return 1
+            r["evidence"] = [e for e in r["evidence"] if not e.startswith("check exit ")] + [line]
         r["status"] = "done"
         r["done"] = c.today()
     save(project, rows)
@@ -206,6 +247,12 @@ def cmd_check(args) -> int:
         return 1
     rows = load(project)
     probs = problems(rows)
+    if getattr(args, "run", False):
+        for r in rows:
+            if r.get("status") == "done":
+                ran = run_line_check(project, r)
+                if ran is not None and not ran[0]:
+                    probs.append(f"{r['id']}: marked done but its check now fails — {ran[1]}")
     done = sum(r.get("status") == "done" for r in rows)
     if probs:
         print(f"requirements: {done}/{len(rows)} done with evidence; not finished:")
@@ -264,5 +311,6 @@ def register(sub) -> None:
     a.set_defaults(func=guarded(cmd_list))
     a = s.add_parser("check", help="exit non-zero while any line is unfinished")
     c.add_project_arg(a)
+    a.add_argument("--run", action="store_true", help="also re-run the check of every done line that is a command")
     a.set_defaults(func=guarded(cmd_check))
     p.set_defaults(func=guarded(cmd_list), project=None, open=False, limit=15)
