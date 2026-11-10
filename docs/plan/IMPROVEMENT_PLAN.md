@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 205 from 12 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, redteam, research-platform). Decisions: 172 do, 3 do in part, 0 reproduce first, 30 later.
+Findings in: 230 from 13 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, redteam, research-platform, templates-b). Decisions: 194 do, 3 do in part, 0 reproduce first, 33 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -140,6 +140,7 @@ Owns: `engine/common.py`, `engine/contract.py`, `engine/doctor.py`, `engine/budg
 | core-06 | should-fix | S | do | Boot, status, checkpoint and handover crash with a Python traceback when a manifest section is null or the wrong type |  |
 | core-09 | should-fix | M | do | Boot and the other commands disagree about the project: with two projects every command after boot says 'no managed project found', an exact --name loses to a substring, and in a brain-only session resume/chec… |  |
 | core-11 | should-fix | S | do | 'stale-brain' mode says 'write nothing to .brain/' but checkpoint, status and boot itself write there |  |
+| lead-04 | should-fix | S | do | Owner's instruction, 2026-11-10: the project repository carries everything a new chat needs to continue; make that folder explain itself |  |
 | performance-03 | should-fix | S | do | Every brain call costs about 240 ms in a fresh clone: no bytecode cache, and all 21 modules imported for any command |  |
 | quality-path-10 | should-fix | S | do | The secret scanner misses 13 of 20 common credential formats |  |
 | redteam-07 | should-fix | M | do | No secret scan before the brain commits and pushes; a key written into a note, evidence, NEEDS_YOU or a helper brief reaches the remote, and the patterns miss 13 of 19 common formats |  |
@@ -323,8 +324,14 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 | e2e-trial-07 | should-fix | M | do | Settling a hire nobody worked records a pass or fail for the template, and a failed settle is final but prints as if it had been run again |  |
 | instructions-09 | should-fix | S | do | A brief that is written but never delegated is settled by `close` as a failed hire against its template |  |
 | ml-planning-07 | should-fix | S | do | Running the test suite beside a managed project writes fake hire contracts into that project and fails from the second run on |  |
+| templates-b-02 | should-fix | M | do | Spanish requests reach the right template 40% of the time against 74% in English, and the golden set never tests it |  |
+| templates-b-06 | should-fix | S | do | Write-capable templates that fetch pages or read outside material never get the outside-content line |  |
+| templates-b-07 | should-fix | S | do | With no check command the brief throws away the template's own done check |  |
 | e2e-trial-12 | minor | S | do | The tickets file has two undocumented shapes: `hr staff` ignores `check` and reports "no acceptance command" |  |
 | owner-docs-13 | minor | S | do | "HR report" tells him to say "Consolidate" for hires that are already folded in |  |
+| templates-b-18 | minor | S | do | `hr staff` ignores a template's `role` and prices the helper on the wrong model |  |
+| templates-b-20 | minor | S | do | Nine planning templates carry a third pitfall that no helper ever sees |  |
+| templates-b-21 | minor | S | do | 38 of 200 method lines carry no reason, and the audit does not look |  |
 | e2e-trial-19 | idea | S | do | Idea: show what a template adds to the done condition before the lead delegates |  |
 | ml-planning-15 | idea | L | later | Idea: make the HR contract the unit of learning for model choice, calibration and drift | a redesign of what the learners learn from; the first step (sealed hires feed the model choice) is done under ml-planning-02 |
 
@@ -332,7 +339,26 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 
 Owns: `hr/rack`. New tests go in `tests/test_r4_j.py`.
 
-No findings yet.
+| Id | Severity | Size | Decision | Finding | Why later or in part |
+|---|---|---|---|---|---|
+| templates-b-01 | blocking | S | do | release-to-main-engineer: the template has a helper push to main by hand, outside `brain release` |  |
+| templates-b-03 | should-fix | M | do | Keywords made of function words and everyday verbs put a wrong template first on 19 of 40 plain requests (27 templates) |  |
+| templates-b-04 | should-fix | S | do | coverage-analyst, e2e-test-author, acceptance-test-designer: mutation edits to app code with no restore, and a done check that cannot see a mutant left in |  |
+| templates-b-05 | should-fix | S | do | All 18 templates on agents with no shell tell the helper that a command 'passes' (11 in these groups) |  |
+| templates-b-08 | should-fix | S | do | migration-planner: the method needs the running system, the base agent has no shell |  |
+| templates-b-09 | should-fix | S | do | session-handover-writer: an Opus writer is hired to do by hand what `brain handover` already does |  |
+| templates-b-10 | should-fix | S | do | canonical-facts-keeper, needs-you-composer, owner-computer-guide: script work and 150-word notes run on the Opus writer |  |
+| templates-b-11 | should-fix | S | do | premortem-redteam: 'three causes' against the agent file's 'about five', and generic keywords that hire Fable for ordinary requests |  |
+| templates-b-12 | should-fix | S | do | security-reviewer: the done check is met after three paths while the method asks for every input and all ten categories |  |
+| templates-b-13 | should-fix | S | do | agent-spec-writer: the done check requires evaluations the helper has no means to run |  |
+| templates-b-14 | minor | S | do | batch-article-rewriter, requirement-verifier, code-reviewer: the return asks for a full table inside a 200-word cap |  |
+| templates-b-15 | minor | S | do | Duplicate pair legal-research-analyst / legal-citation-verifier: keep both, separate the keywords |  |
+| templates-b-16 | minor | S | do | Three templates compare options and recommend one: architecture-decider, option-comparer, strategy-memo-writer |  |
+| templates-b-17 | minor | S | do | Keyword-overlap pairs: keep every template, sharpen the words (six pairs) |  |
+| templates-b-19 | minor | S | do | rollback-restorer is marked one-way-door although its own method makes the work undoable |  |
+| templates-b-22 | idea | M | later | Idea: the scout has no template, so bulk reading is hired at Opus prices | an idea outside this programme's bar; kept for the next one |
+| templates-b-23 | idea | S | later | Idea: templates that wrap a brain command should name the command | an idea outside this programme's bar; kept for the next one |
+| templates-b-24 | idea | M | later | Idea: trial the cheaper tier for mechanical read-only reviews (rubric-mapper, accessibility-auditor, secret-scanner) | an idea outside this programme's bar; kept for the next one |
 
 ### Package K: Instruction surface (CB-222)
 

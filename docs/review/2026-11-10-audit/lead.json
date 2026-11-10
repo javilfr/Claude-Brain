@@ -51,6 +51,23 @@
    "acceptance": "grep -q 'remote remove origin' method/brain-work.md; the package A tests for push_brain_records.",
    "effort": "S",
    "confidence": "high"
+  },
+  {
+   "id": "lead-04",
+   "title": "Owner's instruction, 2026-11-10: the project repository carries everything a new chat needs to continue; make that folder explain itself",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "engine/contract.py",
+    "contract/template/CLAUDE.stub.md",
+    "engine/state.py"
+   ],
+   "evidence": "The owner, in this session: \"You will save plenty of files in the other repo, the project repo, that will tell you that information. Do not save that in the main brain repo, because then we will just have many unrelated files with saved information there.\" `brain init` installs .brain/ (STATE.md, PLAN.md, DECISIONS.md, requirements.jsonl, project.json, memory/lessons.jsonl, ext/, log/), CLAUDE.md stub, STATUS.md and NEEDS_YOU.md, but nothing in the project says which file holds what, that the last chat may have saved on another branch, or which branch and commit a checkpoint was written on.",
+   "repro": "",
+   "proposed_fix": "(a) contract.py: init, adopt and migrate also write .brain/README.md, a map of at most 25 lines: what each file in .brain/ is for, who writes it, and how a new chat continues (run boot; if boot names a newer saved state on another branch, run `brain resume --adopt`; with no brain attached, read STATE.md, PLAN.md and HANDOVER.md). It is created only when missing, so existing projects keep theirs and the frozen fixtures still validate. (b) contract/template/CLAUDE.stub.md: one sentence in the managed block: the last chat may have saved its work on its own branch; boot says so and `brain resume --adopt` continues from it. Keep the stub under its 2,000-byte cap. (c) state.py: each checkpoint records the branch and short commit it was written on in STATE.md (two fields, read back by resume and boot, shown in the handover line), so the state says where it came from whichever branch it is read on. (d) Nothing about a project is written to the brain beyond what I-05 already allows (family and salted hashes in inbox records).",
+   "acceptance": "Tests: init writes .brain/README.md and a second init leaves an edited one alone; the three frozen fixtures still validate (tests/test_fixtures.py unchanged); the stub is under its cap and `brain budget` passes; a checkpoint on branch X records X and the commit, and resume prints them; the continuity rehearsal (core-20) passes.",
+   "effort": "S",
+   "confidence": "high"
   }
  ]
 }
