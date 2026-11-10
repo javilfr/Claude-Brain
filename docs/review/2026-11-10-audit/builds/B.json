@@ -1,0 +1,119 @@
+{
+ "package": "B",
+ "findings": [
+  {
+   "id": "core-06",
+   "status": "fixed",
+   "note": "common.manifest_problem now checks the type of every key the contract declares (sections, gate entries, release.branch, commands, tier) and returns one line with the fix; need_project refuses on it and boot prints it as PROBLEM. common.load_manifest returns a tidied copy (a wrong-typed section becomes empty) for callers that skip need_project; load_manifest(raw=True) is used where the manifest is written back (migrate, init --check). Before: AttributeError tracebacks in boot, status, checkpoint, handover, gate.",
+   "tests": "ManifestShapeTests.test_wrong_typed_manifest_sections_are_one_line_never_a_traceback, .test_inner_shapes_the_commands_rely_on_are_checked_too, .test_unknown_keys_and_a_valid_manifest_are_not_a_problem, .test_load_manifest_never_hands_out_a_wrong_typed_section, ContractTests.test_migrate_writes_back_every_key_as_it_found_it"
+  },
+  {
+   "id": "core-09",
+   "status": "partial",
+   "note": "Done in my files: one resolver, common.locate_project (used by need_project, resolve_project, validate, migrate, doctor --project). With several managed projects and no --project, BRAIN_PROJECT or folder hit every command prints '2 projects attached (shop, shop-admin): add --project <name> ...' and exits 1 (I chose refusing over silently using boot's choice: a write must not go to a guessed project, and it satisfies both core-09 and instructions-19). --project and BRAIN_PROJECT take a bare folder name, exact match first, then a unique substring (common.pick_named). Brain-only and unmanaged-repo cases have their own one-line message. Remains, all in package A's files: detect.detect(--name) still lets a substring beat an exact name and ignores an unknown name silently; boot does not pick a project named in the request; boot ignores BRAIN_PROJECT and the current folder; brain-only resume/checkpoint/handover (state.py, same as owner-docs-06).",
+   "tests": "ResolverTests.test_with_several_projects_every_command_says_so_and_names_them, .test_project_takes_a_bare_folder_name_and_exact_wins_over_a_longer_match, .test_pick_named_is_the_one_rule_for_a_spoken_project_name, .test_environment_and_current_folder_still_choose_the_project, .test_with_no_project_the_message_fits_what_is_attached"
+  },
+  {
+   "id": "core-11",
+   "status": "fixed",
+   "note": "Three layers in common.py: need_project raises StaleBrain (bin/brain prints the one line and exits 3) before any caller writes; write_text/write_json/write_jsonl/append_jsonl refuse any path inside a project with a newer contract (StaleBrain is an OSError, so recall's log and boot's session marker skip quietly); resolve_project returns None for a stale project so run, close, recall and hire carry on without it. init, adopt, validate, migrate also exit 3. Before: boot wrote recall.jsonl, checkpoint and status rewrote STATE.md and STATUS.md with exit 0.",
+   "tests": "StaleBrainTests.test_stale_brain_commands_write_nothing, .test_no_engine_write_reaches_a_project_with_a_newer_contract, .test_boot_with_a_stale_project_among_several_writes_nothing_to_it"
+  },
+  {
+   "id": "quality-path-10",
+   "status": "already-fixed",
+   "note": "Done by the lead before this package (common.SECRET_RULES, tests/test_r4_secrets.py, which still passes). Nothing redone.",
+   "tests": "tests/test_r4_secrets.py (lead's)"
+  },
+  {
+   "id": "redteam-07",
+   "status": "partial",
+   "note": "Pattern part: already fixed by the lead. B's own callers, done now: contract.validate (and so doctor --project, init, adopt) reports any file a checkpoint would commit (everything under .brain/ except cache/ and log/run/, plus NEEDS_YOU.md and STATUS.md) that holds a credential, naming file and kind, never the value; init and adopt refuse a credential in --check or --title before writing. Added common.secret_kind. Remains with the other owners: refusing at checkpoint --note and scanning before push_bookkeeping (A), req evidence (D), close --note (E), hr hire (I), masking in the run digest (C).",
+   "tests": "ContractTests.test_validate_finds_a_credential_in_any_file_a_checkpoint_would_commit, .test_init_refuses_a_title_that_holds_a_credential, .test_init_check_refuses_a_command_that_holds_a_credential, DoctorProjectTests.test_each_contract_fault_carries_the_fix_that_fits_it"
+  },
+  {
+   "id": "core-14",
+   "status": "partial",
+   "note": "Fixed, the five slips in my files: (1) adopt and init refuse the brain and any folder inside it, and adopt no longer says 'existing files untouched'; (4) budget.check enforces the 3,200-token total; (5) bin/brain names the failed module for any missing command instead of 'invalid choice'; (6) written files keep their mode or follow the umask (was always 0600) and .brain/.gitignore ignores .tmp-*; (8) cache.put prunes entries older than 30 days at most once a day. Remains in engine/state.py for package A: (2) last_run/project_cost glob picks by file name, counts the open-session marker and shows unknown usage as $0.00; (3) open_needs matches RESOLVED as a substring; (7) no lock around checkpoint's read-modify-write.",
+   "tests": "SmallSlipTests.test_total_cap_is_enforced_when_each_part_is_within_its_cap, .test_a_broken_module_is_named_for_any_of_its_commands, .test_written_files_respect_the_umask_and_keep_their_mode, .test_a_leftover_temp_file_is_not_offered_to_git, .test_the_cache_prunes_itself, ContractTests.test_adopt_and_init_refuse_the_brain_itself_and_folders_inside_it, .test_adopt_says_what_it_did_to_an_existing_handbook"
+  },
+  {
+   "id": "core-16",
+   "status": "partial",
+   "note": "As decided: the seeded fuzz test only. 60 fixed-seed mutations of project.json and STATE.md (wrong types, deleted keys, truncation, bad byte, conflict markers, whole-file junk) times boot, status, validate, checkpoint, resume, handover, req list, gate: no exception and at most 15 lines each. Before the fix it reported 4 crashes. validate also caps its list at 12 problems. The single project context refactor is deferred.",
+   "tests": "FuzzTests.test_no_core_command_ever_answers_with_a_traceback, ContractTests.test_validate_stays_short_however_broken_the_manifest_is"
+  },
+  {
+   "id": "core-18",
+   "status": "partial",
+   "note": "As decided: brain validate prints one 'note:' line naming privacy.share_lessons and paths.evidence when a manifest sets them away from the defaults (I print it only then, not on every validate, to keep a default project at one line). contract/COMPATIBILITY.md now lists the reserved keys. No behaviour change: share_lessons 'none' is still not honoured; never_touch is package C's.",
+   "tests": "ContractTests.test_validate_names_reserved_keys_that_were_set_but_are_not_read"
+  },
+  {
+   "id": "core-19",
+   "status": "fixed",
+   "note": "brain doctor --project [path or name]: read-only preflight, one 'FAIL <what>: <fix>' line per problem, at most 8, exit 1; one ok line otherwise. Checks: stale brain, manifest shape, contract.validate, damaged byte or conflict markers in project.json, STATE.md, requirements.jsonl, git missing, not a repository, no author identity, no remote origin, detached HEAD, work on the release branch under main-on-green or pr, branch never pushed, unpushed commits. Plain brain doctor is unchanged. Not done because decision 8 left it out and the code is package A's: boot running the preflight when something changed, and the 'newer checkpoint on another branch' check.",
+   "tests": "DoctorProjectTests (6 tests): test_a_healthy_project_is_one_ok_line, test_project_preflight_names_each_fault_and_its_fix, test_preflight_covers_the_release_branch_unpushed_work_and_damaged_files, test_each_contract_fault_carries_the_fix_that_fits_it, test_preflight_says_which_project_when_it_cannot_tell, test_plain_doctor_stays_as_it_is"
+  },
+  {
+   "id": "e2e-trial-15",
+   "status": "fixed",
+   "note": "As decided (decision 9): brain init <path> --check \"<command>\" fills commands.check_fast, commands.check_full and the checks gate, validates, and prints one line ending in 'valid'. Running it twice changes nothing; it fills an empty command in an existing project, never replaces a command already set (it says 'kept'), and leaves a damaged manifest alone. The finding's wider proposal (seed a root .gitignore, commit the files) was not in the decision and is not done.",
+   "tests": "ContractTests.test_init_with_check_finishes_the_set_up_in_one_call, .test_init_check_fills_an_existing_empty_command_and_never_replaces_one, .test_init_check_refuses_a_command_that_holds_a_credential"
+  },
+  {
+   "id": "instructions-19",
+   "status": "fixed",
+   "note": "Same change as core-09: with two managed projects, req list (and every other command) prints '2 projects attached (a, b): add --project <name> to this command (boot shows the one it used)' and exits 1; with --project it lists that ledger.",
+   "tests": "ResolverTests.test_with_several_projects_every_command_says_so_and_names_them, .test_project_takes_a_bare_folder_name_and_exact_wins_over_a_longer_match"
+  },
+  {
+   "id": "core-02",
+   "status": "partial",
+   "note": "Validate side only, as decided: contract.validate reports a gate id used twice and an empty gate id as errors, in code; contract/v1.schema.json is untouched (frozen-hash test passes). The release-side refusal is package C's.",
+   "tests": "ContractTests.test_validate_refuses_a_gate_id_used_twice_and_an_empty_id"
+  }
+ ],
+ "suite": "Whole suite: \"Ran 451 tests in 44.269s\" / \"OK\" (415 before, 36 new in tests/test_r4_b.py). doctor: \"brain is healthy\" (exit 0). lint: \"lint: 0 error(s), 0 note(s) — instruction surface is consistent with the engine\" (exit 0). Also run: hr audit \"rack is sound\", items check \"141 items in 9 files, all valid\", eval audit \"12 tasks, 12 sound, 0 broken\", learn verify \"learned zone matches\".",
+ "head_commit": "0027c708e4fc1bc785d60280e968e2fc868fd883",
+ "existing_tests_changed": [
+  "tests/test_cache.py::CacheTest::test_prune_by_age (core-14, slip 8): its two puts 59 days apart assumed that a put never prunes, which is the slip. The automatic prune is switched off inside that test with mock.patch so it still tests prune() alone; its three assertions are unchanged."
+ ],
+ "new_commands_and_flags": [
+  "brain init <path> --check \"<command>\": fills commands.check_fast, commands.check_full and the checks gate (empty places only), validates, and says so in one line",
+  "brain doctor --project [path|folder name]: read-only preflight of the attached or named project (contract files and git setup); one 'FAIL <what>: <fix>' line per problem, exit 1; one ok line when ready",
+  "--project <folder name> on every command (and BRAIN_PROJECT): a bare name of a folder beside the brain is accepted, exact match first, then a unique substring",
+  "Exit code 3 with one line 'stale brain: ...' from every command that needs a project (checkpoint, status, resume, handover, req, gate, release, init, adopt, validate, migrate) when the project's contract is newer than the brain",
+  "brain validate: new errors for a gate id used twice, an empty gate id, and a credential in any file a checkpoint would commit; a 'note:' line for reserved keys set away from their defaults; at most 12 problems listed",
+  "brain budget (and doctor, lint through it): fails when always-loaded text passes 3,200 tokens in total",
+  "Python, engine/common.py: locate_project(explicit, brain_root) -> (project, why), pick_named, stale_brain, StaleBrain, manifest_shape, MANIFEST_SHAPE, load_manifest(project, raw=True), secret_kind",
+  "Python, engine/contract.py: set_check, secret_findings, reserved_note, RESERVED_KEYS; engine/doctor.py: project_checks; bin/brain: build() and main(argv, tree=None)"
+ ],
+ "cross_package": [
+  "Nothing was appended to a module I do not own. Files changed: bin/brain, contract/COMPATIBILITY.md, contract/template/NEEDS_YOU.md, engine/{common,contract,doctor,budget,cache}.py, tests/test_r4_b.py, and one existing test in tests/test_cache.py.",
+  "Package A, engine/detect.py (rest of core-09): in detect(), replace the --name rule with `hit = c.pick_named(named, [p for p, _ in sibs])` (exact name first, substring only when unique) and print 'no attached project matches \"<name>\"' when nothing fits; in mode choose pick the one project whose folder name occurs as a word in the request; start from c.locate_project() so boot honours BRAIN_PROJECT and the current folder as commands do; MODE_HELP['choose'] should add 'pass --project <name> to later commands'.",
+  "Package A, engine/detect.py (core-11 tidiness): mode 'choose' never looks at the contract version, so boot prints a normal project line for a contract-v2 project; any boot-time git change to the project (the D-17 fast-forward) should be skipped when c.stale_brain(project) is non-empty. Engine file writes there are already refused by common.",
+  "Package A, engine/state.py (core-14 slips 2, 3, 7): last_run/project_cost glob and unknown usage shown as $0.00; open_needs matching RESOLVED as a substring; no lock around checkpoint. The NEEDS_YOU template now tells the owner that `RESUELTO:` works, so open_needs must accept RESUELTO at line start or that sentence is untrue.",
+  "Package A, brain-only commands (owner-docs-06): need_project now prints 'no project attached (brain-only session): ...' itself, so the brain-only path must be chosen before need_project is called. resolve_project also returns None when several projects are attached or the project is stale, so 'None' alone does not mean brain-only; c.locate_project(...)[1] says which.",
+  "All packages: need_project no longer prints 'no managed project found (attach one, or run: brain init <path>)'. A new test elsewhere that asserts that text needs the new wording. engine/learn.py line 1429 (package F) still prints the old sentence by hand; it should print c.locate_project(...)[1].",
+  "All packages: common.load_manifest returns a tidied copy. Code that writes a manifest back must read it with load_manifest(project, raw=True); today only contract.py does that.",
+  "All packages: write_text, write_json, write_jsonl and append_jsonl raise common.StaleBrain (an OSError) for a path inside a project with a newer contract; need_project raises it too, and bin/brain turns it into one line and exit 3. A direct call of a cmd_* function on a stale project raises instead of returning.",
+  "Packages C, E, I, F (commands that use resolve_project: run, close, hr, recall, learn note, route): with several projects attached and no --project they still run without a project and do not say so (close then writes no run record). Each owner can print c.locate_project(args.project)[1] in that case.",
+  "Package C: load_manifest now drops gate entries that are not objects, so run_gates and green_at_head never meet one. validate refuses a gate id used twice; the release-side refusal is still C's.",
+  "Package H: cache.put prunes old entries by itself once a day; repomap needs no change.",
+  "Lead, not in the decisions and not done: for a project created with --language es, init still writes the first STATUS.md and the NEEDS_YOU.md header in English (contract.py and contract/template are mine; A's generated STATUS.md does not cover the NEEDS_YOU header, which is written once)."
+ ],
+ "instruction_notes": [
+  ".claude/skills/brain-new/SKILL.md: '- `BRAIN validate` afterwards. Fill the rest of `.brain/project.json`: commands, gates, live address if known.' -> init now validates what it wrote and says so in its one line; with --check it fills the commands and the checks gate, so only the live address and extra gates are left to fill by hand.",
+  ".claude/skills/brain-new/SKILL.md: 'Empty repo: `BRAIN init <path> --family F --title \"T\" --release R --language L`' -> add `--check \"<command>\"`.",
+  ".claude/skills/brain-start/SKILL.md: '`choose`: boot picked the most recently active project; continue with it unless his message names another.' -> add that every later command needs `--project <folder name>`: the engine does not guess, it names the attached projects and stops.",
+  ".claude/skills/brain-start/SKILL.md: '`stale-brain`: write nothing to `.brain/` and tell the owner the brain needs updating.' -> still right; now enforced: commands print one 'stale brain' line and exit 3.",
+  "CLAUDE.md: 'If something in the brain seems broken, run `BRAIN doctor`.' -> a skill (brain-start or brain-new) should mention `BRAIN doctor --project` for a project's contract and git setup; CLAUDE.md itself only if the byte budget allows.",
+  "docs/MASTER_PLAN.md line 239: 'Several | choose | The one you named; otherwise the most recently active; otherwise one question' -> only boot uses the most recently active project; later commands need --project.",
+  "docs/ENGINE_SPEC.md, 'Rules for every module': add that a command which needs a project calls common.need_project and one that can work without calls common.resolve_project (both decide through locate_project); that manifests are read with load_manifest and written back from load_manifest(raw=True); and that the write helpers refuse a project on a newer contract (StaleBrain, exit 3).",
+  "docs/EXECUTION_PLAN.md I-03 'total <= 3,200 est. tokens ... Enforced by `brain budget`, `brain lint`' -> was untrue for the total (only a test asserted it); it is true now, no rewording needed.",
+  "OWNER_GUIDE.md line 44: 'add **RESOLVED:** to an item' -> may add 'or **RESUELTO:**' once package A's reader accepts it; the project NEEDS_YOU template already says so.",
+  "engine/detect.py MODE_HELP['choose'] (printed text, package A): 'several projects attached: use the one the owner named' -> add 'and pass --project <name> to later commands'."
+ ],
+ "remaining": "Everything in the packet that lives in my files is done, committed on r4/b (7 commits, tree clean) and green. Not done, with the reason: (1) core-09's boot side (--name exact match, unknown name said out loud, project named in the request, BRAIN_PROJECT and current folder at boot) and brain-only resume/checkpoint/handover: engine/detect.py and engine/state.py are package A's; the shared rule is ready as common.pick_named and common.locate_project. (2) core-14 slips 2, 3 and 7: engine/state.py. (3) redteam-07 at the points of entry outside my files (checkpoint --note, push scan, req evidence, close --note, hr hire, run digest). (4) core-16 refactor and core-18 behaviour: deferred by the plan. (5) core-19 boot integration and e2e-trial-15's root .gitignore seed and commit: left out by decisions 8 and 9. (6) Spanish first-time STATUS.md and NEEDS_YOU header at init: not in the decisions. Unproven: how the fuzz test and the stale-brain tests behave against package A's rewritten boot, checkpoint and handover; they ran only against this branch's state.py and detect.py."
+}
