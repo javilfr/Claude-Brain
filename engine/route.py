@@ -7,21 +7,13 @@ Three pieces, each the cheapest method that is exact enough
   task, 2 project, 3 programme) and name its family and task class. Over-process
   is the main waste, so the rules lean low: a question or a small edit is
   never sized 2 or 3, and a doubt between two sizes resolves to the smaller.
-- ``suggest``: the model and effort for a role. Defaults come from
-  memory/models.json; once a task class has enough recorded outcomes, Thompson
-  sampling picks the option with the lowest expected cost per success among
-  those whose sampled pass rate is close to the best (the learning part).
+- ``suggest``: the model and effort for a role, delegated to
+  ``engine/mlearn.suggest_arm`` over ``stats/ml.json``: the role default from
+  memory/models.json until enough checked outcomes exist, then hierarchical
+  discounted Thompson sampling restricted to safe arms (I-10).
 - ``assign``: one option per task maximising quality within a budget, solved
   exactly by dynamic programming (a multiple-choice knapsack). ``cheap_first``
   is the cascade rule: try the cheaper option first only when it pays.
-
-``stats/routing.json`` shape (written by ``learn apply``)::
-
-    {"classes": {"<task_class>": {"<model>/<effort>": {"pass": 9, "fail": 2,
-                                                         "tokens": 812000, "cost": 4.1}}}}
-
-``tokens`` and ``cost`` are totals over the recorded outcomes; ``cost`` (list
-price) is preferred when present. A top level without ``classes`` is accepted.
 """
 from __future__ import annotations
 
@@ -29,12 +21,10 @@ import json
 import random
 import re
 import unicodedata
-from pathlib import Path
 
 from . import common as c
+from . import mlearn
 
-MIN_OUTCOMES = 8
-NEAR_BEST = 0.05
 TIER_NAMES = {0: "0 answer", 1: "1 small task", 2: "2 project", 3: "3 programme"}
 
 
@@ -348,61 +338,17 @@ def classify(request: str, manifest: dict | None = None) -> dict:
 
 
 # ---------------------------------------------------------------- suggest
-def load_models(brain_root: Path | None = None) -> dict:
-    return c.read_json(Path(brain_root or c.BRAIN_ROOT) / "memory" / "models.json", {}) or {}
-
-
-def load_stats(brain_root: Path | None = None) -> dict:
-    return c.read_json(Path(brain_root or c.BRAIN_ROOT) / "stats" / "routing.json", {}) or {}
-
-
-def _price(model: str, cfg: dict) -> float:
-    """List price of a million output plus a million input tokens: a relative
-    cost when outcomes carry no token or cost totals."""
-    for mid, m in cfg.get("models", {}).items():
-        if model in (mid, m.get("alias")):
-            return float(m.get("in", 0)) + float(m.get("out", 0))
-    fb = cfg.get("fallback_price", {})
-    return float(fb.get("in", 4.0)) + float(fb.get("out", 20.0))
-
-
-def suggest(task_class: str, role: str = "lead", stats: dict | None = None, models_cfg: dict | None = None,
+def suggest(task_class: str, role: str = "lead", family: str = "software", risk: str | None = "standard",
+            tier: int | None = 1, has_check: bool = False, state: dict | None = None, cfg: dict | None = None,
             seed: int | None = None) -> dict:
-    """{model, effort, basis} for a role on a task class.
+    """{model, effort, explored, propensity, basis} for a role on a task.
 
-    Thompson sampling: each option's pass rate is drawn from Beta(pass+1,
-    fail+1); among options whose draw is within 0.05 of the best draw, the one
-    with the lowest expected cost per success (mean cost / drawn rate) wins.
-    The randomness is what keeps trying near-equal options so the table keeps
-    learning; a seed makes the draw reproducible."""
-    cfg = models_cfg if models_cfg is not None else load_models()
-    default = cfg.get("roles", {}).get(role) or cfg.get("roles", {}).get("lead") or {"model": "opus", "effort": "medium"}
-    table = (stats or {}).get("classes", stats or {}).get(task_class, {}) if isinstance(stats, dict) else {}
-    options = []
-    for key, rec in (table.items() if isinstance(table, dict) else []):
-        key = key.replace("|", "/")  # the learning pipeline writes "model|effort"
-        if not isinstance(rec, dict) or "/" not in key:
-            continue
-        p, f = int(rec.get("pass", 0) or 0), int(rec.get("fail", 0) or 0)
-        if p + f < MIN_OUTCOMES:
-            continue
-        model, effort = key.split("/", 1)
-        total = rec.get("cost") or rec.get("tokens")
-        mean = float(total) / (p + f) if total else _price(model, cfg)
-        options.append((key, model, effort, p, f, mean))
-    total_n = sum(o[3] + o[4] for o in options)
-    if len(options) < 2:
-        seen = sum(int(r.get("pass", 0) or 0) + int(r.get("fail", 0) or 0) for r in table.values() if isinstance(r, dict)) \
-            if isinstance(table, dict) else 0
-        return {"model": default["model"], "effort": default["effort"],
-                "basis": f"default ({seen} outcomes; learning starts at {MIN_OUTCOMES} per option for two options)"}
-    rng = random.Random(seed)
-    draws = [(rng.betavariate(p + 1, f + 1), key, model, effort, mean) for key, model, effort, p, f, mean in sorted(options)]
-    top = max(d[0] for d in draws)
-    near = [d for d in draws if d[0] >= top - NEAR_BEST]
-    best = min(near, key=lambda d: (d[4] / max(d[0], 1e-6), d[1]))
-    return {"model": best[2], "effort": best[3],
-            "basis": f"Thompson sampling on {total_n} outcomes over {len(options)} options"}
+    All learning lives in engine/mlearn.py; this wrapper only supplies the
+    stored state and config and a seeded generator, so a seed reproduces the
+    choice (I-13). Without a verifying check the answer is the role default."""
+    cfg = cfg if cfg is not None else mlearn.config()
+    state = state if state is not None else mlearn.load()
+    return mlearn.suggest_arm(state, cfg, task_class, family, role, risk, tier, has_check, random.Random(seed))
 
 
 def cheap_first(p_cheap: float, c_cheap: float, c_verify: float, c_strong: float) -> bool:
@@ -491,13 +437,14 @@ def cmd_route(args) -> int:
     manifest = c.load_manifest(proj) if proj and c.is_managed(proj) else {}
     res = classify(args.request, manifest)
     role = lead_role(res)
-    sug = suggest(res["task_class"], role, load_stats(), load_models(), seed=args.seed)
+    sug = suggest(res["task_class"], role, res["family"], args.risk, res["tier"], args.check, seed=args.seed)
     res.update(role=role, **sug)
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
         return 0
+    kind = f"exploration, p={sug['propensity']}" if sug["explored"] else "not an exploration"
     print(f"size {TIER_NAMES[res['tier']]} | {res['family']} | {res['task_class']} | {role}: {sug['model']} {sug['effort']}")
-    print(f"why: {res['reason']}; model basis: {sug['basis']}")
+    print(f"why: {res['reason']}; model basis: {sug['basis']}; {kind}")
     return 0
 
 
@@ -505,6 +452,9 @@ def register(sub) -> None:
     p = sub.add_parser("route", help="size a request and suggest the lead model and effort")
     p.add_argument("request")
     p.add_argument("--seed", type=int, help="seed for the Thompson draw (reproducible)")
+    p.add_argument("--risk", choices=("trivial", "standard", "high"), default="standard",
+                   help="high (release, security, migration, data deletion) never tries a cheaper model")
+    p.add_argument("--check", action="store_true", help="the task has a verifying check (needed to try a cheaper model)")
     p.add_argument("--json", action="store_true")
     c.add_project_arg(p)
     p.set_defaults(func=cmd_route)
