@@ -58,6 +58,11 @@ DEFAULT_CFG = {
     "probation": {"min_trials": 5, "lcb_below": 0.35},
     "overrun_flag": 1.5,
     "hire": {"min_material_tokens": 15000, "startup_tokens": 6000, "max_helpers": 4},
+    # CB-203 (evals/runs/2026-11-10-template-brief.jsonl): briefs from the
+    # automatically selected template did worse than plain briefs on 6 of 8
+    # paired tasks (verdict: revert). Until a paired run says otherwise, a
+    # selected template is shown as a candidate and used only when named.
+    "auto_template": False,
 }
 
 # Patterns a template or brief must not contain (hr/GUIDELINES.md, "Writing rules").
@@ -578,6 +583,8 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
             raise ValueError(f"no template '{template_id}' in the rack")
     else:
         chosen = select(task, rack, state, hc, family, risk, base_agent)
+        if not hc.get("auto_template", True):
+            chosen = []  # the candidates are still shown under "closest"
     t = chosen[0]["template"] if chosen else None
     agent = (t or {}).get("base_agent") or base_agent or ("builder" if family == "software" else "researcher")
     role = (t or {}).get("role") or ROLE_OF[agent]
@@ -799,7 +806,7 @@ def cmd_hire(args) -> int:
     if args.json:
         print(json.dumps(con, indent=2))
         return 0
-    tpl = con["template"] or "none fits: plain helper"
+    tpl = con["template"] or ("none named: plain brief" if not cfg_of().get("auto_template", True) else "none fits: plain helper")
     also = f" (also considered: {', '.join(con['runners_up'])})" if con["runners_up"] else ""
     print(f"hire {con['id']}: template {tpl}{also}")
     if con.get("closest"):
@@ -941,7 +948,8 @@ def cmd_staff(args) -> int:
             continue
         task = " ".join(str(t.get(k, "")) for k in ("title", "goal"))
         best = select(task, rack, state, hc, t.get("family"), t.get("risk"))
-        tpl = best[0]["template"] if best else None
+        tpl = best[0]["template"] if best and hc.get("auto_template", True) else None
+        cand = best[0]["id"] if best and tpl is None else ""
         agent = (tpl or {}).get("base_agent", "builder")
         model = ((models_cfg.get("roles") or {}).get(ROLE_OF[agent]) or {}).get("model", "sonnet")
         pay = wage(t.get("size") or (tpl or {}).get("size") or "M", model, (tpl or {}).get("id"), state, hc, models_cfg)
@@ -953,7 +961,7 @@ def cmd_staff(args) -> int:
             material = estimate_material(base, [str(f) for f in t.get("files") or []])
         go, _why = hire_or_not(material, bool(t.get("accept")), bool(t.get("parallel", str(t.get("id")) in overlapping)), hc)
         why_not[str(t.get("id"))] = c.clip(_why.split(":")[0], 60)
-        rows.append((str(t.get("id")), (tpl or {}).get("id") or "plain", agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
+        rows.append((str(t.get("id")), (tpl or {}).get("id") or ("plain (candidate " + cand + ")" if cand else "plain"), agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
         total += pay["tokens"] if go else 0
     if not rows:
         print("no open ticket to staff")

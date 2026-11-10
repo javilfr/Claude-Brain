@@ -37,6 +37,12 @@ def tpl(tid, **over):
 
 
 class Base(unittest.TestCase):
+    def auto_on(self):
+        """Turn on automatic template choice (off by default since CB-203) for tests of selection itself."""
+        cfg = c.read_json(self.b / "memory" / "ml_config.json")
+        cfg.setdefault("hr", {})["auto_template"] = True
+        c.write_json(self.b / "memory" / "ml_config.json", cfg)
+
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.b = Path(self._tmp.name) / "Claude-Brain"
@@ -268,6 +274,7 @@ class Contracts(Base):
         return p
 
     def test_hire_writes_contract_and_brief_and_settle_records_real_use(self):
+        self.auto_on()
         p = self.project()
         con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="true", family="software", task_class="software.ui")
         self.assertEqual(con["template"], "phone-ui-builder")
@@ -330,6 +337,16 @@ class Contracts(Base):
         self.assertEqual((con["template"], con["base_agent"]), ("code-reviewer", "reviewer"))
         with self.assertRaises(ValueError):
             hr.hire("x", brain_root=self.b, template_id="nope")
+
+    def test_selected_template_is_shown_not_used_by_default(self):
+        # CB-203: auto-selected template briefs lost to plain briefs on 6 of 8 paired tasks
+        proj = self.project()
+        con = hr.hire("Review this branch for bugs before release", brain_root=self.b, project=proj, check="true")
+        self.assertIsNone(con["template"])
+        self.assertIn("code-reviewer", con["closest"])
+        con = hr.hire("Review this branch for bugs before release", brain_root=self.b, project=proj,
+                      check="true", template_id="code-reviewer")
+        self.assertEqual(con["template"], "code-reviewer")
 
     def test_template_none_forces_a_plain_brief(self):
         # The plain arm of a template-versus-plain comparison (CB-203), or a job no template fits
@@ -504,6 +521,7 @@ class ReviewFindings(Base):
 
     def test_one_malformed_template_does_not_break_hiring_and_the_audit_reports_it(self):
         """S8."""
+        self.auto_on()
         bad = [{"when": "no id at all"}, {"id": "int-keys", "base_agent": "builder", "name": "x", "when": "x", "role_line": "x", "keywords": [1, 2], "method": ["a"], "families": ["software"]}, "not an object"]
         (self.b / "hr" / "rack" / "broken.jsonl").write_text("".join(json.dumps(x) + "\n" for x in bad))
         con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=self.project(), check="true")
@@ -519,6 +537,7 @@ class ReviewFindings(Base):
 
     def test_template_role_sets_the_model_tier_and_risk_is_never_lowered(self):
         """S9 and m10: read-only work can run on the reviewer agent at a cheaper tier; a template's risk counts."""
+        self.auto_on()
         rack = self.rack + [tpl("repo-map", name="Repo Mapper", group="discovery", base_agent="reviewer", role="researcher", risk="high",
                                 keywords=["map", "repo", "unfamiliar", "entry", "structure"], when="An unfamiliar repo must be mapped before a change.")]
         c.write_jsonl(self.b / "hr" / "rack" / "all.jsonl", rack)

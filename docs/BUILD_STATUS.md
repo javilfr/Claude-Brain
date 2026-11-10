@@ -195,3 +195,16 @@ Open, with reasons: drift lines are written as "Default: …" although no source
 | Scout tier | used plain, without a template, for bulk read-only extraction; written into `hr/GUIDELINES.md` |
 | Forged inbox records | not fixed: anyone who can push to the brain can write a record, and no key survives an ephemeral container to sign one. Integrity rests on who can push (a private repository) and on consolidation showing what it read. Left open |
 | M16, M17, M22 | not in this ticket's list; unchanged |
+
+### CB-203 A/A run and the first paired evaluation of HR templates
+
+Pre-registered (`evals/prereg/aa-plain-brief.json`, `evals/prereg/template-brief.json`, committed in d1f00ed before any trial). Eight dev tasks, a clean folder per trial (`brain eval setup`, new), the same builder agent on Sonnet at medium effort in every arm, both arms of a task run at the same moment, graded by `brain eval grade`, tokens from each helper's own usage.
+
+| Run | Result (`brain eval compare`) |
+|---|---|
+| A/A, plain brief against plain brief (`evals/runs/2026-11-10-aa-plain-brief.jsonl`) | 8 pairs: 5 wins, 2 losses, 1 tie; tokens differ by about 0%; verdict **not proven** (sign test p 0.23), as an A/A run should be. Per-task token noise up to about 5%. One plain trial failed a grader that wanted the exact words "6 crossings" in a correct memo ("6 winter ferry crossings") |
+| Template brief (the selector's first choice) against plain brief (`evals/runs/2026-11-10-template-brief.jsonl`) | 8 pairs: 2 wins, 6 losses; 1% more tokens; template arm passed 7 of 8, plain 8 of 8; verdict **revert** (P(worse) 0.91 ≥ 0.80) |
+
+Why: the selector chose a template for 5 of 8 tasks and none fitted (`copy-editor` for a code fix, `ticket-slicer` for sizing, `back-translation-checker` for a translation). Helpers mostly noticed and followed the task line; the read-only translation checker did not write the translation at all. About 10,500 of each helper's roughly 11,000 tokens are a fixed start-up cost, so on tasks this small a brief can only move the rest.
+
+What changed: per the verdict, `hr hire` no longer uses an automatically chosen template. It lists the candidates and uses one only when the lead names it (`hr.auto_template`, default false; tests of selection turn it on). `CLAUDE.md` rule 4 and the brain-build skill say so. What is not known: whether a *correctly named* template beats a plain brief; that needs a run where the lead names templates, on tasks large enough for the method to matter. The grader false negative is recorded, not changed mid-run.

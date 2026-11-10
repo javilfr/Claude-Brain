@@ -13,9 +13,9 @@ A helper starts cold, so hire one only for work that is self-contained, bulky ne
 
 `BRAIN hr hire "<the goal, as an outcome>" --why "<reason and who uses it>" --owns <path> --input <file to read first> --check "<acceptance command>" [--parallel] [--material-tokens <rough size>]`
 
-It answers "do not hire" when the work is small or has no check. Otherwise it picks the best of the 100 templates in the rack for the task, the model and effort (from learned results, with safe defaults), and a token wage, and writes the full brief to a file. Delegate exactly as its last line says: the named agent, model and effort, with the one-line message pointing at the brief. Do not retype the brief; that pointer is the saving. No two running helpers own the same file, and at most four run at once.
+It answers "do not hire" when the work is small or has no check. Otherwise it lists the closest of the 100 templates in the rack (a template is used only when named: in a paired test, automatically chosen templates did worse than plain briefs on 6 of 8 tasks), picks the model and effort (from learned results, with safe defaults), and a token wage, and writes the full brief to a file. Delegate exactly as its last line says: the named agent, model and effort, with the one-line message pointing at the brief. Do not retype the brief; that pointer is the saving. No two running helpers own the same file, and at most four run at once.
 
-Add `--also "<constraint, with its reason>"` for anything only this task needs. If no template fits, HR says so and writes a plain brief. `BRAIN hr rack --search "<task>"` shows candidates; `--template <id>` forces one.
+Add `--also "<constraint, with its reason>"` for anything only this task needs. Without `--template` the brief is plain. Name a candidate with `--template <id>` only when its role line describes this exact job; `BRAIN hr rack --id <id>` shows it.
 
 When the helper returns, `BRAIN hr settle` runs the acceptance command itself and compares real token use with the wage (`BRAIN close` also settles whatever is still open). A failed check goes back to the same helper once with the failing output, then up one step in the escalation order in `memory/models.json`.
 
