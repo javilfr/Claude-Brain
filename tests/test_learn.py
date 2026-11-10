@@ -415,7 +415,7 @@ class ApplyTest(BrainCase):
         self.assertFalse(learn.apply_delta(bad, self.root)[0])
         c.write_jsonl(self.root / "memory/items.jsonl", [item(f"pb-item-{i:02d}") for i in range(3)])
         # redteam-04: a delta file can add only a candidate, so the new item is one.
-        add = learn.make_delta([{"op": "ADD", "file": "memory/items.jsonl", "item": item("pb-new-one", status="candidate")}])
+        add = learn.make_delta([{"op": "ADD", "file": "memory/items.jsonl", "item": item("pb-new-one", status="candidate", provenance="note:s1")}])
         ok, lines = learn.apply_delta(add, self.root, budget=3)
         self.assertFalse(ok)
         self.assertIn("budget", lines[0])
@@ -673,8 +673,9 @@ class PathTraversalTest(BrainCase):
         # redteam-04: a delta file adds candidates; the playbook line shows in
         # the rendered page once it is on probation.
         ok, lines = learn.apply_delta(learn.make_delta([
-            {"op": "ADD", "file": "memory/items.jsonl", "item": item("lsn-one", status="candidate")},
-            {"op": "ADD", "file": "playbooks/software.jsonl", "item": item("pb-one", type="playbook", status="candidate")},
+            {"op": "ADD", "file": "memory/items.jsonl", "item": item("lsn-one", status="candidate", provenance="note:s1")},
+            {"op": "ADD", "file": "playbooks/software.jsonl",
+             "item": item("pb-one", type="playbook", status="candidate", provenance="note:s1")},
             {"op": "SET_STATUS", "id": "pb-one", "status": "probation"}]), self.root)
         self.assertTrue(ok, lines)
         self.assertIn("pb-one", (self.root / "playbooks" / "software.md").read_text())
@@ -1035,11 +1036,12 @@ class CanonicalSeedTest(unittest.TestCase):
         # redteam-04: items enter as candidates, and an item under owner/ only
         # in a delta built by a command that checked the owner's words.
         proof = {"session": "s", "turn": "2026-11-10T10:00:00Z", "start": 0, "len": 20, "sha": "0123456789ab"}
-        targets = {"memory/items.jsonl": item("lsn-new-one", status="candidate"),
+        new = {"status": "candidate", "provenance": "note:s1"}
+        targets = {"memory/items.jsonl": item("lsn-new-one", **new),
                    "memory/facts.jsonl": item("fact-new-one", "The test fact is about a priced model", type="fact",
-                                              trust="external", source="https://example.test/x", status="candidate"),
+                                              trust="external", source="https://example.test/x", **new),
                    "owner/preferences.jsonl": item("pref-new-one", type="preference", evidence=[OWNER_EV]),
-                   fam: item("pb-new-one", type="playbook", status="candidate")}
+                   fam: item("pb-new-one", type="playbook", **new)}
         before = {rel: (tmp / rel).read_text(encoding="utf-8").splitlines() for rel in targets}
         ops = [{"op": "ADD", "file": rel, "item": it, **({"owner": proof} if rel.startswith("owner/") else {})}
                for rel, it in targets.items()]

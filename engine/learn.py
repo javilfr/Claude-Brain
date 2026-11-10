@@ -709,6 +709,12 @@ def fact_keys(text: str) -> set[str]:
     return keys
 
 
+def says_the_same(a: str, b: str, fact: bool) -> bool:
+    """Two texts about the same subject agree: the same polarity and, for
+    facts, the same numbers and names."""
+    return negative(a) == negative(b) and (not fact or fact_keys(a) == fact_keys(b))
+
+
 def learned(row: dict) -> bool:
     """True for a rule or pitfall a session's note created. Only these fade
     with disuse or are demoted by outcomes; shipped knowledge (seed, derived,
@@ -875,6 +881,12 @@ class Workspace:
                 return (f"ADD: {it.get('id')} must enter as a candidate with trust observed or external, outside owner/ "
                         f"(it is {it['status']}, {it['trust']}, {it['type']}); the owner's words enter through "
                         "brain learn note --quote")
+            # A new item starts from nothing: credit, sessions and rank are
+            # earned afterwards, and it is a lesson from a note like any other.
+            if any(it[k] for k in ("helpful", "harmful", "uses")) or it["sessions"] not in (0, 1) \
+                    or it["importance"] > 2 or it["supersedes"] or not str(it["provenance"]).startswith("note:"):
+                return (f"ADD: {it.get('id')} must start as a note does: provenance note:<session>, no votes or uses, "
+                        "at most one session, importance 1 or 2, superseding nothing")
             return ""
         if kind == "OWNER_CONFIRM":
             return "" if auth else "OWNER_CONFIRM: needs the owner's words, checked by brain learn confirm --quote"
@@ -1509,23 +1521,22 @@ def _note_ops(ws: Workspace, rec: dict, at: str, fixed: dict, by_model: str, ids
         item["evidence"].append(f"outcome:{pit}")
 
     def same(row: dict) -> bool:
-        agree = negative(str(row.get("text", ""))) == negative(item["text"])
-        return agree and (not fact or fact_keys(str(row.get("text", ""))) == fact_keys(item["text"]))
+        return says_the_same(item["text"], str(row.get("text", "")), fact)
 
-    best = None
-    for demoted in (False, True):  # a live item first; else a demoted one this note would revive
-        best_sim = -1.0
-        for rel, row in ws.all_items():
-            if (row.get("type") == "fact") != fact or row.get("valid_to") or \
-                    (row.get("status", "active") == "demoted") != demoted or row.get("status") == "retired":
-                continue
-            if not restates(item["text"], str(row.get("text", ""))) or (demoted and not same(row)):
-                continue
-            sim = jaccard(item["text"], str(row.get("text", "")))
-            if sim > best_sim or (sim == best_sim and row["id"] < best[1]["id"]):
-                best, best_sim = (rel, row), sim
-        if best:
-            break
+    # The item this note is about: one that says the same before one that
+    # says the opposite, a live one before a demoted one it would revive,
+    # then the closest in words.
+    best, best_key = None, None
+    for rel, row in ws.all_items():
+        if (row.get("type") == "fact") != fact or row.get("valid_to") or row.get("status") == "retired" \
+                or not restates(item["text"], str(row.get("text", ""))):
+            continue
+        demoted = row.get("status", "active") == "demoted"
+        if demoted and not same(row):
+            continue  # an opposite that is out of use is no conflict
+        key = (same(row), not demoted, jaccard(item["text"], str(row.get("text", ""))), [-ord(ch) for ch in row["id"]])
+        if best_key is None or key > best_key:
+            best, best_key = (rel, row), key
     if best is not None and same(best[1]):
         return _support_ops(ws, best[0], best[1], rec, verified)
     item["sessions"] = 1 if sid else 0
@@ -1545,8 +1556,10 @@ def _note_ops(ws: Workspace, rec: dict, at: str, fixed: dict, by_model: str, ids
         if against_owner:
             return [], f"changes a fact that is the owner's ({best[1]['id']}): only he can replace it"
         return ops + [{"op": "SUPERSEDE", "old": best[1]["id"], "new": item["id"]}], ""
-    if against_owner:
-        item["conflicts"] = [best[1]["id"]]  # one-sided: the owner's item is not touched
+    if against_owner or item.get("awaiting_owner"):
+        # One-sided: the owner's item is not touched, and a claim nobody
+        # checked cannot hold up the lesson it contradicts.
+        item["conflicts"] = [best[1]["id"]]
     else:
         ops.append({"op": "LINK", "a": item["id"], "b": best[1]["id"], "rel": "conflicts"})
     return ops, ""
@@ -2199,7 +2212,14 @@ def cmd_note(args) -> int:
     near = nearest_items(ws, rec["text"], fact, c.today())
     hit = next((row for _sim, _rel, row in near if restates(rec["text"], str(row.get("text", "")))), None)
     if hit is not None:
-        print(f"note recorded ({path.name}): it restates {hit['id']} and counts for it at the next consolidation")
+        if says_the_same(rec["text"], str(hit.get("text", "")), fact):
+            what = f"it restates {hit['id']} and counts for it at the next consolidation"
+        elif fact:
+            what = f"it differs from {hit['id']} and replaces it at the next consolidation"
+        else:
+            what = (f"it says the opposite of {hit['id']}: neither moves up until the owner settles it "
+                    "(brain learn confirm <the one he means> --quote)")
+        print(f"note recorded ({path.name}): {what}")
         return 0
     future = note_item(rec, c.today())["id"]
     if rec["trust"] == "owner-stated":

@@ -272,7 +272,21 @@ class HandWrittenDeltaTest(BrainCase):
             with self.subTest(label):
                 self.refused([{"op": "ADD", "file": rel, "item": new}], "ADD")
         ok, lines = learn.apply_delta(learn.make_delta([
-            {"op": "ADD", "file": "memory/items.jsonl", "item": item("lsn-new", status="candidate")}]), self.root)
+            {"op": "ADD", "file": "memory/items.jsonl", "item": lesson("lsn-new", status="candidate")}]), self.root)
+        self.assertTrue(ok, lines)
+
+    def test_a_hand_added_candidate_cannot_carry_its_own_credit(self):
+        """A candidate added by a delta file starts from nothing: no votes, no
+        sessions, no importance mark, no claim to replace a fact, and it is a
+        learned lesson like any other (it can fade)."""
+        base = dict(status="candidate", provenance="note:hand")
+        for label, extra in [("votes", {"helpful": 5}), ("sessions", {"sessions": 4}), ("uses", {"uses": 9}),
+                             ("importance", {"importance": 3}), ("supersedes", {"supersedes": ["fact-aa"]}),
+                             ("no note provenance", {"provenance": "docs/research/x.md"})]:
+            with self.subTest(label):
+                self.refused([{"op": "ADD", "file": "memory/items.jsonl", "item": item("lsn-new", **{**base, **extra})}], "ADD")
+        ok, lines = learn.apply_delta(learn.make_delta([
+            {"op": "ADD", "file": "memory/items.jsonl", "item": item("lsn-new", **base)}]), self.root)
         self.assertTrue(ok, lines)
 
     def test_a_forged_owner_proof_does_not_help_learn_apply(self):
@@ -681,7 +695,7 @@ class RobustnessTest(BrainCase):
 
     def test_demoted_items_do_not_count_against_the_budget(self):
         c.write_jsonl(self.root / "memory/items.jsonl", [item(f"lsn-item-{i}", status="demoted") for i in range(3)])
-        add = learn.make_delta([{"op": "ADD", "file": "memory/items.jsonl", "item": item("lsn-new", status="candidate")}])
+        add = learn.make_delta([{"op": "ADD", "file": "memory/items.jsonl", "item": lesson("lsn-new", status="candidate")}])
         ok, lines = learn.apply_delta(add, self.root, budget=1)
         self.assertTrue(ok, lines)
 
