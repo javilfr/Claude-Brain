@@ -208,3 +208,23 @@ Then, tuning on dev and the old held-out set only:
 The old misses are synonyms ("steal accounts" for the security reviewer), which no word-overlap change reaches. One candidate was fixed in advance (B + C, original weights, nothing fitted to a set) and measured once on the new set: **top 1 35, top 3 44, against 37 and 47**. It is below the ticket's bar (+3 points top 3), so **no change was kept**; verdict: not proven. A floor test now guards the new set (`test_selection_on_the_independent_held_out_set_does_not_get_worse`, top 3 ≥ 0.43).
 
 What this means for use: the word matcher is a shortlist, not a decision. On requests it was not written alongside, it surfaces the right template about half the time. Until selection improves, the lead should treat "closest by wording" as a suggestion and name a template with `--template` only when it reads right; a plain brief is the safe default. A selector that lets the lead model choose from a wider shortlist is the candidate for the next round; it needs the CB-203 evidence that templates help at all before it is worth building.
+
+### CB-206 Open review items
+
+| Item | Result | Test |
+|---|---|---|
+| M6 success output mixed the last lines of both streams | `run` captures one stream in write order | `test_run_keeps_full_output_in_a_file_and_prints_little` |
+| M8 repo map listed run logs and generated files | In a git repository the map takes only what git tracks or would track (`.gitignore` respected); `.brain/log/` never | `test_run_logs_and_git_ignored_files_are_not_mapped` |
+| M15 radar shutdown time | **Measured**: radar returned after 1.07 s but the process exited after 6.1 s (pool threads joined at exit). Checks now run on daemon threads: exit after 1.08 s | `test_a_slow_source_never_holds_the_process_open` (exit under 4 s for an 8 s fetch and a 0.5 s budget) |
+| M16 logs outside a project go to a temporary folder | Kept; now listed in `docs/ENGINE_SPEC.md` | — |
+| M18 two tunables inline | `learn.promote_multiplier` and `recall.floor` read from `memory/ml_config.json` (values unchanged: 1.0 and 0.15). The plan's "0.6" is on a probability scale; on the multiplier scale [0.7, 1.3] it would always pass, which the config's help text says | `test_tunables_are_read_from_ml_config` |
+| M19 lead field names | Spec now matches the code (`id` formula, `matched`) | — |
+| M20 radar state dirtied the tree daily | Split: `learning/radar/state.json` (hash, seen ids) is rewritten only on news; check times and validators go to git-ignored `learning/radar/checked.json`. Cost: a fresh container checks the radar once at boot (within its 4 s budget) | `test_a_check_with_no_news_leaves_the_tracked_state_untouched` |
+| M22 eval prompts mentioned the owner's trips | Three rows reworded to neutral subjects; tiers and classes unchanged | routing tests |
+| `staff` assumed every ticket ran in parallel | A ticket counts as parallel only if another open ticket shares no file and is not in its dependency chain; an explicit `parallel` still wins | `test_staff_derives_parallel_from_deps_and_files` |
+
+Left, with reasons:
+
+- **Forged inbox records** and **M17** (`close --has-check`, `--outcome`, `--explored` are declared by the model): anyone who can push to the brain can write any record, so no file-level signature with a key in the repository would help. The defence is in the pipeline: two-key promotion, the multiplier clamp (±30%), hire outcomes that come only from a check `settle` ran itself, and git history for audit. Accepted risk, stated here.
+- **A use for the scout tier**: no template needs a read-only agent without shell that the lead would not do faster itself; four read-only templates run on the reviewer agent at the cheaper tier. Revisit when `hr report` shows reading-only hires.
+- The M6, M8 and M15 changes went into commit `d815627` (labelled CB-204) because a broad `git add` took them along; their tests passed in that commit's gate.

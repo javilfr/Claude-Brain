@@ -40,7 +40,33 @@ from typing import Any, Callable
 from . import common as c
 
 SOURCES_FILE = "memory/radar_sources.json"
-STATE_FILE = "learning/radar/state.json"
+STATE_FILE = "learning/radar/state.json"      # tracked: content hash and seen ids, changes only with news
+CHECKED_FILE = "learning/radar/checked.json"  # git-ignored: when each source was last asked, and how it answered
+VOLATILE = ("last_checked", "last_status", "etag", "last_modified")
+
+
+def read_state(root: Path) -> dict:
+    """Tracked state with this machine's check times merged in."""
+    state = c.read_json(Path(root) / STATE_FILE, {})
+    state = state if isinstance(state, dict) else {}
+    checked = c.read_json(Path(root) / CHECKED_FILE, {})
+    for sid, v in (checked.items() if isinstance(checked, dict) else ()):
+        if isinstance(v, dict):
+            state.setdefault(sid, {})
+            if isinstance(state[sid], dict):
+                state[sid].update({k: x for k, x in v.items() if k in VOLATILE})
+    return state
+
+
+def write_state(root: Path, state: dict) -> None:
+    """Split the state: timestamps change every check and would dirty the brain
+    tree every day (review M20), so they go to a git-ignored file; the tracked
+    file is rewritten only when a source's content or seen ids changed."""
+    tracked = {sid: {k: x for k, x in v.items() if k not in VOLATILE} for sid, v in state.items() if isinstance(v, dict)}
+    volatile = {sid: {k: x for k, x in v.items() if k in VOLATILE} for sid, v in state.items() if isinstance(v, dict)}
+    if c.read_json(Path(root) / STATE_FILE, None) != tracked:
+        c.write_json(Path(root) / STATE_FILE, tracked)
+    c.write_json(Path(root) / CHECKED_FILE, volatile)
 USER_AGENT = "brain-radar/1.0"
 MAX_BYTES = 2_000_000          # response size cap: read no more than this
 REQUEST_TIMEOUT = 6.0          # seconds per request
@@ -503,7 +529,7 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     if trust:
         sources = [s for s in sources if s.get("trust") == trust]
     state_path = root / STATE_FILE
-    state = c.read_json(state_path, {})
+    state = read_state(root)
     state = {k: v for k, v in state.items() if k in ids and isinstance(v, dict)} if isinstance(state, dict) else {}
     stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
     timeout = min(REQUEST_TIMEOUT, max(1.0, float(max_seconds)))
@@ -561,7 +587,7 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     result["lines"] = [_line(p) for p in chosen]
 
     try:
-        c.write_json(state_path, state)
+        write_state(root, state)
         _write_leads(root, leads, when)
     except OSError as e:
         result["errors"].append(f"write failed: {type(e).__name__}")

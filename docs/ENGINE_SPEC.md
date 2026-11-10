@@ -23,7 +23,9 @@ The engine is the set of deterministic scripts behind `bin/brain`. Design is in 
 | `stats/ledger/YYYY-MM.jsonl` | `learn apply` (`APPEND_STAT`) | Append-only ledger |
 | `stats/ml.json` | `learn apply` (`ML_FOLD`, via `mlearn.fold`) | All statistical learning state; JSON with sorted keys |
 | `learning/inbox/*.jsonl` | any session, append-only | Zone `inbox` |
-| `learning/radar/**` | `brain radar` | Zone `state`: rewritten in a working session, not part of manifest replay |
+| `learning/radar/state.json` | `brain radar` | Zone `state`: content hash and seen ids per source; rewritten only when a source has news; not part of manifest replay |
+| `learning/radar/checked.json` | `brain radar` | Git-ignored: last check time, status and HTTP validators per source, so a check with no news leaves the tree clean |
+| `<tmp>/brain-run/*.log` | `brain run` outside a project | Logs of commands run with no managed project; a project's runs go to `.brain/log/run/` |
 | `learning/manifest.jsonl`, `learning/CHANGELOG.md`, `learning/deltas/`, `learning/digest/` | `learn apply`, `learn digest` | Audit trail |
 | `<project>/.brain/**` | contract, state, req, gate, ledger, recall modules | See `contract/v1.schema.json`; `.brain/log/recall.jsonl` is the injection log, `.brain/log/open-session.json` the unclosed-session marker |
 
@@ -56,7 +58,7 @@ Evidence (`learn note`), checked by script before anything is written; `learn no
 - A brain-bound note (scope `global` or `family:*`) whose text or evidence (other than `review:`) names a path or file, an id from `evals/known_project_ids.txt`, or the resolved project's manifest id, title or folder name is refused at `learn note` time and never written.
 
 At consolidation a note whose `owner:` evidence is not in the verified form, or an owner-stated note without it, is rejected, and so is a correction without it.
-- `kind: "lead"` (key: `url`) — written by the radar for every relevant new item (`--max`/`max_lines` caps only the printed lines): `source`, `trust` (`official`, `research`, `community`), `title`, `url`, `date`, `keywords`. A lead never changes memory; `learn status` counts unhandled official ones and consolidation lists them, then marks them handled with the rest of the file. `brain radar` and boot's radar do nothing when `BRAIN_NO_NETWORK` is set (`brain radar` prints one line saying so and exits 0).
+- `kind: "lead"` (key: `url`) — written by the radar for every relevant new item (`--max`/`max_lines` caps only the printed lines): `id` (the radar's stable item id: the first 12 hex digits of SHA-1 over source id and the feed's own item id), `source`, `trust` (`official`, `research`, `community`), `title`, `url`, `date`, `matched` (the source keywords the item matched, at most four). A lead never changes memory; `learn status` counts unhandled official ones and consolidation lists them, then marks them handled with the rest of the file. `brain radar` and boot's radar do nothing when `BRAIN_NO_NETWORK` is set (`brain radar` prints one line saying so and exits 0).
 
 Reading the inbox: each line is decoded on its own (`common.read_jsonl_counted`, `errors="replace"`), so a bad byte costs one line. `learn status` and `learn consolidate` report the number of unreadable lines; a file is marked handled only when every valid record read from it was processed, and a file that cannot be read stays pending.
 

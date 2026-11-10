@@ -190,7 +190,11 @@ RADAR_EVERY_HOURS = 24
 
 def radar_due(root: Path) -> bool:
     """True when no source has been checked in the last day."""
-    state = c.read_json(root / "learning" / "radar" / "state.json", {}) or {}
+    from . import radar
+    try:
+        state = radar.read_state(root)
+    except Exception:
+        return True
     sources = state.get("sources", state) if isinstance(state, dict) else {}
     stamps = [v.get("last_checked", "") for v in sources.values() if isinstance(v, dict)]
     if not stamps:

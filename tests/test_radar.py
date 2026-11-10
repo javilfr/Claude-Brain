@@ -97,7 +97,7 @@ class RadarCase(unittest.TestCase):
         return f
 
     def state(self):
-        return c.read_json(self.root / "learning" / "radar" / "state.json")
+        return radar.read_state(self.root)
 
     def inbox(self):
         rows = []
@@ -516,8 +516,18 @@ class Records(RadarCase):
         self.baseline()
         self.go(Fake("v2"))
         written = sorted(str(p.relative_to(self.root)) for p in self.root.rglob("*") if p.is_file())
-        self.assertEqual(written, ["learning/inbox/2026-11-10-radar.jsonl", "learning/radar/state.json",
-                                   "memory/radar_sources.json"])
+        self.assertEqual(written, ["learning/inbox/2026-11-10-radar.jsonl", "learning/radar/checked.json",
+                                   "learning/radar/state.json", "memory/radar_sources.json"])
+
+    def test_a_check_with_no_news_leaves_the_tracked_state_untouched(self):
+        """Review M20: every networked boot rewrote the tracked state file and dirtied the brain tree."""
+        self.baseline()
+        tracked = self.root / "learning" / "radar" / "state.json"
+        before = (tracked.read_bytes(), tracked.stat().st_mtime_ns)
+        self.go(Fake("v1"))  # same content again
+        self.assertEqual((tracked.read_bytes(), tracked.stat().st_mtime_ns), before)
+        self.assertNotIn("last_checked", json.dumps(c.read_json(tracked)))
+        self.assertTrue(all(v.get("last_checked") for v in self.state().values()))
 
     def test_determinism_with_fixed_now(self):
         outs, states = [], []

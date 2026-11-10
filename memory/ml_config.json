@@ -122,5 +122,13 @@
     "too_early": 5,
     "medium": 15,
     "high": 30
+  },
+  "learn": {
+    "_help": "Promotion threshold for learned items (engine/learn.py). The plan's 'tunable 0.6' refers to a lower-bound probability; mlearn.item_score is a multiplier in [0.7, 1.3] where 1.0 means no evidence either way, so on that scale 0.6 would always pass. 1.0 asks that the evidence not be negative.",
+    "promote_multiplier": 1.0
+  },
+  "recall": {
+    "_help": "Recall silence floor (engine/recall.py): items covering less of the query than this are not returned.",
+    "floor": 0.15
   }
 }

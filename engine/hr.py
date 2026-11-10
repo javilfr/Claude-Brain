@@ -889,6 +889,36 @@ def cmd_report(args) -> int:
     return 0
 
 
+def parallel_tickets(tickets: list[dict]) -> set[str]:
+    """Ids of open tickets that can run beside at least one other open ticket:
+    neither depends on the other (directly or through others) and they share
+    no file. Review minor item: staff used to assume every ticket ran in parallel."""
+    open_t = [t for t in tickets if isinstance(t, dict) and t.get("status") != "done" and t.get("id")]
+    deps = {str(t["id"]): {str(d) for d in t.get("deps", [])} for t in open_t}
+
+    def ancestors(tid: str, seen: set | None = None) -> set:
+        seen = set() if seen is None else seen
+        for d in deps.get(tid, ()):
+            if d not in seen:
+                seen.add(d)
+                ancestors(d, seen)
+        return seen
+
+    anc = {tid: ancestors(tid) for tid in deps}
+    files = {str(t["id"]): {str(f).rstrip("/") for f in t.get("files", [])} for t in open_t}
+
+    def clash(a: set, b: set) -> bool:
+        return any(x == y or x.startswith(y + "/") or y.startswith(x + "/") for x in a for y in b)
+
+    out = set()
+    for a in deps:
+        for b in deps:
+            if a != b and a not in anc[b] and b not in anc[a] and not clash(files[a], files[b]):
+                out.add(a)
+                break
+    return out
+
+
 def cmd_staff(args) -> int:
     """Plan the helpers for every open ticket in a plan file and total the payroll."""
     data = c.read_json(args.plan, None)
@@ -904,6 +934,7 @@ def cmd_staff(args) -> int:
     except Exception:
         state = {}
     total, rows = 0, []
+    side_by_side = parallel_tickets(data["tickets"])
     for t in data["tickets"]:
         if not isinstance(t, dict) or t.get("status") == "done":
             continue
@@ -913,7 +944,7 @@ def cmd_staff(args) -> int:
         agent = (tpl or {}).get("base_agent", "builder")
         model = ((models_cfg.get("roles") or {}).get(ROLE_OF[agent]) or {}).get("model", "sonnet")
         pay = wage(t.get("size") or (tpl or {}).get("size") or "M", model, (tpl or {}).get("id"), state, hc, models_cfg)
-        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), bool(t.get("parallel", True)), hc)
+        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), bool(t.get("parallel", str(t.get("id")) in side_by_side)), hc)
         rows.append((str(t.get("id")), (tpl or {}).get("id") or "plain", agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
         total += pay["tokens"] if go else 0
     if not rows:

@@ -55,7 +55,14 @@ CONTAINED = 0.8           # share of the shorter text's words found in the other
 CONTAIN_MIN_WORDS = 4     # containment is meaningless for very short texts
 MAX_EDIT_RATIO = 0.3      # EDIT_TEXT may change at most this share of an item
 MIN_EDIT_CHARS = 40       # and may not leave fewer characters than this
-PROMOTE_MULTIPLIER = 1.0  # mlearn.item_score needed for probation -> active
+PROMOTE_MULTIPLIER = 1.0  # default; tunable: memory/ml_config.json learn.promote_multiplier
+
+
+def promote_multiplier(root: Path) -> float:
+    """The item-score multiplier probation -> active needs (review M18: was inline only)."""
+    cfg = c.read_json(Path(root) / "memory" / "ml_config.json", {}) or {}
+    v = (cfg.get("learn") or {}).get("promote_multiplier", PROMOTE_MULTIPLIER) if isinstance(cfg, dict) else PROMOTE_MULTIPLIER
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else PROMOTE_MULTIPLIER
 DEMOTE_AFTER_DAYS = 90    # fallback when mlearn.retention is unavailable
 RETIRE_AFTER_DAYS = 90 + 180
 RETENTION_FLOOR = 0.15    # fallback for memory/ml_config.json retention.threshold
@@ -905,6 +912,7 @@ def _transitions(ws: Workspace, at: str, min_sessions: int) -> list[dict]:
     Conflicting items are never promoted; harm demotes, except what the owner
     stated (I-08)."""
     score = _item_scorer(ws)
+    need = promote_multiplier(ws.root)
     ops = []
     for _ in range(3):  # candidate -> probation -> active can happen in one pass
         moved = False
@@ -922,7 +930,7 @@ def _transitions(ws: Workspace, at: str, min_sessions: int) -> list[dict]:
             elif st == "candidate" and h >= 1:
                 new = "probation"
             elif st == "probation" and it["sessions"] >= min_sessions and (
-                    score is None or score(it) >= PROMOTE_MULTIPLIER):
+                    score is None or score(it) >= need):
                 new = "active"
             if new:
                 op = {"op": "SET_STATUS", "id": it["id"], "status": new}

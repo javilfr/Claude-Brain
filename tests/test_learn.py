@@ -201,6 +201,18 @@ class ConsolidateTest(BrainCase):
         self.assertTrue(all("path, file or project" in r for r in rejected[1:]))
         self.assertEqual(len(self.items()), 1)
 
+    def test_tunables_are_read_from_ml_config(self):
+        """Review M18: the promotion multiplier and the recall floor live in memory/ml_config.json."""
+        from engine import recall
+        root = Path(__file__).resolve().parents[1]
+        cfg = json.loads((root / "memory" / "ml_config.json").read_text())
+        self.assertEqual(learn.promote_multiplier(root), cfg["learn"]["promote_multiplier"])
+        self.assertEqual(recall.floor_from_config(root), cfg["recall"]["floor"])
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "memory").mkdir()
+            (Path(tmp) / "memory" / "ml_config.json").write_text('{"learn": {"promote_multiplier": 1.2}, "recall": {"floor": 0.3}}')
+            self.assertEqual((learn.promote_multiplier(Path(tmp)), recall.floor_from_config(Path(tmp))), (1.2, 0.3))
+
     def test_two_key_promotion(self):
         text = "Check the phone layout at 390 pixels before calling a screen done"
         self.inbox(note(text, session="s1"), outcome("s9"))  # mlearn now holds data

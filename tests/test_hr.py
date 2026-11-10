@@ -554,6 +554,14 @@ class ReviewFindings(Base):
             hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "M", "band_tokens": 1000, "actual_tokens": 1000})
         self.assertEqual(len(hr.hr_state(state)["ratios"]["_all"]), hr.DEFAULT_CFG["ratio_cap"])
 
+    def test_staff_derives_parallel_from_deps_and_files(self):
+        ts = [{"id": "A", "files": ["src/a.py"]}, {"id": "B", "deps": ["A"], "files": ["src/b.py"]},
+              {"id": "C", "files": ["src"]}, {"id": "D", "files": ["docs/d.md"], "deps": ["B"]},
+              {"id": "E", "files": ["x"], "status": "done"}]
+        # A -> B -> D is one chain; C shares src/ with A and B; only C and D can run side by side.
+        self.assertEqual(hr.parallel_tickets(ts), {"C", "D"})
+        self.assertEqual(hr.parallel_tickets([{"id": "solo", "files": ["f"]}]), set())
+
     def test_staff_and_report_run_end_to_end(self):
         plan = Path(self._tmp.name) / "plan.json"
         plan.write_text(json.dumps({"tickets": [

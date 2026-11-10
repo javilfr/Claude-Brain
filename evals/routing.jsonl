@@ -31,7 +31,7 @@
 {"text": "Go deep: which star tracker is best for a 400mm lens", "tier": 1, "class": "knowledge.research", "trigger": true}
 {"text": "a fondo: qué dice la ley sobre los contratos de alquiler", "tier": 1, "class": "knowledge.research", "trigger": true}
 {"text": "New project: a bird sighting app for my iPhone deployed on Vercel", "tier": 2, "family": "software", "trigger": true}
-{"text": "Nuevo proyecto: una base de conocimiento sobre Costa Rica", "tier": 2, "family": "knowledge", "trigger": true}
+{"text": "Nuevo proyecto: una base de conocimiento sobre jardinería", "tier": 2, "family": "knowledge", "trigger": true}
 {"text": "new project: plan the entire platform in phases with a roadmap", "tier": 3, "trigger": true}
 {"text": "What does this error mean?", "tier": 0, "class": "answer"}
 {"text": "which is better for this, a pwa or a native app?", "tier": 0, "class": "answer"}
@@ -71,7 +71,7 @@
 {"text": "research the best way to photograph the milky way from a dark site and write a report with sources", "tier": 2, "family": "knowledge", "class": "knowledge.research"}
 {"text": "build a searchable knowledge base from these PDFs", "tier": 2, "family": "knowledge"}
 {"text": "write a 3000 word essay on the history of Kyoto temples", "tier": 2, "family": "knowledge", "class": "knowledge.longform"}
-{"text": "Write the brochure for the Costa Rica trip as a PDF", "tier": 2, "family": "knowledge", "class": "knowledge.document"}
+{"text": "Write the brochure for the pottery course as a PDF", "tier": 2, "family": "knowledge", "class": "knowledge.document"}
 {"text": "audit my assignment against the rubric and give me a table of what's missing", "tier": 2, "family": "knowledge", "class": "knowledge.audit"}
 {"text": "translate the whole website to Spanish and Japanese", "tier": 2, "family": "language", "class": "language.translate"}
 {"text": "Traduce todo el libro al inglés", "tier": 2, "family": "language", "class": "language.translate"}
@@ -85,7 +85,7 @@
 {"text": "crea una presentación de 10 diapositivas sobre el proyecto", "tier": 2, "family": "knowledge", "class": "knowledge.document"}
 {"text": "quiero una aplicación para identificar plantas con la cámara", "tier": 2, "family": "software"}
 {"text": "write my cover letter for the job as a word document", "tier": 1, "family": "knowledge", "class": "knowledge.document"}
-{"text": "build the whole travel journal: phases, waves, everything, till it's done", "tier": 3, "family": "software"}
+{"text": "build the whole recipe journal: phases, waves, everything, till it's done", "tier": 3, "family": "software"}
 {"text": "plan a multi week roadmap for the legal counsel system", "tier": 3}
 {"text": "build the app, the backend api and the admin dashboard end to end", "tier": 3, "family": "software"}
 {"text": "construye la plataforma completa por fases", "tier": 3}
