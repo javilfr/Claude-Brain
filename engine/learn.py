@@ -18,6 +18,17 @@ Why it is built this way (MASTER_PLAN Part 6, ENGINE_SPEC, EXECUTION_PLAN 4.2):
   checkable, new, not about one project), and promotion to ``active`` needs
   two independent keys (round2/01 sections 3.4-3.5). Owner-stated items are
   never demoted, decayed or superseded by learning (I-08).
+- The owner's authority cannot be claimed by writing a file. A record acts
+  as his words only when its quote is found again in a transcript on disk at
+  the moment it is consolidated; otherwise it waits for his yes
+  (``learn confirm``). Operations on what is his are accepted only in a delta
+  this process built after checking his words, never from a delta file, and
+  the same rules are applied when CI replays the history (2026-11-10 audit:
+  one forged inbox line had become an active owner rule).
+- Only what a session's note created fades with disuse or is demoted by
+  outcomes, a little per run, and it can be restored. In a simulated year
+  the old decay retired half of the shipped knowledge, the rule against
+  skipping tests included, with no way back.
 - Statistical learning lives in ``engine/mlearn.py``; this module hands it the
   new records in one ``ML_FOLD`` op and stores the state it returns in
   ``stats/ml.json``. The import is lazy so every other op works without it.
@@ -263,6 +274,64 @@ def shown_ids(project: Path | None, sid: str) -> set[str]:
     return out
 
 
+def project_votes(project: Path, sid: str, records: list[dict]) -> list[dict]:
+    """Apply this session's ``used`` records for lessons that live in the
+    project's own ``.brain/memory/`` to those files, and return the records
+    that still go to the brain (learning-03). A project lesson never leaves
+    its project, so its credit is kept there too: the same rules as in the
+    brain (credit from this session's outcomes, only when recall showed it,
+    one vote per session), probation to active on two supporting sessions,
+    and demotion only on the lower-bound case."""
+    files: dict[Path, list[dict]] = {}
+    frozen: set[Path] = set()  # a file with an unreadable line is never rewritten: that would drop the line
+    for p in I.project_item_files(project):
+        try:
+            files[p], bad = c.read_jsonl_counted(p)
+        except OSError:
+            continue
+        if bad:
+            frozen.add(p)
+    where = {str(r.get("id")): (p, r) for p, rows in files.items() for r in rows}
+    mine = [r for r in records if r.get("kind") == "outcome"]
+    good = bool(mine) and all(o.get("passed") is True and o.get("first_pass", True) is True for o in mine)
+    bad = any(o.get("passed") is False for o in mine)
+    keep, changed = [], set()
+    day = c.today()
+    for rec in records:
+        hit = where.get(str(rec.get("item"))) if rec.get("kind") == "used" else None
+        if hit is None:
+            keep.append(rec)
+            continue
+        path, row = hit
+        voted = [v for v in row.get("voted") or [] if isinstance(v, str)]
+        if path in frozen or rec.get("shown") is not True or sid in voted:
+            continue  # not shown this session, or this session already counted
+        row["last_used"] = day
+        row["voted"] = (voted + [sid])[-MAX_VOTE_EVIDENCE:]
+        changed.add(path)
+        if rec.get("followed") is not True:
+            continue
+        row["uses"] = int(row.get("uses", 0) or 0) + 1
+        if good:
+            row["helpful"] = int(row.get("helpful", 0) or 0) + 1
+            row["sessions"] = int(row.get("sessions", 0) or 0) + 1
+        elif bad:
+            row["harmful"] = int(row.get("harmful", 0) or 0) + 1
+            week = _iso_week(c.now())
+            weeks = [w for w in row.get("harm_weeks") or [] if isinstance(w, str)]
+            row["harm_weeks"] = (weeks + [week] if week not in weeks else weeks)[-8:]
+        it = I.normalise(row)
+        if it["status"] in ("candidate", "probation", "active") and harm_case(it):
+            row["status"] = "demoted"
+        elif it["status"] == "candidate" and it["helpful"] >= 1:
+            row["status"] = "probation"
+        elif it["status"] == "probation" and it["sessions"] >= 2:
+            row["status"] = "active"
+    for path in changed:
+        c.write_jsonl(path, files[path])
+    return keep
+
+
 def replace_session_records(root: Path, sid: str, records: list[dict], kinds: tuple[str, ...],
                             project: Path | None = None) -> Path | None:
     """Put ``records`` in the session's inbox file, replacing earlier records
@@ -281,6 +350,8 @@ def replace_session_records(root: Path, sid: str, records: list[dict], kinds: tu
         shown = shown_ids(Path(project), sid) if managed else set()
         records = [{**r, "shown": str(r.get("item", "")) in shown} if r.get("kind") == "used" and managed else r
                    for r in records]
+        if managed:
+            records = project_votes(Path(project), sid, records)
     consumed = consumed_inbox(root)
     for f in _session_files(root, sid):
         if f.relative_to(root).as_posix() in consumed and any(

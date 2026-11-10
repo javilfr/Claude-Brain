@@ -562,6 +562,33 @@ class LoopTest(NoteCommandCase):
         got = {r["item"]: r["shown"] for r in map(json.loads, self.inbox_text().splitlines())}
         self.assertEqual(got, {"lsn-shown": True, "lsn-elsewhere": False, "lsn-never": False})
 
+    def test_project_lesson_earns_its_place_in_the_project_file(self):
+        """learning-03: a vote for a project lesson is applied in the project,
+        once per session, and never sent to the brain, where the id is unknown."""
+        proj = self.make_project()
+        path = proj / ".brain" / "memory" / "lessons.jsonl"
+        c.write_jsonl(path, [lesson("lsn-staging-tenant", "Use the staging tenant for invoice exports", scope="project",
+                                    status="probation")])
+        log = proj / ".brain" / "log" / "recall.jsonl"
+        for sid in ("p1", "p2", "p3"):
+            c.append_jsonl(log, {"at": NOW, "session": sid, "query_sha": "x", "ids": ["lsn-staging-tenant", "rule-brain"]})
+
+        def close(sid, passed=True, times=1):
+            for _ in range(times):
+                learn.replace_session_records(self.root, sid, [outcome(sid, passed=passed), used(sid, "lsn-staging-tenant"),
+                                                               used(sid, "rule-brain")], kinds=("outcome", "used"), project=proj)
+            return c.read_jsonl(path)[0]
+
+        row = close("p1", times=2)  # close is often run twice; the vote counts once
+        self.assertEqual((row["helpful"], row["sessions"], row["uses"], row["status"]), (1, 1, 1, "probation"))
+        row = close("p2")
+        self.assertEqual((row["helpful"], row["sessions"], row["status"]), (2, 2, "active"))
+        row = close("p3", passed=False)
+        self.assertEqual((row["helpful"], row["harmful"], row["status"]), (2, 1, "active"))
+        sent = [json.loads(l) for l in self.inbox_text().splitlines()]
+        self.assertEqual({r["item"] for r in sent if r["kind"] == "used"}, {"rule-brain"})
+        self.assertNotIn("staging", self.inbox_text())
+
     def test_project_lesson_is_on_probation_and_recalled(self):
         """learning-03: a project lesson whose evidence resolved is usable in
         the next session; with the owner's verified words it is active."""
