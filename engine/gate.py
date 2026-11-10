@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 
 from . import common as c
-from .state import git
+from .state import git, is_bookkeeping
 
 ERROR_RE = re.compile(r"(error|fail(ed|ure)?|exception|traceback|assert|✗|✖|not ok|panic|fatal|cannot find|undefined)", re.I)
 MAX_LINES = 40
@@ -82,13 +82,6 @@ def gates_path(project: Path) -> Path:
 
 def head_commit(project: Path) -> str:
     return git(project, "rev-parse", "HEAD")
-
-
-def is_bookkeeping(path: str) -> bool:
-    """Contract files that record the work but are not the work: changing them
-    does not invalidate a gate result."""
-    path = path.strip().strip('"')
-    return path.startswith(".brain/") or path in ("STATUS.md", "NEEDS_YOU.md")
 
 
 def tree_dirty(project: Path) -> bool:
