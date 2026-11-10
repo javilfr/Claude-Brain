@@ -107,3 +107,24 @@ Blocking items from the final review, all fixed: a model could label its own not
 - Helpers were 73% of the cost. The first ten analysts ran on the session's model because nothing set theirs; later helpers used the brain's own agents or an explicit cheaper model. That is the reason every brain agent file sets its model.
 - The main conversation read 99% of its input from cache. Three tool results exceeded 5,000 tokens.
 - This was a deliberately heavy session: two research rounds of ten agents each were asked for by name. It is not a baseline for normal work.
+
+## Improvement session, 2026-11-10 (tickets CB-200 to CB-209)
+
+### CB-200 Baseline and self-audit
+
+Every number below is from a command run in this session, before any change.
+
+| Check | Result |
+|---|---|
+| `python3 -m unittest discover -s tests -t .` | 407 tests, OK, 35.0 s |
+| `brain doctor` | healthy; version 0.9.0; model facts verified 0 days ago; always-loaded budget about 2,550 tokens |
+| `brain lint` | 0 errors, 0 notes |
+| `brain hr audit` | 100 templates in 10 groups (researcher 17, builder 48, writer 19, reviewer 15, redteam 1, scout 0); sound |
+| `brain lint --transcript` | 0 oversized results, 0 re-reads, 1 model, 0 helpers, 82% input from cache (target 80%) |
+| `brain items check` | 141 items in 9 files, all valid |
+| `brain eval audit` | 12 tasks, 12 sound |
+| `brain learn consolidate` | first real delta `d-20261110-a431e755f2`: 3 ops (APPEND_STAT 1, MARK_INBOX 1, ML_FOLD 1); 1 ledger row, 2 hire records folded; inbox now empty |
+| `brain learn verify` | 1 delta replayed on `origin/main`; learned zone matches |
+| `brain learn status` | 141 active items, 0 candidate, 0 in conflict |
+
+Differs from the handover: the inbox held one file with three records (one ledger row, two settled hires), as stated; the scout tier still has no template (an open item for CB-206).

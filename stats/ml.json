@@ -1,0 +1,70 @@
+{
+  "alarms": [],
+  "bandit": {
+    "c": {},
+    "cost": {
+      "c": {},
+      "f": {},
+      "g": {}
+    },
+    "f": {},
+    "g": {},
+    "ids": {},
+    "raw_c": {},
+    "raw_g": {}
+  },
+  "baseline": {},
+  "calib": {
+    "c": {},
+    "f": {},
+    "g": {}
+  },
+  "corrections": 0,
+  "credit": {},
+  "drift": {},
+  "gates": {},
+  "hr": {
+    "g": {},
+    "ratios": {
+      "_all": [
+        0.2712,
+        0.41
+      ],
+      "s:L": [
+        0.2712,
+        0.41
+      ],
+      "t:_plain": [
+        0.2712
+      ],
+      "t:code-reviewer": [
+        0.41
+      ]
+    },
+    "settled": 2,
+    "t": {}
+  },
+  "last_at": "2026-11-10T14:35:00Z",
+  "log": [],
+  "n": 2,
+  "pending": {},
+  "promotions": [],
+  "reviews": [],
+  "seen": [
+    "3b5882b82242a22e",
+    "e140ce08fcc71dc0"
+  ],
+  "sizing": {
+    "counts": {},
+    "shadow": {
+      "hint_right": 0,
+      "n": 0,
+      "rule_right": 0
+    },
+    "strong": 0,
+    "tot": {},
+    "vocab": {}
+  },
+  "version": 1,
+  "window": []
+}
