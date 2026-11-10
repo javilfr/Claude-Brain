@@ -323,7 +323,7 @@ def cmd_map(args) -> int:
 def register(sub) -> None:
     p = sub.add_parser("map", help="ranked outline of a source tree (PageRank over references)")
     p.add_argument("path", nargs="?", default=".")
-    p.add_argument("--top", type=int, default=25)
+    p.add_argument("--top", type=int, default=12)
     p.add_argument("--budget", type=int, default=800, help="token budget for the printed map")
     p.add_argument("--json", action="store_true")
     c.add_project_arg(p)

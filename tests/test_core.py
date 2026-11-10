@@ -222,6 +222,28 @@ class DetectTests(Base):
         self.assertIn("T-7 build the list view", blob)
         self.assertIn("mode: work", blob)
 
+    def test_broken_manifest_is_said_out_loud(self):
+        p = self.project()
+        (p / ".brain" / "project.json").write_text("{ not json")
+        blob = "\n".join(detect.boot_lines(None, self.brain))
+        self.assertIn("PROBLEM", blob)
+        self.assertIn("not valid JSON", blob)
+
+        class A:
+            project = str(p)
+            id = None
+            all = True
+        with redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(gate.cmd_gate(A()), 1)
+        self.assertIn("not valid JSON", out.getvalue())
+
+    def test_boot_never_exceeds_its_byte_cap_whatever_the_state_holds(self):
+        p = self.project()
+        state.checkpoint(p, item="i" * 400, nxt=["n" * 300, "m" * 300, "o" * 300], note="z" * 9000, blockers="b" * 500)
+        (p / "NEEDS_YOU.md").write_text("# Needs you\n" + "".join(f"\n## {i}. item {'x' * 80}\n" for i in range(40)))
+        blob = "\n".join(detect.boot_lines("Continue with the " + "very " * 200 + "long request", self.brain))
+        self.assertLessEqual(len(blob.encode()), 1500)  # the cap itself, not the constant, so raising the constant fails here
+
     def test_boot_warns_about_a_second_session_and_stale_model_facts(self):
         p = self.project()
         os.environ["BRAIN_SESSION_ID"] = "session-aaaa"
@@ -323,6 +345,24 @@ class ReqTests(Base):
         self.assertTrue(req.load(p)[0]["implied"])
         self.assertIn("(implied) must work on a phone", (p / ".brain" / "REQUIREMENTS.md").read_text())
 
+    def test_a_corrupt_ledger_line_stops_everything_and_is_never_deleted(self):
+        p = self.project()
+        os.environ["BRAIN_PROJECT"] = str(p)
+        self.run_cli("req", "add", "--quote", "first thing", "--passes-when", "x")
+        self.run_cli("req", "add", "--quote", "second thing", "--passes-when", "y")
+        f = p / ".brain" / "requirements.jsonl"
+        lines = f.read_text().splitlines()
+        f.write_text(lines[0][: len(lines[0]) // 2] + "\n" + lines[1] + "\n")
+        broken = f.read_text()
+        code, out = self.run_cli("req", "check")
+        self.assertEqual(code, 2)
+        self.assertIn("line 1 is not valid JSON", out)
+        code, _ = self.run_cli("req", "add", "--quote", "third thing")
+        self.assertEqual(code, 2)
+        self.assertEqual(f.read_text(), broken, "a broken ledger must never be rewritten")
+        self.assertTrue(any("line 1" in e for e in contract.validate(p)))
+        self.assertIn("unreadable line", "\n".join(detect.boot_lines(None, self.brain)))
+
     def test_same_words_are_not_added_twice(self):
         p = self.project()
         os.environ["BRAIN_PROJECT"] = str(p)
@@ -415,6 +455,93 @@ class GateTests(Base):
         self.assertEqual(code, 1)
         self.assertIn("Never force-push", out.getvalue())
         self.assertEqual(sh(remote, "git", "rev-parse", "main").stdout.strip(), theirs)
+
+    def test_release_never_uses_a_forcing_push(self):
+        """Capture every git push the release makes: no --force, no -f, no
+        +refspec, no --force-with-lease, even when a fast-forward is refused."""
+        p = self.project()
+        self.setup_remote(p)
+        self.set_gate(p, "true")
+        commit_all(p)
+        os.environ["BRAIN_PROJECT"] = str(p)
+        seen = []
+        real = gate.subprocess.run
+
+        def spy(cmd, *a, **k):
+            if isinstance(cmd, list) and "push" in cmd:
+                seen.append(list(cmd))
+            return real(cmd, *a, **k)
+
+        class A:
+            project = None
+            push = True
+            run_gates = True
+            check_live = False
+            live_wait = 0
+        gate.subprocess.run = spy
+        try:
+            with redirect_stdout(io.StringIO()):
+                gate.cmd_release(A())
+        finally:
+            gate.subprocess.run = real
+        self.assertTrue(seen, "release should have pushed")
+        for cmd in seen:
+            for arg in cmd:
+                self.assertFalse(arg in ("--force", "-f") or arg.startswith("--force") or arg.startswith("+"), cmd)
+
+    def test_changing_the_gate_command_or_project_tools_makes_a_green_gate_stale(self):
+        p = self.project()
+        self.setup_remote(p)
+        self.set_gate(p, "true")
+        commit_all(p)
+        gate.run_gates(p)
+        self.assertTrue(gate.green_at_head(p)[0])
+        self.set_gate(p, "true # weakened")
+        commit_all(p, "edit the gate")
+        self.assertFalse(gate.green_at_head(p)[0])
+        self.assertFalse(state.is_bookkeeping(".brain/ext/tools/check.py"))
+
+    def test_run_output_is_capped_and_keeps_quoting(self):
+        p = self.project()
+        r = gate.run_filtered("for i in $(seq 1 80); do echo \"error number $i\"; done; exit 3", p, p)
+        self.assertLessEqual(len(r["shown"]), 15)
+        os.environ.pop("BRAIN_PROJECT", None)
+        import contextlib
+
+        class A:
+            project = str(p)
+            cwd = str(p)
+            tail = 6
+            timeout = 60
+            cmd = ["--", sys.executable, "-c", "import sys; print('a  b'); sys.exit(0)"]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = gate.cmd_run(A())
+        self.assertEqual(code, 0, buf.getvalue())
+        self.assertIn("a  b", buf.getvalue())
+        self.assertLessEqual(len(buf.getvalue().splitlines()), 15)
+
+    def test_run_executes_where_it_was_typed_not_in_the_project(self):
+        p = self.project()
+        elsewhere = self.ws / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "marker.txt").write_text("here")
+        old = os.getcwd()
+        os.chdir(elsewhere)
+        try:
+            class A:
+                project = None
+                cwd = None
+                tail = 6
+                timeout = 60
+                cmd = ["--", "ls"]
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                gate.cmd_run(A())
+        finally:
+            os.chdir(old)
+        self.assertIn("marker.txt", buf.getvalue())
+        self.assertFalse((p / ".brain" / "log" / "run").exists())
 
     def test_release_without_push_flag_only_reports(self):
         p = self.project()

@@ -69,6 +69,15 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(contract.validate(p, ROOT), [])
         self.assertEqual(detect.detect(self.brain)["mode"], "work")
 
+    def test_released_schema_is_frozen(self):
+        """A released contract schema is never edited: old projects depend on
+        it. To change the contract, add v2 and a migration; do not touch v1.
+        (If v1 truly must change before any project uses it, update this hash
+        in the same commit and say why.)"""
+        import hashlib
+        digest = hashlib.sha256((ROOT / "contract" / "v1.schema.json").read_bytes()).hexdigest()
+        self.assertEqual(digest, "4ba870a61938af2cbf47ae4310982c77969c96557b97fe71d14e6c64dea7ac92")
+
     def test_empty_fixture_is_bootstrap(self):
         self.place("empty")
         self.assertEqual(detect.detect(self.brain)["mode"], "bootstrap")

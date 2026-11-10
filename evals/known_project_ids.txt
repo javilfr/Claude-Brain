@@ -1,0 +1,3 @@
+# One project id per line (the `project.id` of each project that has used this brain).
+# `brain lint`, `brain guard diff` and the learning pipeline refuse brain files that name one.
+# Add an id when a project is created or adopted. Lines starting with # are ignored.

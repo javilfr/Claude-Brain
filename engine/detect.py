@@ -81,7 +81,9 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
     lines = [f"brain: {root.name} · mode: {mode}" + (f" · {MODE_HELP[mode]}" if MODE_HELP.get(mode) else "")]
     proj = Path(d["project"]) if d.get("project") else None
     family = None
-    if proj and mode in ("work", "choose", "migrate") and c.is_managed(proj):
+    if proj and c.is_managed(proj) and c.manifest_problem(proj):
+        lines.append(f"project: {proj.name} · PROBLEM: {c.manifest_problem(proj)}")
+    elif proj and mode in ("work", "choose", "migrate") and c.is_managed(proj):
         m, st = c.load_manifest(proj), st_mod.read_state(proj)
         family = m.get("family")
         lines.append(f"project: {proj.name} · {m.get('project', {}).get('title', '')} · family {family} · contract v{m.get('contract')} · stage {st.get('stage') or m.get('stage')}")
@@ -94,6 +96,8 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
             lines.append("notes: " + c.clip(st["notes"], 220))
         rq, needs = st_mod.req_counts(proj), st_mod.open_needs(proj)
         rel = m.get("release", {}).get("rule", "none")
+        if rq.get("broken"):
+            lines.append("PROBLEM: .brain/requirements.jsonl has an unreadable line; run `brain req check` and repair it first")
         lines.append(f"requirements: {rq['done']}/{rq['total']} done, {rq['open']} open · needs owner: {len(needs)} · release: {rel}")
         warn = st_mod.lease_warning(st)
         if warn:

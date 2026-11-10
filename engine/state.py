@@ -108,9 +108,32 @@ def checkpoint(project: Path, item: str | None = None, done: str | None = None, 
 
 
 def is_bookkeeping(path: str) -> bool:
-    """Contract files that record the work but are not the work."""
+    """Contract files that record the work but are not the work. The manifest
+    and the project's own tools are excluded: changing a gate command or a
+    project tool changes what "green" means, so it must not ride along as
+    bookkeeping."""
     path = path.strip().strip('"')
+    if path == ".brain/project.json" or path.startswith(".brain/ext/"):
+        return False
     return path.startswith(".brain/") or path in ("STATUS.md", "NEEDS_YOU.md")
+
+
+def release_branch_block(project: Path, branch: str) -> str:
+    """Why a plain push of this branch is not allowed, or "".
+
+    On the branch a project releases from, work reaches the remote only
+    through `brain release` (which requires a green gate). A checkpoint may
+    still push there when everything not yet on the remote is bookkeeping."""
+    rel = c.load_manifest(project).get("release", {}) or {}
+    if rel.get("rule") != "main-on-green" or branch != rel.get("branch", "main"):
+        return ""
+    if not git(project, "rev-parse", "--verify", "--quiet", f"origin/{branch}"):
+        return f"this is the release branch ({branch}) and it has never been released: use `brain release`"
+    ahead = [l for l in git(project, "diff", "--name-only", f"origin/{branch}", "HEAD").splitlines() if l.strip()]
+    work = [f for f in ahead if not is_bookkeeping(f)]
+    if work:
+        return f"this is the release branch ({branch}) and {len(work)} changed file(s) are not released yet (e.g. {work[0]}): use `brain release`, which pushes only on a green gate"
+    return ""
 
 
 def write_checklist(project: Path) -> list[str]:
@@ -148,6 +171,9 @@ def push_bookkeeping(project: Path) -> str:
     if not git(project, "remote"):
         return "checkpoint committed; not pushed: the project has no remote"
     branch = git(project, "rev-parse", "--abbrev-ref", "HEAD")
+    blocked = release_branch_block(project, branch)
+    if blocked:
+        return "checkpoint committed; not pushed: " + blocked
     pushed = subprocess.run(["git", "-C", str(project), "push", "-q", "-u", "origin", branch], capture_output=True, text=True, timeout=120)
     if pushed.returncode != 0:
         return "checkpoint committed; PUSH FAILED: " + c.clip(pushed.stderr, 140)
@@ -229,7 +255,11 @@ def open_needs(project: Path) -> list[str]:
 
 
 def req_counts(project: Path) -> dict:
-    rows = c.read_jsonl(Path(project) / ".brain" / "requirements.jsonl")
+    from . import req
+    try:
+        rows = req.load(project)
+    except req.LedgerError:
+        return {"total": 0, "done": 0, "open": 0, "dropped": 0, "broken": True}
     out = {"total": len(rows), "done": 0, "open": 0, "dropped": 0}
     for r in rows:
         out[r.get("status", "open") if r.get("status") in ("done", "dropped") else "open"] += 1
@@ -382,7 +412,11 @@ def cmd_status(args) -> int:
     project = c.need_project(args)
     if not project:
         return 1
-    print(write_status(project).rstrip())
+    lines = write_status(project).rstrip().splitlines()
+    shown = lines if args.full else [l for l in lines if l.strip()][:14]
+    print("\n".join(shown))
+    if not args.full and len(shown) < len([l for l in lines if l.strip()]):
+        print("… the rest is in STATUS.md (or: brain status --full)")
     return 0
 
 
@@ -419,6 +453,7 @@ def register(sub) -> None:
     p.set_defaults(func=cmd_resume)
     p = sub.add_parser("status", help="regenerate and print the owner's STATUS.md")
     c.add_project_arg(p)
+    p.add_argument("--full", action="store_true", help="print the whole file")
     p.set_defaults(func=cmd_status)
     p = sub.add_parser("handover", help="write the handover note and check both repositories are clean and pushed")
     c.add_project_arg(p)

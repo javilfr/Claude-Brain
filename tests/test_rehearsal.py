@@ -26,7 +26,14 @@ class Rehearsal(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.ws = Path(self._tmp.name)
         self.brain = self.ws / "Claude-Brain"
+        # A clean brain: whatever this repository has recorded from real
+        # sessions (inbox, radar state, deltas, statistics) is left out, so the
+        # test cannot go red just because the brain has been used.
         shutil.copytree(ROOT, self.brain, ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"))
+        for rel in ("learning/inbox", "learning/radar", "learning/deltas", "learning/digest", "stats"):
+            shutil.rmtree(self.brain / rel, ignore_errors=True)
+        for rel in ("learning/manifest.jsonl", "learning/CHANGELOG.md"):
+            (self.brain / rel).unlink(missing_ok=True)
         self.proj = self.ws / "demo"
         self.proj.mkdir()
         self.remote = self.ws / "remote.git"

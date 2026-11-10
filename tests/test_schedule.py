@@ -289,6 +289,21 @@ class Packet(unittest.TestCase):
         self.assertTrue(any(l.startswith("Acceptance command: ") for l in lines))
 
 
+class SeedDeterminismTest(unittest.TestCase):
+    def test_same_seed_same_schedule_where_annealing_runs(self):
+        """Run the command twice in fresh interpreters: identical bytes. An
+        unseeded generator would differ between processes."""
+        import subprocess
+        import sys as _sys
+        ROOT = Path(__file__).resolve().parents[1]
+        case = str(ROOT / "evals" / "schedule_cases" / "anneal_beats_cp.json")
+        outs = [subprocess.run([_sys.executable, str(ROOT / "bin" / "brain"), "plan", "schedule", case, "--seed", "7", "--json"],
+                               capture_output=True, text=True).stdout for _ in range(2)]
+        self.assertTrue(outs[0].strip())
+        self.assertEqual(outs[0], outs[1])
+        self.assertIn("anneal", outs[0])
+
+
 class DoneTicketsTest(unittest.TestCase):
     def test_done_tickets_are_skipped_and_satisfy_dependencies(self):
         from engine import schedule

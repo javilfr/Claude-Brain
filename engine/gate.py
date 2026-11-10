@@ -10,6 +10,7 @@ exact commit being released.
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import time
 import urllib.error
@@ -20,7 +21,7 @@ from . import common as c
 from .state import git, is_bookkeeping
 
 ERROR_RE = re.compile(r"(error|fail(ed|ure)?|exception|traceback|assert|✗|✖|not ok|panic|fatal|cannot find|undefined)", re.I)
-MAX_LINES = 40
+MAX_LINES = 12  # lines of output shown for a failure; the rest stays in the log file
 # Marks that a change switched tests off instead of fixing them.
 SKIP_RE = re.compile(r"^\+.*(\.skip\(|\bxit\(|\bxdescribe\(|@unittest\.skip|@pytest\.mark\.skip|\.only\(|test\.todo\()")
 STUB_RE = re.compile(r"^\+.*\b(TODO|FIXME|XXX)\b|^\+.*raise NotImplementedError")
@@ -33,7 +34,7 @@ def log_dir(project: Path | None) -> Path:
     return Path(tempfile.gettempdir()) / "brain-run"
 
 
-def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 30, timeout: int = 3600) -> dict:
+def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, timeout: int = 3600) -> dict:
     """Run a shell command; save all output; return a short digest."""
     start = time.time()
     try:
@@ -53,8 +54,8 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 30, 
     else:
         hits = [i for i, l in enumerate(lines) if ERROR_RE.search(l)]
         keep = set()
-        for i in hits[:12]:  # the first failures are usually the cause
-            keep.update(range(max(0, i - 1), min(len(lines), i + 3)))
+        for i in hits[:3]:  # the first failures are usually the cause
+            keep.update(range(i, min(len(lines), i + 2)))
         keep.update(range(max(0, len(lines) - tail), len(lines)))
         idx = sorted(keep)
         if len(idx) > MAX_LINES:
@@ -65,7 +66,7 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 30, 
                 shown.append("  …")
             shown.append(lines[i])
             prev = i
-    return {"exit": code, "seconds": round(secs, 1), "log": str(log), "lines": len(lines), "shown": [c.clip(l, 240) for l in shown]}
+    return {"exit": code, "seconds": round(secs, 1), "log": str(log), "lines": len(lines), "shown": [l[:240] for l in shown]}  # truncated, not re-spaced: output is shown as it was
 
 
 def print_digest(command: str, r: dict) -> None:
@@ -207,16 +208,24 @@ def live_report(project: Path, rel: dict, head: str, wait_seconds: int) -> int:
 
 # ---------------------------------------------------------------- cli
 def cmd_run(args) -> int:
-    command = " ".join(args.cmd).strip()
-    if command.startswith("-- "):
-        command = command[3:]
-    if not command:
+    parts = list(args.cmd)
+    if parts and parts[0] == "--":
+        parts = parts[1:]
+    if not parts:
         print("usage: brain run -- <command>")
         return 2
+    # One argument is a shell line as typed; several are an argument list
+    # whose quoting must survive the trip through the shell.
+    command = parts[0] if len(parts) == 1 else shlex.join(parts)
+    cwd = Path(args.cwd).resolve() if args.cwd else Path.cwd().resolve()
     project = c.resolve_project(args.project)
     if project is not None and not c.is_managed(project):
         project = None
-    r = run_filtered(command, Path(args.cwd) if args.cwd else (project or Path.cwd()), project, args.tail, args.timeout)
+    # The command runs where it was typed. Its log goes into the project only
+    # when that is where we are; otherwise to a temporary folder.
+    if project is not None and not args.project and project.resolve() not in (cwd, *cwd.parents):
+        project = None
+    r = run_filtered(command, cwd, project, args.tail, args.timeout)
     print_digest(command, r)
     return r["exit"]
 
@@ -297,7 +306,7 @@ def cmd_release(args) -> int:
 def register(sub) -> None:
     p = sub.add_parser("run", help="run a command; keep the full output in a file, print only the result")
     c.add_project_arg(p)
-    p.add_argument("--tail", type=int, default=30)
+    p.add_argument("--tail", type=int, default=6)
     p.add_argument("--timeout", type=int, default=3600)
     p.add_argument("--cwd")
     p.add_argument("cmd", nargs="...")

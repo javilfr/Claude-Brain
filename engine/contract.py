@@ -241,6 +241,11 @@ def validate(project: Path, brain_root: Path | None = None) -> list[str]:
     for g in m.get("gates", []) if isinstance(m.get("gates"), list) else []:
         if isinstance(g, dict) and g.get("kind") == "command" and "command" not in g:
             errs.append(f"gate {g.get('id')}: kind 'command' needs a command (may be empty until known)")
+    from . import req
+    try:
+        req.load(project)
+    except req.LedgerError as e:
+        errs.append(str(e))
     if c.find_secrets(c.read_text(project / ".brain" / "project.json")):
         errs.append("manifest looks like it contains a secret; use the environment's secret settings instead")
     return errs

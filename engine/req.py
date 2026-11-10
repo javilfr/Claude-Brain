@@ -8,6 +8,7 @@ a generated view for reading.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from . import common as c
@@ -17,8 +18,44 @@ def path(project: Path) -> Path:
     return Path(project) / ".brain" / "requirements.jsonl"
 
 
+class LedgerError(Exception):
+    """The ledger file has a line that cannot be read."""
+
+
 def load(project: Path) -> list[dict]:
-    return c.read_jsonl(path(project))
+    """Read the ledger strictly. A line that does not parse (a half-written
+    file, a merge conflict between two chats) stops everything: skipping it
+    would let `check` pass with a requirement missing, and the next write
+    would delete that requirement for good."""
+    rows = []
+    try:
+        text = path(project).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return rows
+    except UnicodeDecodeError as e:
+        raise LedgerError(f"requirements.jsonl is not readable text ({c.clip(str(e), 60)})")
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            raise LedgerError(f"requirements.jsonl line {n} is not valid JSON; repair it (or restore the file from git) before going on")
+        if not isinstance(row, dict) or not row.get("id"):
+            raise LedgerError(f"requirements.jsonl line {n} is not a requirement (no id)")
+        rows.append(row)
+    return rows
+
+
+def guarded(func):
+    """Turn a broken ledger into one clear line and exit code 2."""
+    def run(args):
+        try:
+            return func(args)
+        except LedgerError as e:
+            print(f"requirements: {e}")
+            return 2
+    return run
 
 
 def save(project: Path, rows: list[dict]) -> None:
@@ -202,30 +239,30 @@ def register(sub) -> None:
     a.add_argument("--check", help="command or method that verifies it")
     a.add_argument("--implied", action="store_true", help="not the owner's words: a need the request implies")
     a.add_argument("--assumption", help="with --implied: what was assumed and why")
-    a.set_defaults(func=cmd_add)
+    a.set_defaults(func=guarded(cmd_add))
     a = s.add_parser("set", help="set 'passes when' or the check for a line")
     c.add_project_arg(a)
     a.add_argument("id")
     a.add_argument("--passes-when", dest="passes_when")
     a.add_argument("--check")
-    a.set_defaults(func=cmd_set)
+    a.set_defaults(func=guarded(cmd_set))
     a = s.add_parser("evidence", help="attach evidence; --done marks the line done")
     c.add_project_arg(a)
     a.add_argument("id")
     a.add_argument("evidence", nargs="+")
     a.add_argument("--done", action="store_true")
-    a.set_defaults(func=cmd_evidence)
+    a.set_defaults(func=guarded(cmd_evidence))
     a = s.add_parser("drop", help="drop a line with a reason")
     c.add_project_arg(a)
     a.add_argument("id")
     a.add_argument("--reason", required=True)
-    a.set_defaults(func=cmd_drop)
+    a.set_defaults(func=guarded(cmd_drop))
     a = s.add_parser("list")
     c.add_project_arg(a)
     a.add_argument("--open", action="store_true")
     a.add_argument("--limit", type=int, default=15)
-    a.set_defaults(func=cmd_list)
+    a.set_defaults(func=guarded(cmd_list))
     a = s.add_parser("check", help="exit non-zero while any line is unfinished")
     c.add_project_arg(a)
-    a.set_defaults(func=cmd_check)
-    p.set_defaults(func=cmd_list, project=None, open=False, limit=15)
+    a.set_defaults(func=guarded(cmd_check))
+    p.set_defaults(func=guarded(cmd_list), project=None, open=False, limit=15)

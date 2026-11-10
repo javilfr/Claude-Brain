@@ -243,7 +243,24 @@ def resolve_project(explicit: str | None = None, brain_root: Path | None = None)
 
 
 def load_manifest(project: Path) -> dict:
-    return read_json(Path(project) / ".brain" / "project.json", {}) or {}
+    m = read_json(Path(project) / ".brain" / "project.json", {})
+    return m if isinstance(m, dict) else {}
+
+
+def manifest_problem(project: Path) -> str:
+    """One line when the manifest exists but cannot be used, else "". A broken
+    manifest must be said out loud: silently treating it as empty would make
+    gates and release rules disappear."""
+    path = Path(project) / ".brain" / "project.json"
+    if not path.is_file():
+        return ""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        return f".brain/project.json is not valid JSON ({clip(str(e), 60)}); fix it or restore it from git before anything else"
+    if not isinstance(data, dict) or not isinstance(data.get("contract"), int):
+        return ".brain/project.json has no integer 'contract'; fix it or restore it from git before anything else"
+    return ""
 
 
 # ---------------------------------------------------------------- sessions
@@ -282,5 +299,9 @@ def need_project(args) -> Path | None:
     proj = resolve_project(getattr(args, "project", None))
     if proj is None or not is_managed(proj):
         print("no managed project found (attach one, or run: brain init <path>)")
+        return None
+    problem = manifest_problem(proj)
+    if problem:
+        print(problem)
         return None
     return proj

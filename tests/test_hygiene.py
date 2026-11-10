@@ -59,6 +59,38 @@ class HygieneTests(unittest.TestCase):
         self.assertEqual(self.remote_has("feature.py"), "")
         self.assertIn("feature.py", sh(self.p, "git", "status", "--porcelain").stdout)
 
+    def test_checkpoint_cannot_push_unreleased_work_to_the_release_branch(self):
+        m = c.load_manifest(self.p)
+        m["release"] = {"rule": "main-on-green", "branch": "main"}
+        m["gates"] = [{"id": "checks", "kind": "command", "command": "false"}]
+        c.write_json(self.p / ".brain" / "project.json", m)
+        sh(self.p, "git", "add", "-A")
+        sh(self.p, "git", "commit", "-q", "-m", "manifest")
+        sh(self.p, "git", "push", "-q", "origin", "work:main")
+        sh(self.p, "git", "checkout", "-q", "-B", "main")
+        sh(self.p, "git", "fetch", "-q", "origin")
+        before = sh(self.remote, "git", "rev-parse", "main").stdout.strip()
+        (self.p / "app.py").write_text("broken = True\n")
+        sh(self.p, "git", "add", "-A")
+        sh(self.p, "git", "commit", "-q", "-m", "red work")
+        state.checkpoint(self.p, done="x")
+        msg = state.push_bookkeeping(self.p)
+        self.assertIn("not pushed", msg)
+        self.assertIn("brain release", msg)
+        self.assertEqual(sh(self.remote, "git", "rev-parse", "main").stdout.strip(), before)
+
+    def test_checkpoint_may_push_bookkeeping_only_to_the_release_branch(self):
+        m = c.load_manifest(self.p)
+        m["release"] = {"rule": "main-on-green", "branch": "main"}
+        c.write_json(self.p / ".brain" / "project.json", m)
+        sh(self.p, "git", "add", "-A")
+        sh(self.p, "git", "commit", "-q", "-m", "manifest")
+        sh(self.p, "git", "push", "-q", "origin", "work:main")
+        sh(self.p, "git", "checkout", "-q", "-B", "main")
+        sh(self.p, "git", "fetch", "-q", "origin")
+        state.checkpoint(self.p, item="T-9")
+        self.assertIn("checkpoint pushed to main", state.push_bookkeeping(self.p))
+
     def test_push_without_remote_or_repo_says_so(self):
         sh(self.p, "git", "remote", "remove", "origin")
         state.checkpoint(self.p, item="T-6")
