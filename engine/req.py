@@ -184,7 +184,9 @@ def cmd_verify(args) -> int:
     head = (gate.head_commit(project) or "")[:8] or "no commit"
     failed = manual = passed = 0
     for r in rows:
-        if r.get("status") in ("done", "dropped") or not r.get("passes_when"):
+        if r.get("status") == "dropped" or not r.get("passes_when"):
+            continue
+        if r.get("status") == "done" and not getattr(args, "all", False):
             continue
         cmd = (r.get("check") or "").strip()
         if not cmd:
@@ -201,7 +203,11 @@ def cmd_verify(args) -> int:
             print(f"{r['id']}: done (check exited 0)")
         else:
             failed += 1
-            print(f"{r['id']}: check exited {res['exit']}; still open · log: {res['log']}")
+            if r.get("status") == "done":
+                # --all: a line once done whose check now fails is open again (CB-208).
+                r["status"] = "open"
+                r.setdefault("evidence", []).append(f"check exited {res['exit']} on {head} ({c.today()}): reopened")
+            print(f"{r['id']}: check exited {res['exit']}; open · log: {res['log']}")
             for l in res["shown"][-3:]:
                 print(f"  {l}")
     save(project, rows)
@@ -295,6 +301,7 @@ def register(sub) -> None:
     a = s.add_parser("verify", help="run each open line's check; mark it done with the result when it exits 0")
     c.add_project_arg(a)
     a.add_argument("--timeout", type=int, default=600)
+    a.add_argument("--all", action="store_true", help="re-run lines already done too, and reopen any whose check now fails")
     a.set_defaults(func=guarded(cmd_verify))
     a = s.add_parser("drop", help="drop a line with a reason")
     c.add_project_arg(a)

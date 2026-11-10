@@ -1,0 +1,2 @@
+# Inbox files are append-only JSON lines: a merge keeps both sides (CB-208).
+learning/inbox/*.jsonl merge=union

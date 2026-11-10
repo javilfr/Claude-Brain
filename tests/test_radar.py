@@ -105,7 +105,7 @@ class RadarCase(unittest.TestCase):
 
     def inbox(self):
         rows = []
-        for p in sorted((self.root / "learning" / "inbox").glob("*-radar.jsonl")):
+        for p in sorted((self.root / "learning" / "inbox").glob("*-radar*.jsonl")):
             rows += c.read_jsonl(p)
         return rows
 
@@ -465,6 +465,33 @@ class ExitTime(RadarCase):
         self.assertLess(time.monotonic() - t, 2.5)
 
 
+class ParallelBranches(unittest.TestCase):
+    def test_two_branches_appending_to_one_inbox_file_merge_cleanly(self):
+        # CB-208 red team: parallel session branches conflicted on a shared dated inbox file
+        import subprocess
+        root = Path(__file__).resolve().parent.parent
+        with tempfile.TemporaryDirectory() as d:
+            def git(*a):
+                return subprocess.run(["git", "-C", d, *a], capture_output=True, text=True)
+            git("init", "-q", "-b", "main")
+            git("config", "user.email", "t@example.invalid")
+            git("config", "user.name", "t")
+            (Path(d) / ".gitattributes").write_text((root / ".gitattributes").read_text())
+            f = Path(d) / "learning" / "inbox" / "2026-11-11-x.jsonl"
+            f.parent.mkdir(parents=True)
+            f.write_text('{"a": 0}\n')
+            git("add", "-A"); git("commit", "-qm", "base")
+            for b in ("s1", "s2"):
+                git("checkout", "-qb", b, "main")
+                with f.open("a") as h:
+                    h.write('{"s": "%s"}\n' % b)
+                git("commit", "-qam", b)
+            git("checkout", "-q", "main"); git("merge", "-q", "s1")
+            r = git("merge", "-q", "s2", "-m", "m")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(len(f.read_text().splitlines()), 3)
+
+
 class DueLines(RadarCase):
     def test_returns_lines_for_official_sources_only_up_to_the_cap(self):
         radar_run = radar.run
@@ -526,13 +553,13 @@ class Records(RadarCase):
             self.assertIsInstance(r["matched"], list)
             self.assertIn(r["trust"], radar.TRUST_RANK)
         self.assertEqual(len({r["id"] for r in rows}), len(rows))
-        self.assertTrue((self.root / "learning" / "inbox" / "2026-11-10-radar.jsonl").is_file())
+        self.assertTrue((self.root / "learning" / "inbox" / f"2026-11-10-radar-{c.session_id()[:8]}.jsonl").is_file())
         # a second brain sees the same item ids
         with tempfile.TemporaryDirectory() as other:
             write_config(other)
             radar.run(other, fetch=Fake("v1"), now=NOW, force=True)
             radar.run(other, fetch=Fake("v2"), now=NOW, force=True)
-            ids2 = sorted(r["id"] for r in c.read_jsonl(Path(other) / "learning" / "inbox" / "2026-11-10-radar.jsonl"))
+            ids2 = sorted(r["id"] for r in c.read_jsonl(Path(other) / "learning" / "inbox" / f"2026-11-10-radar-{c.session_id()[:8]}.jsonl"))
         self.assertEqual(ids2, sorted(r["id"] for r in rows))
 
     def test_no_page_bodies_in_state_or_inbox(self):
@@ -547,7 +574,7 @@ class Records(RadarCase):
         self.baseline()
         self.go(Fake("v2"))
         written = sorted(str(p.relative_to(self.root)) for p in self.root.rglob("*") if p.is_file())
-        self.assertEqual(written, ["learning/inbox/2026-11-10-radar.jsonl", "learning/radar/checked.json", "learning/radar/state.json",
+        self.assertEqual(written, [f"learning/inbox/2026-11-10-radar-{c.session_id()[:8]}.jsonl", "learning/radar/checked.json", "learning/radar/state.json",
                                    "memory/radar_sources.json"])
 
     def test_determinism_with_fixed_now(self):

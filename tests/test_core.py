@@ -383,6 +383,14 @@ class ReqTests(Base):
         self.assertIn("check exited 0", rows["it passes"]["evidence"][0])
         self.assertEqual(rows["it fails"]["status"], "open")
         self.assertIn("1 done, 1 failed, 1 need evidence by hand", out)
+        # --all re-runs done lines and reopens one whose check now fails (CB-208)
+        rows = req.load(p)
+        next(r for r in rows if r["quote"] == "it passes")["check"] = "false"
+        req.save(p, rows)
+        self.run_cli("req", "verify")
+        self.assertEqual({r["quote"]: r for r in req.load(p)}["it passes"]["status"], "done")  # not re-run without --all
+        self.run_cli("req", "verify", "--all")
+        self.assertEqual({r["quote"]: r for r in req.load(p)}["it passes"]["status"], "open")
 
     def test_boot_takes_the_project_from_brain_project(self):
         p, q = self.project(), self.project("other")

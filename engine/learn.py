@@ -350,7 +350,10 @@ def owner_turns(transcript: Path | str) -> list[tuple[str, str]]:
     return out
 
 
-def verify_owner_quote(quote: str, sid: str | None = None) -> tuple[str, str]:
+MIN_RULE_QUOTE_WORDS = 5  # an owner-stated rule rests on a sentence of his, not a fragment (CB-208)
+
+
+def verify_owner_quote(quote: str, sid: str | None = None, min_words: int = 0) -> tuple[str, str]:
     """(evidence, "") when ``quote`` occurs in a turn the owner typed in this
     session's transcript, else ("", one-line reason). The evidence names the
     turn and a hash of the quote, never the quote itself."""
@@ -362,6 +365,9 @@ def verify_owner_quote(quote: str, sid: str | None = None) -> tuple[str, str]:
         return "", "no transcript of this session is on disk, so the owner's words cannot be checked"
     for ts, text in owner_turns(main):
         if q in norm_quote(text):
+            if min_words and len(q.split()) < min_words and q != norm_quote(text):
+                return "", (f"--quote holds {len(q.split())} word(s): quote at least {min_words} of his words, "
+                            "or his whole message, so a fragment cannot carry a rule")
             return f"owner:turn@{ts}#{c.sha256_text(q)[:12]}", ""
     return "", "the quote is not in any turn the owner typed in this session"
 
@@ -1411,7 +1417,8 @@ def build_note(args, root: Path) -> tuple[dict | None, Path | None, str]:
     if why:
         return None, None, why
     if getattr(args, "quote", None):
-        owner_ev, why = verify_owner_quote(args.quote, sid)
+        owner_ev, why = verify_owner_quote(args.quote, sid,
+                                           MIN_RULE_QUOTE_WORDS if getattr(args, "trust", "") == "owner-stated" else 0)
         if why:
             return None, None, why
         evidence.append(owner_ev)
