@@ -108,6 +108,7 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
     age = c.days_since(models.get("verified_on", ""))
     if age > int(models.get("recheck_days", 90)):
         lines.append(f"note: model facts were verified {age} days ago; re-check memory/models.json before relying on prices or model names")
+    lines += session_start_lines(root, proj if proj and c.is_managed(proj) and mode in ("work", "choose") else None)
     if request:
         try:
             from . import route
@@ -133,6 +134,51 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
         if size > BOOT_LIMIT:
             break
         out.append(l)
+    return out
+
+
+RADAR_EVERY_HOURS = 24
+
+
+def radar_due(root: Path) -> bool:
+    """True when no source has been checked in the last day."""
+    state = c.read_json(root / "learning" / "radar" / "state.json", {}) or {}
+    sources = state.get("sources", state) if isinstance(state, dict) else {}
+    stamps = [v.get("last_checked", "") for v in sources.values() if isinstance(v, dict)]
+    if not stamps:
+        return True
+    import datetime as dt
+    try:
+        newest = max(dt.datetime.fromisoformat(x.replace("Z", "+00:00")) for x in stamps if x)
+    except ValueError:
+        return True
+    return (c.now() - newest).total_seconds() > RADAR_EVERY_HOURS * 3600
+
+
+def session_start_lines(root: Path, project: Path | None) -> list[str]:
+    """Extra orientation that depends on optional modules. Every part is
+    guarded: a failure here must never cost the session its start."""
+    out: list[str] = []
+    if project is not None:
+        try:  # an earlier session that never ran `close`: record it now
+            from . import ledger
+            previous = ledger.mark_open(project)
+            if previous:
+                out.append("earlier session was not closed: " + c.clip(ledger.repair_unclosed(project, previous), 150))
+        except Exception:
+            pass
+    try:  # a model update or a bad lesson shows up as a shift in the numbers
+        from . import mlearn
+        cfg = c.read_json(root / "memory" / "ml_config.json", {}) or {}
+        out += [c.clip("alarm: " + a, 180) for a in mlearn.alarms(mlearn.load(root), cfg)[:2]]
+    except Exception:
+        pass
+    try:  # official news about the models or Claude Code, at most once a day
+        if radar_due(root):
+            from . import radar
+            out += [c.clip("news: " + l, 220) for l in radar.due_lines(max_seconds=4, max_lines=2, trust="official", brain_root=root)]
+    except Exception:
+        pass
     return out
 
 

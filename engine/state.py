@@ -155,6 +155,30 @@ def push_bookkeeping(project: Path) -> str:
     return f"checkpoint pushed to {branch}{note}"
 
 
+def push_brain_records(brain_root: Path | None = None) -> str:
+    """Commit and push what this session recorded in the brain (inbox records
+    and the radar's state) on the brain's current branch. Only those paths:
+    a working session never commits anything else in the brain."""
+    root = Path(brain_root or c.BRAIN_ROOT)
+    if not (root / ".git").exists():
+        return ""
+    paths = [p for p in ("learning/inbox", "learning/radar") if (root / p).exists()]  # git rejects a pathspec that matches nothing
+    if not paths:
+        return ""
+    changed = [l for l in git(root, "status", "--porcelain", "--", *paths).splitlines() if l.strip()]
+    if not changed:
+        return ""
+    subprocess.run(["git", "-C", str(root), "add", "--", *paths], capture_output=True)
+    made = subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "learn: session records", "--", *paths], capture_output=True, text=True)
+    if made.returncode != 0:
+        return "brain records not committed (" + c.clip(made.stderr or made.stdout, 100) + ")"
+    if not git(root, "remote"):
+        return "brain records committed; no remote to push to"
+    branch = git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    pushed = subprocess.run(["git", "-C", str(root), "push", "-q", "-u", "origin", branch], capture_output=True, text=True, timeout=120)
+    return f"brain records pushed to {branch}" if pushed.returncode == 0 else "brain records committed; PUSH FAILED: " + c.clip(pushed.stderr, 120)
+
+
 def last_gate(project: Path) -> str:
     rows = c.read_jsonl(Path(project) / ".brain" / "log" / "gates.jsonl")
     if not rows:
@@ -318,6 +342,9 @@ def handover(project: Path, brain_root: Path | None = None) -> tuple[list[str], 
     pushed = push_bookkeeping(project)
     problems = [f"project: {pushed}"] if "FAILED" in pushed or pushed.startswith("not pushed: could not") else []
     problems += [f"project: {p}" for p in repo_cleanliness(project)]
+    brain_msg = push_brain_records(brain_root)
+    if "FAILED" in brain_msg or "not committed" in brain_msg:
+        problems.append(f"brain: {brain_msg}")
     problems += [f"brain: {p}" for p in repo_cleanliness(Path(brain_root or c.BRAIN_ROOT))]
     return problems, text
 
@@ -334,7 +361,10 @@ def cmd_checkpoint(args) -> int:
     if args.push:
         msg = push_bookkeeping(project)
         print(msg)
-        if "FAILED" in msg:
+        brain_msg = push_brain_records()
+        if brain_msg:
+            print(brain_msg)
+        if "FAILED" in msg or "FAILED" in brain_msg:
             return 1
     return 0
 

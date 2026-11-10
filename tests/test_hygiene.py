@@ -95,6 +95,39 @@ class HygieneTests(unittest.TestCase):
         self.assertIn("open one", text)
         self.assertNotIn("finished one", text)
 
+    def test_brain_records_are_pushed_and_nothing_else_in_the_brain(self):
+        brain = self.ws / "Claude-Brain"
+        bremote = self.ws / "brain-remote.git"
+        sh(self.ws, "git", "init", "-q", "--bare", "-b", "main", str(bremote))
+        brain.mkdir()
+        for cmd in (["git", "init", "-q", "-b", "work"], ["git", "config", "user.email", "t@example.invalid"],
+                    ["git", "config", "user.name", "t"], ["git", "config", "commit.gpgsign", "false"],
+                    ["git", "remote", "add", "origin", str(bremote)]):
+            sh(brain, *cmd)
+        (brain / "CLAUDE.md").write_text("kernel\n")
+        sh(brain, "git", "add", "-A")
+        sh(brain, "git", "commit", "-q", "-m", "init")
+        self.assertEqual(state.push_brain_records(brain), "")  # nothing recorded yet
+        (brain / "learning" / "inbox").mkdir(parents=True)
+        (brain / "learning" / "inbox" / "2026-11-10-s.jsonl").write_text('{"kind": "ledger"}\n')
+        (brain / "CLAUDE.md").write_text("kernel edited by hand\n")
+        self.assertIn("brain records pushed to work", state.push_brain_records(brain))
+        self.assertIn("ledger", sh(bremote, "git", "show", "work:learning/inbox/2026-11-10-s.jsonl").stdout)
+        self.assertEqual(sh(bremote, "git", "show", "work:CLAUDE.md").stdout, "kernel\n")
+
+    def test_boot_extras_never_break_the_start(self):
+        from engine import detect
+        brain = self.ws / "B2"
+        (brain / "memory").mkdir(parents=True)
+        (brain / "learning" / "radar").mkdir(parents=True)
+        (brain / "learning" / "radar" / "state.json").write_text("{ not json")
+        (brain / "memory" / "ml_config.json").write_text("[]")
+        os.environ["BRAIN_NO_NETWORK"] = "1"
+        self.assertIsInstance(detect.session_start_lines(brain, self.p), list)
+        self.assertTrue(detect.radar_due(brain))
+        c.write_json(brain / "learning" / "radar" / "state.json", {"sources": {"a": {"last_checked": c.now_iso()}}})
+        self.assertFalse(detect.radar_due(brain))
+
     def test_bookkeeping_definition_is_shared_with_gates(self):
         self.assertIs(gate.is_bookkeeping, state.is_bookkeeping)
         self.assertTrue(state.is_bookkeeping(".brain/log/gates.jsonl"))
