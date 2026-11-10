@@ -16,7 +16,21 @@ as a share of output and never added on top.
 always do (round2/05). So boot marks the session open
 (``.brain/log/open-session.json``, ``mark_open``), capture clears the mark,
 and a later boot that finds another session's mark repairs the gap from
-that session's transcript or records it as unrecorded (``repair_unclosed``).
+that session's last live capture, its transcript, or records it as
+unrecorded (``repair_unclosed``).
+
+Two copies of a session's records exist. The Stop hook captures after every
+turn into ``learning/inbox/.live/`` (``capture(live=True)``), which git
+ignores: a tracked file rewritten every turn left the tree dirty every turn.
+``close`` writes the tracked inbox file and removes the live one. Each
+capture reads both, so neither loses what the other knew.
+
+Units. ``tokens`` counts every token, and in a long session over nine in
+ten are cache reads, so it does not measure work. ``tokens_oe`` (output-
+equivalent) is the cost divided by the main model's output price, the unit
+HR wages use. ``wall_minutes`` runs from the first to the last timestamp;
+``active_minutes`` adds the gaps between consecutive timestamps, each
+counted up to a cap, so a night between two turns is not a night of work.
 """
 from __future__ import annotations
 
@@ -30,6 +44,8 @@ from . import learn
 
 COUNTERS = ("in", "cache_write", "cache_read", "out", "thinking")
 BIG_TOOL_RESULT_TOKENS = 5000
+ACTIVE_GAP_MINUTES = 5.0   # tunable: memory/ml_config.json ledger.active_gap_minutes
+LIVE_DIR = c.INBOX_DIR + ".live/"   # git-ignored: what the Stop hook captures between closes
 
 
 # ---------------------------------------------------------------- reading
@@ -52,6 +68,7 @@ def _usage(raw: dict) -> dict:
         "cache_read": num(raw.get("cache_read_input_tokens")),
         "out": num(raw.get("output_tokens")),
         "thinking": num(details.get("thinking_tokens")),
+        "fast": raw.get("speed") == "fast",
     }
 
 
@@ -99,15 +116,31 @@ def read_transcript(path: Path | str) -> dict:
 
 
 # ---------------------------------------------------------------- pricing
-def rates_for(model: str, models_cfg: dict) -> dict:
-    """Per-million prices for a model id or alias; unknown models use the fallback."""
+def known_rates(model: str, models_cfg: dict) -> dict | None:
+    """The price row of a model id or alias, or None when the brain has none."""
     models = (models_cfg or {}).get("models", {})
     if model in models:
         return models[model]
     for mid, m in models.items():
         if m.get("alias") == model or model.startswith(mid):
             return m
-    return (models_cfg or {}).get("fallback_price", {})
+    return None
+
+
+def rates_for(model: str, models_cfg: dict) -> dict:
+    """Per-million prices for a model id or alias; unknown models use the fallback."""
+    known = known_rates(model, models_cfg)
+    return known if known is not None else (models_cfg or {}).get("fallback_price", {})
+
+
+def _fast_factor(model: str, u: dict, models_cfg: dict) -> float | None:
+    """The multiplier for a fast-mode message, 1.0 for a standard one, None
+    when the message was fast and the price row records no ``fast_multiplier``
+    (it is then priced as standard and the summary says so)."""
+    if not u.get("fast"):
+        return 1.0
+    f = rates_for(model, models_cfg).get("fast_multiplier")
+    return float(f) if isinstance(f, (int, float)) and not isinstance(f, bool) and f > 0 else None
 
 
 def price(model: str, u: dict, models_cfg: dict) -> float:
@@ -116,7 +149,22 @@ def price(model: str, u: dict, models_cfg: dict) -> float:
     w1 = r.get("cache_write_1h", w5)
     cost = (u["in"] * r.get("in", 0.0) + u["cache_write_5m"] * w5 + u["cache_write_1h"] * w1
             + u["cache_read"] * r.get("cache_read", 0.0) + u["out"] * r.get("out", 0.0)) / 1_000_000
-    return cost
+    return cost * (_fast_factor(model, u, models_cfg) or 1.0)
+
+
+def output_equivalent(cost: float, model: str, models_cfg: dict) -> int:
+    """A cost as tokens of the model's output: the one unit in which sessions,
+    helpers and HR wages can be compared (cost / output price)."""
+    out = rates_for(model, models_cfg).get("out") if model else None
+    out = out or (models_cfg or {}).get("fallback_price", {}).get("out") or 20.0
+    return int(round(cost / out * 1_000_000))
+
+
+def gap_cap(brain_root: Path | None = None) -> float:
+    """Minutes one gap between two timestamps may add to ``active_minutes``."""
+    cfg = c.read_json(Path(brain_root or c.BRAIN_ROOT) / "memory" / "ml_config.json", {})
+    v = (cfg.get("ledger") or {}).get("active_gap_minutes") if isinstance(cfg, dict) and isinstance(cfg.get("ledger"), dict) else None
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else ACTIVE_GAP_MINUTES
 
 
 def _empty() -> dict:
@@ -142,10 +190,13 @@ def _parse_ts(ts: str) -> _dt.datetime | None:
     return d if d.tzinfo else d.replace(tzinfo=_dt.timezone.utc)
 
 
-def summarise(main_path, sub_paths, models_cfg: dict) -> dict:
+def summarise(main_path, sub_paths, models_cfg: dict, gap_minutes: float = ACTIVE_GAP_MINUTES) -> dict:
     """Priced totals for one session: per model, main versus helpers, cache
-    share of the main conversation, oversized tool results, and wall time."""
+    share of the main conversation, oversized tool results, wall and active
+    time, the totals in output-equivalent tokens, and what was priced by
+    guess (models at the fallback rate, fast mode at the standard rate)."""
     per_model: dict[str, dict] = {}
+    fast_at_standard = 0
     main_acc, help_acc = _empty(), _empty()
     stamps: list[str] = []
     main_models: dict[str, int] = {}
@@ -158,6 +209,7 @@ def summarise(main_path, sub_paths, models_cfg: dict) -> dict:
             helpers += 1
         for m in data["messages"]:
             cost = price(m["model"], m["usage"], models_cfg)
+            fast_at_standard += _fast_factor(m["model"], m["usage"], models_cfg) is None
             _add(per_model.setdefault(m["model"], _empty()), m["usage"], cost)
             _add(main_acc if is_main else help_acc, m["usage"], cost)
             if is_main:
@@ -173,6 +225,8 @@ def summarise(main_path, sub_paths, models_cfg: dict) -> dict:
     first = times[0].strftime("%Y-%m-%dT%H:%M:%SZ") if times else ""
     last = times[-1].strftime("%Y-%m-%dT%H:%M:%SZ") if times else ""
     wall = round((times[-1] - times[0]).total_seconds() / 60, 1) if times else 0.0
+    active = round(sum(min((b - a).total_seconds() / 60, gap_minutes) for a, b in zip(times, times[1:])), 1)
+    main_model = max(sorted(main_models), key=lambda m: main_models[m]) if main_models else ""
     return {
         "models": {k: _round(v) for k, v in sorted(per_model.items())},
         "main": _round(main_acc),
@@ -182,11 +236,16 @@ def summarise(main_path, sub_paths, models_cfg: dict) -> dict:
         "helpers": helpers,
         "helper_cost_share": round(help_acc["cost"] / totals["cost"], 4) if totals["cost"] else 0.0,
         "big_tool_results": main["big_tool_results"],
-        "main_model": max(sorted(main_models), key=lambda m: main_models[m]) if main_models else "",
+        "main_model": main_model,
         "main_effort": main["effort"],
         "first": first,
         "last": last,
         "wall_minutes": wall,
+        "active_minutes": active,
+        "tokens_oe": output_equivalent(totals["cost"], main_model, models_cfg),
+        "tokens_oe_main": output_equivalent(main_acc["cost"], main_model, models_cfg),
+        "unpriced_models": sorted(m for m in per_model if known_rates(m, models_cfg) is None),
+        "fast_at_standard": fast_at_standard,
     }
 
 
@@ -203,13 +262,26 @@ def _tokens(acc: dict) -> int:
     return acc["in"] + acc["cache_write"] + acc["cache_read"] + acc["out"]
 
 
+def pricing_notes(s: dict) -> list[str]:
+    """What the cost rests on a guess for; empty when every price is recorded."""
+    out = []
+    if s.get("unpriced_models"):
+        out.append(f"priced at the fallback rate: {', '.join(s['unpriced_models'][:4])}; add it to memory/models.json")
+    if s.get("fast_at_standard"):
+        out.append(f"fast mode priced at the standard rate: {s['fast_at_standard']} message(s); memory/models.json has no fast_multiplier")
+    return out
+
+
 def format_summary(sid: str, s: dict) -> list[str]:
-    lines = [f"session {sid[:12]}: {s['wall_minutes']} min, {s['helpers']} helper(s), main model {s['main_model'] or 'none'}"]
+    lines = [f"session {sid[:12]}: {s['wall_minutes']} min ({s['active_minutes']} active), {s['helpers']} helper(s), "
+             f"main model {s['main_model'] or 'none'}"]
     for model, m in list(s["models"].items())[:6]:
         lines.append(f"  {model}: in {_k(m['in'])}, cache write {_k(m['cache_write'])}, cache read {_k(m['cache_read'])}, "
                      f"out {_k(m['out'])} (thinking {_k(m['thinking'])}), ${m['cost']:.2f}")
     t = s["totals"]
-    lines.append(f"total: {_k(_tokens(t))} tokens, ${t['cost']:.2f}; helpers {s['helper_cost_share']:.0%} of cost")
+    lines.append(f"total: {_k(_tokens(t))} tokens ({_k(s['tokens_oe'])} output-equivalent), ${t['cost']:.2f}; "
+                 f"helpers {s['helper_cost_share']:.0%} of cost")
+    lines += pricing_notes(s)
     lines.append(f"main conversation read from cache: {s['cache_read_share']:.0%} (target 80% or more)")
     lines.append(f"tool results over {BIG_TOOL_RESULT_TOKENS} tokens in main: {s['big_tool_results']}")
     return lines
@@ -296,6 +368,10 @@ def _outcomes(sid: str, at: str, family: str, classes: list[str], tier, s: dict,
                "rework": reds, "tokens": _tokens(s["main"]) // n, "cost": round(s["main"]["cost"] / n, 6),
                "tokens_all": _tokens(s["totals"]) // n, "cost_all": round(s["totals"]["cost"] / n, 6),
                "minutes": round(s["wall_minutes"] / n, 1),
+               # The same usage in units that mean work (see the module text).
+               "tokens_oe": output_equivalent(s["main"]["cost"], s["main_model"], models_cfg) // n,
+               "tokens_oe_all": output_equivalent(s["totals"]["cost"], s["main_model"], models_cfg) // n,
+               "active_minutes": round(s["active_minutes"] / n, 1) if s.get("active_minutes") is not None else None,
                "est_tokens": declared.get("est_tokens"), "est_minutes": declared.get("est_minutes"),
                "explored": bool(declared.get("explored")),
                "propensity": declared.get("propensity") if declared.get("propensity") is not None else 1.0,
@@ -310,68 +386,184 @@ def _outcomes(sid: str, at: str, family: str, classes: list[str], tier, s: dict,
             rec["words"], rec["rule_tier"] = list(declared["words"]), declared["rule_tier"]
         if not usage_known:
             # No transcript: the gates still say what happened; the cost does not exist.
-            rec.update(tokens=None, cost=None, tokens_all=None, cost_all=None, minutes=None, usage="unknown")
+            rec.update(tokens=None, cost=None, tokens_all=None, cost_all=None, minutes=None, tokens_oe=None,
+                       tokens_oe_all=None, active_minutes=None, usage="unknown")
         out.append(rec)
     return out
+
+
+SESSION_FILE = r"\d{4}-\d{2}-\d{2}-%s(?:-n\d+)?\.jsonl"
+
+
+def _session_files(folder: Path, sid: str) -> list[Path]:
+    """The files of one session in an inbox folder, matched on the whole name
+    (a glob on the tail would also take sessions whose id ends the same)."""
+    safe = learn.safe_session(sid)
+    pat = re.compile(SESSION_FILE % re.escape(safe))
+    return sorted(f for f in folder.glob(f"*-{safe}*.jsonl") if pat.fullmatch(f.name)) if folder.is_dir() else []
+
+
+def live_file(brain_root: Path, sid: str) -> Path:
+    """Where the Stop hook keeps this session's capture between closes."""
+    folder = Path(brain_root) / LIVE_DIR
+    hits = _session_files(folder, sid)
+    return hits[0] if hits else folder / f"{c.today()}-{learn.safe_session(sid)}.jsonl"
+
+
+def live_records(brain_root: Path, sid: str) -> list[dict]:
+    return [r for f in _session_files(Path(brain_root) / LIVE_DIR, sid) for r in c.read_jsonl(f) if r.get("session") == sid]
+
+
+def drop_live(brain_root: Path, sid: str) -> None:
+    for f in _session_files(Path(brain_root) / LIVE_DIR, sid):
+        try:
+            f.unlink()
+        except OSError:
+            pass
+
+
+def promote_live(brain_root: Path | None = None, sid: str | None = None) -> Path | None:
+    """Move a session's live capture into its tracked inbox file and remove
+    the live file. Returns the tracked file, or None when there was nothing
+    to move or the session was already consolidated. For whatever is about
+    to commit the inbox (a checkpoint that pushes, a repair): the live copy
+    exists only in this container."""
+    root = Path(brain_root or c.BRAIN_ROOT)
+    sid = sid or c.session_id()
+    recs = live_records(root, sid)
+    # Only kinds the live copy holds are replaced: a capture that could not
+    # see the project has no outcomes, and must not erase the tracked ones.
+    kinds = tuple(k for k in ("ledger", "outcome") if any(r.get("kind") == k for r in recs))
+    written = learn.replace_session_records(root, sid, recs, kinds=kinds) if kinds else None
+    drop_live(root, sid)
+    return written
+
+
+def _promote_orphans(root: Path, keep: str) -> None:
+    """Live files of other sessions belong to sessions that ended without
+    ``close`` (or are still running; their own close then replaces the
+    record). Without a project there is no open marker to trigger a repair,
+    so the next close moves them into the tracked inbox."""
+    folder = root / LIVE_DIR
+    for f in sorted(folder.glob("*.jsonl")) if folder.is_dir() else []:
+        for sid in sorted({str(r.get("session")) for r in c.read_jsonl(f) if r.get("session")} - {keep}):
+            promote_live(root, sid)
+
+
+def tracked_ledgers(brain_root: Path, sid: str) -> list[dict]:
+    """This session's ledger records in the tracked inbox, consolidated or not."""
+    return [r for f in _session_files(Path(brain_root) / c.INBOX_DIR, sid) for r in c.read_jsonl(f)
+            if r.get("kind") == "ledger" and r.get("session") == sid]
+
+
+def is_closed(brain_root: Path, sid: str) -> bool:
+    """True when the session ran ``close``: its tracked ledger record says so."""
+    return any(r.get("closed") for r in tracked_ledgers(brain_root, sid))
+
+
+def recorded_tier(project: Path) -> int | None:
+    """The size the project's work is recorded at: ``tier`` in the head of
+    ``.brain/STATE.md``, then the manifest's ``tier``."""
+    for line in c.read_text(Path(project) / ".brain" / "STATE.md").splitlines():
+        if line.startswith("## "):
+            break
+        m = re.fullmatch(r"tier:\s*([0-3])\s*", line)
+        if m:
+            return int(m.group(1))
+    t = c.load_manifest(project).get("tier")
+    return t if isinstance(t, int) and not isinstance(t, bool) and 0 <= t <= 3 else None
+
+
+def _save_run_record(project: Path, sid: str, record: dict) -> Path:
+    log_dir = Path(project) / ".brain" / "log"
+    existing = sorted(log_dir.glob(f"*-{learn.safe_session(sid)}.json"))
+    path = existing[0] if existing else log_dir / f"{c.today()}-{learn.safe_session(sid)}.json"
+    c.write_json(path, record)
+    return path
+
+
+def _after_record(project: Path, sid: str) -> None:
+    """A tracked record exists for the session: its marker goes, the status page is redrawn."""
+    clear_open(project, sid)
+    try:
+        from . import state
+        state.write_status(project)
+    except (ImportError, AttributeError):
+        pass
 
 
 def capture(brain_root: Path | None = None, sid: str | None = None, main_path=None, sub_paths=None,
             project: Path | None = None, outcome: str = "", classes: list[str] | None = None,
             tier: int | None = None, note: str = "", models_cfg: dict | None = None,
-            used: list[tuple[str, bool]] | None = None, declared: dict | None = None) -> dict:
+            used: list[tuple[str, bool]] | None = None, declared: dict | None = None,
+            live: bool = False, closed: bool = False) -> dict:
     """Write the run record and inbox records for one session. Safe to call
     again: both are keyed by session id and replaced, never duplicated.
 
     What only ``close`` knows (classes, tier, outcome, ``declared`` outcome
     fields such as risk and estimates) is kept from this session's earlier
-    records when a later call (the Stop hook) does not repeat it; ``used``
+    records, tracked and live, when a later call does not repeat it; ``used``
     records are replaced only when ``used`` is given. ``declared`` may hold
     risk, model, effort, est_tokens, est_minutes, explored, propensity and
-    has_check; anything absent comes from the transcript and the manifest."""
+    has_check; anything absent comes from the transcript and the manifest.
+
+    ``live=True`` is the Stop hook's capture after every turn. It is
+    provisional, so it writes only the git-ignored live file: no tracked
+    inbox record, nothing in the project, and the open marker stays, which is
+    what lets a later boot repair a session that never closed. ``closed=True``
+    (``brain close``) marks the ledger record so that a stale marker of this
+    session is never taken for an unclosed one."""
     root = Path(brain_root or c.BRAIN_ROOT)
     sid = sid or c.session_id()
     if main_path is None:
         main_path, sub_paths = c.transcript_paths(sid)
     cfg = models_cfg if models_cfg is not None else c.read_json(root / "memory" / "models.json", {})
     usage_known = main_path is not None and Path(main_path).is_file()
-    s = summarise(main_path if usage_known else None, sub_paths if usage_known else [], cfg)
-    earlier = learn.pending_session_records(root, sid)
-    prev_ledger = next((r for r in earlier if r.get("kind") == "ledger"), {})
+    s = summarise(main_path if usage_known else None, sub_paths if usage_known else [], cfg, gap_cap(root))
+    # A live file is always written after the tracked one it read, so where both exist it is the later copy.
+    earlier = learn.pending_session_records(root, sid) + live_records(root, sid)
+    prev_ledger = next((r for r in reversed(earlier) if r.get("kind") == "ledger"), {})
     prev_out = {str(r.get("task_class")): r for r in earlier if r.get("kind") == "outcome"}
     classes = [x for x in (classes or []) if x] or list(prev_ledger.get("classes") or [])
     tier = tier if tier is not None else prev_ledger.get("tier")
     outcome = outcome or str(prev_ledger.get("outcome") or "")
+    closed = closed or bool(prev_ledger.get("closed"))
     declared = {k: v for k, v in (declared or {}).items() if v is not None}
     at = c.now_iso()
     result = {"session": sid, "summary": s, "run_record": "", "inbox": "", "inbox_records": 0, "skipped": "",
-              "usage": "known" if usage_known else "unknown"}
+              "usage": "known" if usage_known else "unknown", "live": live}
 
+    managed = project is not None and c.is_managed(project)
     family = ""
     gates: list[dict] = []
     command_gates: set[str] = set()
-    if project is not None and c.is_managed(project):
+    if managed:
         family = str(c.load_manifest(project).get("family", ""))
         gates = _gate_rows(project, sid)
         command_gates = _command_gates(project)
-        log_dir = Path(project) / ".brain" / "log"
-        safe = learn.safe_session(sid)
-        existing = sorted(log_dir.glob(f"*-{safe}.json"))
-        path = existing[0] if existing else log_dir / f"{c.today()}-{safe}.json"
+    if managed and not live:
         record = {"session": sid, "at": at, "tier": tier, "classes": classes, "outcome": outcome,
                   "note": note, "models": _model_rows(s), "totals": s["totals"], "helpers": s["helpers"],
                   "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"],
+                  "active_minutes": s["active_minutes"], "tokens_oe": s["tokens_oe"],
                   "gates": [{k: g[k] for k in ("gate", "exit_code", "at")} for g in gates]}
         if not usage_known:
-            record["usage"] = "unknown"
-        c.write_json(path, record)
-        result["run_record"] = str(path)
+            record.update(usage="unknown", active_minutes=None, tokens_oe=None)
+        result["run_record"] = str(_save_run_record(project, sid, record))
 
     records = [{"kind": "ledger", "session": sid, "at": at, "family": family,
                 "task_class": classes[0] if classes else "", "classes": classes, "tier": tier,
                 "outcome": outcome, "model": _alias(s["main_model"], cfg), "models": _model_rows(s),
-                "helpers": s["helpers"], "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"]}]
+                "helpers": s["helpers"], "cache_read_share": s["cache_read_share"], "wall_minutes": s["wall_minutes"],
+                "active_minutes": s["active_minutes"], "tokens_oe": s["tokens_oe"]}]
+    if s["unpriced_models"]:
+        records[0]["unpriced_models"] = s["unpriced_models"]
+    if closed:
+        records[0]["closed"] = True
     if not usage_known:
-        records[0].update(models={}, cache_read_share=None, wall_minutes=None, usage="unknown")
+        records[0].update(models={}, cache_read_share=None, wall_minutes=None, active_minutes=None, tokens_oe=None,
+                          usage="unknown")
+    kinds: tuple[str, ...] = ("ledger",)
     if classes and gates:
         per_class = []
         for cls in classes:
@@ -379,7 +571,14 @@ def capture(brain_root: Path | None = None, sid: str | None = None, main_path=No
             per_class.append({**{k: v for k, v in keep.items() if v is not None}, **declared})
         # Classes share one session, so the declared fields of the first class stand for all.
         records += _outcomes(sid, at, family, classes, tier, s, gates, command_gates, per_class[0], cfg, usage_known)
-    kinds: tuple[str, ...] = ("ledger", "outcome")
+        # Outcomes are replaced only by outcomes: a capture that cannot see the
+        # project (no gate log) must not erase the ones an earlier capture wrote.
+        kinds += ("outcome",)
+    if live:
+        path = live_file(root, sid)
+        c.write_jsonl(path, [learn.with_id(r) for r in records])
+        result["inbox"], result["inbox_records"] = str(path), len(records)
+        return result
     if used is not None:
         kinds += ("used",)
         records += [{"kind": "used", "session": sid, "at": at, "item": item, "followed": followed}
@@ -390,13 +589,9 @@ def capture(brain_root: Path | None = None, sid: str | None = None, main_path=No
     else:
         result["inbox"] = str(written)
         result["inbox_records"] = len(records)
-    if project is not None and c.is_managed(project):
-        clear_open(project, sid)
-        try:
-            from . import state
-            state.write_status(project)
-        except (ImportError, AttributeError):
-            pass
+    drop_live(root, sid)
+    if managed:
+        _after_record(project, sid)
     return result
 
 
@@ -405,11 +600,15 @@ def _marker(project: Path) -> Path:
     return Path(project) / ".brain" / "log" / OPEN_MARKER
 
 
-def mark_open(project: Path, sid: str | None = None) -> dict | None:
+def mark_open(project: Path, sid: str | None = None, brain_root: Path | None = None) -> dict | None:
     """Record at boot that this session is open, so a later boot can tell
     when it ended without ``close``. Writes ``.brain/log/open-session.json``
     ``{session, at}`` when it is absent or belongs to another session, and
-    returns that other session's marker (the one to repair), else None."""
+    returns that other session's marker (the one to repair), else None.
+
+    A marker can outlive a session that did close: a checkpoint pushed it
+    before the close removed it, or the session closed on another project.
+    Such a marker is taken over without a word, because nothing is missing."""
     sid = sid or c.session_id()
     path = _marker(project)
     prev = c.read_json(path)
@@ -417,6 +616,8 @@ def mark_open(project: Path, sid: str | None = None) -> dict | None:
     if prev is not None and prev["session"] == sid:
         return None
     c.write_json(path, {"session": sid, "at": c.now_iso()})
+    if prev is not None and is_closed(Path(brain_root or c.BRAIN_ROOT), str(prev["session"])):
+        return None
     return prev
 
 
@@ -431,25 +632,55 @@ def clear_open(project: Path, sid: str) -> None:
             pass
 
 
+def _record_from_ledger(project: Path, sid: str, led: dict) -> None:
+    """The project's run record for a session known only from its ledger
+    record (a promoted live capture), so the project's cost page counts it."""
+    models = led.get("models") if isinstance(led.get("models"), dict) else {}
+    totals = {k: sum(m.get(k, 0) for m in models.values() if isinstance(m, dict)) for k in ("in", "cache_write", "cache_read", "out")}
+    totals["cost"] = round(sum(m.get("cost", 0.0) for m in models.values() if isinstance(m, dict)), 6)
+    _save_run_record(project, sid, {
+        "session": sid, "at": led.get("at", c.now_iso()), "tier": led.get("tier"), "classes": led.get("classes") or [],
+        "outcome": led.get("outcome") or "", "note": "recorded from the last capture; the session did not close",
+        "models": models, "totals": totals, "helpers": led.get("helpers", 0),
+        "cache_read_share": led.get("cache_read_share"), "wall_minutes": led.get("wall_minutes"),
+        "active_minutes": led.get("active_minutes"), "tokens_oe": led.get("tokens_oe"),
+        "gates": [{k: g[k] for k in ("gate", "exit_code", "at")} for g in _gate_rows(project, sid)]})
+
+
 def repair_unclosed(project: Path, previous_marker: dict, brain_root: Path | None = None) -> str:
     """Close the gap an earlier session left by ending without ``close``.
 
-    If its transcript is still on disk, capture it now (same records as
-    ``close`` would have written, without the classes only the model knew);
-    otherwise append an inbox ``ledger`` record marked ``unrecorded: true``
-    so the ledger shows the gap instead of hiding it. Returns one short line
-    for boot to print."""
+    In this order: a session whose ledger says it closed needs nothing (""
+    is returned); its last live capture, if this container still has it,
+    becomes the tracked record; else its transcript, if still on disk, is
+    captured now (same records as ``close`` would have written, without the
+    classes only the model knew); else a real record an earlier capture left
+    is kept as it is; else an inbox ``ledger`` record marked ``unrecorded:
+    true`` shows the gap instead of hiding it. A real record is never
+    replaced by that stub. Returns one short line for boot to print."""
     root = Path(brain_root or c.BRAIN_ROOT)
     sid = str((previous_marker or {}).get("session") or "")
-    if not sid:
+    if not sid or is_closed(root, sid):
         return ""
+    managed = c.is_managed(project)
+    live = live_records(root, sid)
+    if live:
+        written = promote_live(root, sid)
+        if written is None:
+            return f"earlier session {sid[:12]} was not closed; its ledger was already consolidated"
+        if managed:
+            _record_from_ledger(project, sid, next((r for r in live if r.get("kind") == "ledger"), {}))
+            _after_record(project, sid)
+        return f"earlier session {sid[:12]} was not closed; recorded it from its last capture"
     main, subs = c.transcript_paths(sid)
     if main is not None and main.is_file():
         r = capture(root, sid, main, subs, project)
         if r["skipped"]:
             return f"earlier session {sid[:12]} was not closed; its ledger was already consolidated"
         return f"earlier session {sid[:12]} was not closed; recorded it from its transcript"
-    family = str(c.load_manifest(project).get("family", "")) if c.is_managed(project) else ""
+    if any(not r.get("unrecorded") for r in tracked_ledgers(root, sid)):
+        return f"earlier session {sid[:12]} was not closed; its last recorded ledger is kept"
+    family = str(c.load_manifest(project).get("family", "")) if managed else ""
     rec = {"kind": "ledger", "session": sid, "at": c.now_iso(), "family": family, "unrecorded": True,
            "started": str(previous_marker.get("at", "")), "models": {}}
     written = learn.replace_session_records(root, sid, [rec], kinds=("ledger",))
@@ -465,7 +696,7 @@ def cmd_ledger(args) -> int:
     if main is None or not main.is_file():
         print(f"no transcript found for session {sid}")
         return 1
-    s = summarise(main, subs, c.read_json(c.BRAIN_ROOT / "memory" / "models.json", {}))
+    s = summarise(main, subs, c.read_json(c.BRAIN_ROOT / "memory" / "models.json", {}), gap_cap())
     if args.json:
         print(json.dumps(s, indent=2, sort_keys=True))
     else:
@@ -486,6 +717,10 @@ def cmd_close(args) -> int:
     if args.propensity is not None and not 0 < args.propensity <= 1:
         print("--propensity must be in (0, 1]")
         return 2
+    problem = c.secret_problem(args.note or "")
+    if problem:  # the note is written into the project's run record, which the next checkpoint pushes
+        print(problem)
+        return 2
     main, subs = c.transcript_paths(sid)
     known = main is not None and main.is_file()
     project = c.resolve_project(args.project, getattr(args, "brain_root", None))
@@ -500,10 +735,17 @@ def cmd_close(args) -> int:
         from . import route
         declared["words"] = learn.hashed_words(args.request, learn.project_salt(project))
         declared["rule_tier"] = int(route.classify(args.request, c.load_manifest(project))["tier"])
-    r = capture(brain_root=getattr(args, "brain_root", None), sid=sid, main_path=main if known else None,
+    tier = args.tier
+    if tier is None and project is not None:
+        # The size the work ran at is on disk; without it the sizing learner
+        # gets no label from a session closed the documented way.
+        tier = recorded_tier(project)
+    root = Path(getattr(args, "brain_root", None) or c.BRAIN_ROOT)
+    r = capture(brain_root=root, sid=sid, main_path=main if known else None,
                 sub_paths=subs if known else [], project=project, outcome=args.outcome or "",
-                classes=args.cls, tier=args.tier, note=args.note or "",
-                used=used if args.used else None, declared=declared)
+                classes=args.cls, tier=tier, note=args.note or "",
+                used=used if args.used else None, declared=declared, closed=True)
+    _promote_orphans(root, sid)
     if args.json:
         print(json.dumps(r, indent=2, sort_keys=True))
         return 0
@@ -513,9 +755,12 @@ def cmd_close(args) -> int:
         print(f"no transcript found for session {sid}: outcomes recorded from the gate log, token usage unknown")
     else:
         print(f"tokens: {_k(_tokens(t))} (in {_k(t['in'])}, cache write {_k(t['cache_write'])}, "
-              f"cache read {_k(t['cache_read'])}, out {_k(t['out'])})")
-        print(f"cost: ${t['cost']:.2f}; helpers {s['helpers']} ({s['helper_cost_share']:.0%} of cost)")
+              f"cache read {_k(t['cache_read'])}, out {_k(t['out'])}); {_k(s['tokens_oe'])} output-equivalent")
+        print(f"cost: ${t['cost']:.2f}; helpers {s['helpers']} ({s['helper_cost_share']:.0%} of cost); "
+              f"{s['active_minutes']} active min of {s['wall_minutes']}")
         print(f"main conversation read from cache: {s['cache_read_share']:.0%}")
+        for line in pricing_notes(s):
+            print(line)
     print(f"run record: {r['run_record'] or 'none (no managed project)'}")
     print(f"inbox: {r['skipped'] or str(r['inbox_records']) + ' record(s) in ' + Path(r['inbox']).name}")
     try:  # helpers hired this session are settled here, so no wage goes unrecorded
@@ -539,7 +784,8 @@ def register(sub) -> None:
     k.add_argument("--session", help="session id (default: this session)")
     k.add_argument("--outcome", choices=("ok", "partial", "failed"))
     k.add_argument("--class", dest="cls", action="append", default=[], help="task class (repeatable)")
-    k.add_argument("--tier", type=int, choices=(0, 1, 2, 3))
+    k.add_argument("--tier", type=int, choices=(0, 1, 2, 3),
+                   help="size the work ran at (default: the project's STATE.md, then its manifest)")
     k.add_argument("--note", help="short note for the project's run record")
     # Whether an item helped is never accepted here: mlearn derives it from
     # the gate outcomes (I-07). Only whether it was followed is declared.
@@ -548,7 +794,8 @@ def register(sub) -> None:
     k.add_argument("--risk", choices=RISKS, help="risk of the work (default standard)")
     k.add_argument("--model", help="model alias of the work (default: the main conversation's)")
     k.add_argument("--effort", help="effort level (default: the transcript's)")
-    k.add_argument("--est-tokens", type=int, help="tokens estimated before the work")
+    k.add_argument("--est-tokens", type=int,
+                   help="tokens estimated before the work, in output-equivalent tokens (the unit of HR wages)")
     k.add_argument("--est-minutes", type=float, help="minutes estimated before the work")
     k.add_argument("--explored", type=int, choices=(0, 1), help="1 if a cheaper arm was being tried")
     k.add_argument("--propensity", type=float, help="probability the routing choice had (default 1)")
