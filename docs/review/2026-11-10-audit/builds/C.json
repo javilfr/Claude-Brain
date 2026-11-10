@@ -1,0 +1,154 @@
+{
+ "package": "C",
+ "findings": [
+  {
+   "id": "core-02",
+   "status": "fixed",
+   "note": "Two gates sharing an id, or an empty id, now refuse `brain gate` and `brain release` with a line naming the id; a record answers only for the command it ran; owner and checklist gates hold a release. The `brain validate` half is in engine/contract.py (package B) and is not done here.",
+   "tests": "test_two_gates_with_one_id_cannot_release_on_one_pass, test_a_gate_with_an_empty_id_cannot_release, test_an_edited_gate_command_does_not_inherit_the_old_pass, test_release_waits_for_owner_and_checklist_gates"
+  },
+  {
+   "id": "quality2-01",
+   "status": "fixed",
+   "note": "`release` (with or without --run-gates) runs the detectors and refuses on a hold unless `--accept-skips \"<reason>\"`; the reason and the held lines go into .brain/log/releases.jsonl. Marker list extended as the finding gives; removed tests, deleted test files and a changed, removed or masked gate command are holds; commands run through `bash -o pipefail -c`.",
+   "tests": "test_release_refuses_a_newly_skipped_test_until_accepted, test_detectors_see_expected_failure_skiptest_and_deleted_tests, test_changed_or_masked_gate_command_is_reported, test_pipeline_failure_is_not_hidden"
+  },
+  {
+   "id": "redteam-05",
+   "status": "fixed",
+   "note": "`release --push` runs every gate itself on HEAD and pushes only on those exit codes, so a hand-written record cannot release; report-only mode still reads records. Pipes are safe under pipefail, `|| true` and the like at the end of a gate are a hold, duplicate ids refuse. The `validate` half is package B's.",
+   "tests": "test_a_forged_gate_record_does_not_release, test_pipeline_failure_is_not_hidden, test_changed_or_masked_gate_command_is_reported, test_two_gates_with_one_id_cannot_release_on_one_pass"
+  },
+  {
+   "id": "e2e-trial-03",
+   "status": "fixed",
+   "note": "After the push the release record is committed with state.push_bookkeeping and the release branch is fast-forwarded to that commit with a plain push; a second `release --push` prints one line (`already released ... bookkeeping synced`), adds no record and leaves the tree clean. The proposal's other half (a checkpoint on a working branch also pushing to the release branch) is in state.py, package A; until then a later `release --push` does that sync.",
+   "tests": "test_release_branch_holds_the_record_of_its_own_release, test_a_project_on_its_release_branch_also_gets_its_record"
+  },
+  {
+   "id": "e2e-trial-08",
+   "status": "fixed",
+   "note": "`brain run` with no --cwd runs in the one detected project when typed outside any managed project (parent folder or brain folder) and starts its line with `in <project>:`; with two projects it runs where typed; --cwd still decides. Logs are created exclusively, so same-second runs get two files (names still match learn.RUN_LOG_RE).",
+   "tests": "test_run_goes_to_the_one_detected_project, test_two_runs_in_one_second_leave_two_logs, test_digest_is_the_runs_own_output_even_if_the_log_name_is_taken_over (a guard for the new code, not a before/after test of the finding)"
+  },
+  {
+   "id": "quality-path-03",
+   "status": "fixed",
+   "note": "Exit 0 with a failure summary in the last 20 lines is recorded as `suspect`, said in one line by `run` and `gate`, and holds a release. Masked commands (`|| true`, `|| :`, `|| exit 0`, `|| echo`, trailing `; true` or `exit 0`, --passWithNoTests, a pipe when there is no bash) hold a release, also a first one. I chose end-of-command masks only: `rm -f x || true; pytest` is not flagged. Bare `true` only gets the never-seen-to-fail note.",
+   "tests": "test_exit_zero_with_failure_summary_is_not_green, test_changed_or_masked_gate_command_is_reported, test_pipeline_failure_is_not_hidden, test_detectors_see_expected_failure_skiptest_and_deleted_tests"
+  },
+  {
+   "id": "quality-path-04",
+   "status": "fixed",
+   "note": "A checklist gate is evaluated by script (file exists, at least one box, none unchecked; I made a file with no box red, which is stricter than the decision's wording). An owner gate is green only after `brain gate confirm <id> --quote`, checked with learn.verify_owner_quote, recorded with the commit and stale once the work changes; the quote is not stored.",
+   "tests": "test_release_waits_for_owner_and_checklist_gates, test_checklist_gate_is_red_with_unchecked_boxes, test_owner_gate_confirmation_needs_the_owners_typed_words"
+  },
+  {
+   "id": "quality-path-05",
+   "status": "fixed",
+   "note": "run_filtered rebuilt on Popen: stdin /dev/null, one log in true order (closes open item M6), own process group killed on timeout or on SIGTERM/SIGINT/SIGHUP to brain with a record still written (exit 124 / 143), digest streamed (peak under 20 MB for 54 MB of output, was 197 MB), stored log capped at 20 MB keeping head and tail, logs pruned to 60, defaults 540 s for run and 900 s for a gate, per-gate `timeout` honoured. The brain-build sentence and the ml_config group are for other owners (see notes).",
+   "tests": "test_timeout_kills_the_whole_process_group_and_keeps_stderr, test_run_does_not_read_the_callers_stdin, test_killed_gate_still_leaves_a_record, test_large_output_is_streamed_not_held, test_run_logs_are_pruned, test_default_timeouts_are_under_the_tool_limit_and_a_gate_honours_its_own"
+  },
+  {
+   "id": "quality-path-07",
+   "status": "fixed",
+   "note": "`brain gate` exits 1 and says `no gate ran ...: set gates[].command` when no gate produced an exit code; before the first commit the record's commit is empty, not the literal HEAD.",
+   "tests": "test_gate_exits_non_zero_when_nothing_ran"
+  },
+  {
+   "id": "quality-path-14",
+   "status": "partial",
+   "note": "Done: gate prints the full digest of the first red gate and one line per other gate (15 lines for five failing gates, was 60), stops at the first red gate unless --keep-going, paths are relative, and the release refusal names up to three dirty paths and .gitignore. Remains: the starter .gitignore written by contract.init, which is in engine/contract.py (package B).",
+   "tests": "test_gate_output_stays_under_fifteen_lines_with_many_failures, test_gate_stops_at_the_first_red_gate_by_default, test_release_refusal_names_the_dirty_files"
+  },
+  {
+   "id": "quality2-05",
+   "status": "partial",
+   "note": "Done: files matching paths.never_touch (prefix or glob) changed against the release branch, or not yet committed, are named by `gate` and hold a release unless --accept-skips. Remains: `req evidence` resolving a bare path against paths.evidence, which is in engine/req.py (package D).",
+   "tests": "test_release_refuses_changes_under_never_touch, test_gate_names_never_touch_files_changed_but_not_committed"
+  },
+  {
+   "id": "e2e-trial-20",
+   "status": "partial",
+   "note": "Done: run and gate digests print the log path relative to the project; a passing gate is one line with no path (45 bytes, was about 220). Remains: `hr hire` printing the brief path once, which is in engine/hr.py (package I).",
+   "tests": "test_digest_paths_are_relative_inside_the_project, test_gate_output_stays_under_fifteen_lines_with_many_failures"
+  },
+  {
+   "id": "instructions-16",
+   "status": "fixed",
+   "note": "`brain gate --last` prints each gate's recorded exit, time, age, commit and whether it still covers the work, plus the failing lines of the first red gate from its saved log (or a checklist's reason); it runs nothing.",
+   "tests": "test_gate_last_shows_the_recorded_failure_without_running, test_checklist_gate_is_red_with_unchecked_boxes"
+  },
+  {
+   "id": "quality-path-16",
+   "status": "fixed",
+   "note": "Gate records keep `tests` when a runner-neutral pattern finds a count (unittest, pytest, jest, mocha, TAP). A count below the gate's last green record on the release branch is shown by `gate` and holds a release unless --accept-skips. Any drop holds; no percentage threshold.",
+   "tests": "test_test_count_drop_is_reported_at_gate_and_release"
+  },
+  {
+   "id": "quality2-07",
+   "status": "fixed",
+   "note": "A release names, once per gate command, a command gate with no red run on record (`has never been seen to fail`); it does not block, and the release record remembers it was said.",
+   "tests": "test_gate_never_seen_to_fail_is_named_once"
+  },
+  {
+   "id": "redteam-07 (part in gate.py, decision 12)",
+   "status": "fixed",
+   "note": "The gate command written to gates.jsonl and the first line of every run log go through common.redact_secrets; a redacted record still answers for its gate.",
+   "tests": "test_gate_record_and_log_do_not_keep_a_secret_from_the_command"
+  },
+  {
+   "id": "owner-docs-14 (part a, decision 11) / instructions-14",
+   "status": "fixed",
+   "note": "`brain release --accept [commit]` appends {accepted: true, commit, branch} to .brain/log/releases.jsonl (default: the latest release; a commit that is not a recorded release is refused); with --push the record is synced to the release branch. Skill and guide wording is for packages K and L.",
+   "tests": "test_release_accept_records_the_owners_acceptance"
+  },
+  {
+   "id": "redteam-06 (part in gate.py)",
+   "status": "fixed",
+   "note": "gate.same_work lists renames under both names, so a work file moved into .brain/ makes a green gate stale. The rest of the finding (state.is_bookkeeping, release_branch_block, rule pr) is package A's.",
+   "tests": "test_moving_a_work_file_under_brain_makes_a_green_gate_stale"
+  }
+ ],
+ "suite": "Whole suite (python3 bin/brain run -- python3 -m unittest discover -s tests -t .): \"ok in 52.6s · 5 lines · full output: /tmp/brain-run/20261110-190035-4cda924a.log\" / \"Ran 451 tests in 52.365s\" / \"OK\" (415 before + 36 new). python3 bin/brain doctor: \"brain is healthy\", exit 0. python3 bin/brain lint: \"lint: 0 error(s), 0 note(s) — instruction surface is consistent with the engine\", exit 0. Before the fixes, the 36 new tests run against the engine at dddff2f gave \"FAILED (failures=33, errors=3)\".",
+ "head_commit": "6f6c55faf809190549af2d8b1592a1fd9758faa4",
+ "existing_tests_changed": [],
+ "new_commands_and_flags": [
+  "brain gate confirm <owner-gate-id> --quote \"<his words>\" — turns an owner gate green for the current commit, only on words the owner typed in this session (tree must be committed first)",
+  "brain gate --keep-going — run the remaining gates after one is red (the default now stops at the first red command gate)",
+  "brain gate --last — print each gate's recorded result and the failing lines of the first red one from the saved log; runs nothing",
+  "brain release --accept-skips \"<reason>\" — release although a detector holds it (skipped or removed tests, changed, removed or masked gate, never_touch files, exit 0 with a failure summary, fewer tests); the reason (8+ characters, no secret) is kept in releases.jsonl",
+  "brain release --accept [commit] — record that the owner accepted a release (default: the latest), for Go back; with --push it is synced to the release branch",
+  "brain release --push — now always runs every gate itself; --run-gates only matters without --push",
+  "brain run — with no --cwd, runs in the one detected project when typed outside any project and prints `in <project>:`; --timeout now defaults to 540 s (was 3600)",
+  "Manifest: gates[].timeout (seconds, default 900) for a command gate; gates[].file for a checklist gate",
+  "Tunables: an optional `gate` group in memory/ml_config.json (run_timeout, gate_timeout, log_cap_mb, log_stop_mb, keep_logs, kill_grace); defaults are in engine/gate.py DEFAULT_CFG"
+ ],
+ "cross_package": [
+  "Nothing was appended to or changed in any module I do not own; only engine/gate.py and tests/test_r4_c.py changed.",
+  "Package B (contract.py): validate should reject duplicate or empty gate ids and masked commands; gate.gate_id_problem(manifest) and gate.masked_command(command) return the one-line reason and can be reused. The starter .gitignore in contract.init (quality-path-14) is still to do: a unittest gate leaves __pycache__ and the next release refuses until it is ignored.",
+  "Package A (state.py): the second half of e2e-trial-03 (a checkpoint on a working branch also pushing HEAD to the release branch when only bookkeeping differs) is not done; gate.sync_record(project, branch) does exactly that and release calls it. sync_record treats push_bookkeeping's return as opaque text and checks the result with git, so internal changes there are safe.",
+  "Package D (req.py): `req evidence` resolving a bare path against paths.evidence (second half of quality2-05).",
+  "Package I (hr.py): print the brief path once in `hr hire` (e2e-trial-20). hr.settle calls gate.run_filtered, which now defaults to 540 s and runs through bash -o pipefail.",
+  "Lead: add a `gate` group to memory/ml_config.json so the tunables are visible there (run_timeout 540, gate_timeout 900, log_cap_mb 20, log_stop_mb 1024, keep_logs 60, kill_grace 2.0); the code already reads it.",
+  "Package E / ledger readers: gates.jsonl rows can now carry `tests`, `suspect`, `evidence` and kind `owner` (exit 0 on a confirmation); gates not reached after a red one get no row; the recorded command is redacted.",
+  "Consequence of decision 9 for the lead to weigh: each release now makes two pushes to the release branch (the work, then the bookkeeping commit), so a deploy-on-push host deploys twice. The live check after a release and `--check-live` expect the tip of the release branch, not the gated commit.",
+  "Seen while building: worktrees still on the old gate.py overwrite each other's log in /tmp/brain-run when two runs of one command end in the same second. One of my whole-suite runs printed another worktree's `Ran 475 tests`. Until this package is merged, a `Ran N tests` line from `brain run` in a parallel worktree may be someone else's; the exit code is always the caller's own.",
+  "tests/test_core.py::GateTests::test_run_executes_where_it_was_typed_not_in_the_project passes unchanged, but only because its project is not a sibling of the real brain; its name now describes the no-project-detected case only (e2e-trial-08)."
+ ],
+ "instruction_notes": [
+  "CLAUDE.md rule 6: \"It pushes only on a recorded green gate and never forces.\" -> it runs the gates itself on the commit and pushes only when they pass; it never forces.",
+  ".claude/skills/brain-verify/SKILL.md section 2: \"`BRAIN gate --all` records each gate's exit code; a gate with no recorded exit code has not passed.\" -> it now stops at the first red gate (`--keep-going` runs all), exits non-zero when no gate ran, and `BRAIN gate --last` shows the recorded failure without a re-run. Owner gates need `BRAIN gate confirm <id> --quote \"<his words>\"`; checklist gates are evaluated by script.",
+  ".claude/skills/brain-verify/SKILL.md section 5: \"`BRAIN release --run-gates --push` ... pushes only when every gate is green on this commit\" -> `--push` always runs the gates itself (a separate `gate` run first is no longer needed); it also refuses on skipped or removed tests, a changed or masked gate, never_touch files, an exit 0 whose output reports failures, or fewer tests, unless `--accept-skips \"<reason>\"` is given after the owner's yes; it commits the release record and fast-forwards the release branch to it. Should mention `BRAIN release --accept` when he says a release is good.",
+  "playbooks/software.md line 20: \"it pushes only when every gate recorded exit 0 on this commit\" -> it runs every gate itself on this commit. Line 23 (`sw-tag-known-good`): the acceptance is now recorded with `brain release --accept [commit]`.",
+  "method/routing.md line 26 (Go back): \"the last release he accepted (releases are listed in `.brain/log/releases.jsonl`)\" -> accepted releases are the rows with `accepted: true`, written by `BRAIN release --accept`.",
+  "method/quality.md line 21: \"`release` treats a gate with no recorded exit code, or one recorded on an earlier commit, as not passed; `gate` flags added skip markers ... Nothing checks deleted tests\" -> release runs the gates itself and holds on skip markers, removed tests and deleted test files; `gate` shows the same lines.",
+  "docs/EXECUTION_PLAN.md I-12: \"`release` pushes only on a recorded exit 0 for the current work\" -> on an exit 0 it saw itself on the commit being released. Enforced also by tests/test_r4_c.py.",
+  "docs/EXECUTION_PLAN.md section 0.3 and any brain-maintenance instruction: `python3 bin/brain run -- \"python3 -m unittest discover ...\"` typed in the brain folder now runs in the attached project when exactly one managed project is detected; for the brain's own suite with a project attached add `--cwd .`.",
+  ".claude/skills/brain-build/SKILL.md should gain one line (quality-path-05): `BRAIN run` stops a command after 540 s and a gate after 900 s (or its own `timeout`); a check longer than two minutes also needs a longer tool timeout or a background run.",
+  "Any instruction that shows a gate piped into `head` or `grep -q`: under pipefail a writer cut off by the reader exits 141 and the gate is red; `brain run` prints a one-line hint when that happens.",
+  "docs/ENGINE_SPEC.md should describe: gates.jsonl row fields (`tests`, `suspect`, `evidence`, kind `owner`), releases.jsonl fields (`accept_skips`, `held`, `never_failed`, `accepted`), run logs (header line, output in true order, `[exit N in Xs]` last, capped at 20 MB, 60 kept, a hex suffix on a same-second name), and the `gate` tunables group.",
+  "docs/BUILD_STATUS.md line 84 lists M6 (success output mixes both streams) as open: it is closed by the single merged log."
+ ],
+ "remaining": "Everything in the packet that lives in engine/gate.py is done and committed on r4/c (5 commits, tree clean). Not done because the code is in another owner's file: validate rejecting duplicate ids and masked commands, and the starter .gitignore (contract.py, B); checkpoint also pushing bookkeeping to the release branch (state.py, A); paths.evidence in req evidence (req.py, D); brief path printed once (hr.py, I); skill and guide wording (K, L); the `gate` group in memory/ml_config.json (lead). Known limits, stated rather than fixed: (1) the change detectors need a released base, so a first release can only be held by a masked gate, a suspect exit 0 or duplicate ids; (2) if brain itself is killed with SIGKILL the command keeps running, since it has its own session (SIGTERM, SIGINT and SIGHUP are handled); (3) an owner confirmation is a plain row in gates.jsonl, so a forged one would pass (sealing is the deferred quality-path-17); (4) a masked gate or a chronic false failure summary needs --accept-skips at every release until the gate is made honest, by design; (5) the log cap applies after the run, so a command can fill up to log_stop_mb (1 GB) of disk before it is stopped."
+}
