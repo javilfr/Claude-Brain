@@ -231,10 +231,10 @@ def validate(project: Path, brain_root: Path | None = None) -> list[str]:
     if not isinstance(m, dict):
         return [".brain/project.json is missing or not valid JSON"]
     ver = m.get("contract")
-    if not isinstance(ver, int):
+    if not isinstance(ver, int) or isinstance(ver, bool):
         return ["manifest: 'contract' must be an integer"]
     if ver > c.CONTRACT_VERSION:
-        return [f"stale brain: project uses contract v{ver}, this brain knows v{c.CONTRACT_VERSION}; update the brain, nothing was written"]
+        return [c.stale_brain(project)]
     if ver < c.CONTRACT_VERSION:
         errs.append(f"project is on contract v{ver}; run: brain migrate")
     schema = load_schema(ver, brain_root)
@@ -367,6 +367,9 @@ def cmd_init(args) -> int:
     if _in_brain(project):
         print(IN_BRAIN)
         return 1
+    if c.stale_brain(project):
+        print(c.stale_brain(project))
+        return 3
     if not c.is_empty_repo(project) and not c.is_managed(project) and not args.force:
         print("this folder already has content: use `brain adopt` (it surveys first and never moves existing files)")
         return 1
@@ -411,6 +414,9 @@ def cmd_adopt(args) -> int:
     if _in_brain(project):
         print(IN_BRAIN)
         return 1
+    if c.stale_brain(project):
+        print(c.stale_brain(project))
+        return 3
     s, made = adopt(project, args.title, args.family)
     pointer = " (CLAUDE.md got a pointer block above its content)" if any(x.startswith("CLAUDE.md (") for x in made) else ""
     print(f"adopted {project.name}: family {c.load_manifest(project).get('family')}; added {len(made)} contract file(s); existing files kept{pointer}")
@@ -426,9 +432,9 @@ def cmd_adopt(args) -> int:
 
 
 def cmd_validate(args) -> int:
-    project = c.resolve_project(args.project)
+    project, why = c.locate_project(args.project)
     if project is None:
-        print("no project found")
+        print(why)
         return 1
     errs = validate(project)
     if errs:
@@ -444,9 +450,9 @@ def cmd_validate(args) -> int:
 
 
 def cmd_migrate(args) -> int:
-    project = c.resolve_project(args.project)
+    project, why = c.locate_project(args.project)
     if project is None:
-        print("no project found")
+        print(why)
         return 1
     code, msgs = migrate(project)
     for m in msgs:

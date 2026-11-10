@@ -419,5 +419,167 @@ class ContractTests(Base):
         self.assertEqual((m["contract"], m["release"], m["custom"]), (1, "main-on-green", {"kept": True}))
 
 
+class ResolverTests(Base):
+    def two(self):
+        return self.project("shop"), self.project("shop-admin")
+
+    def test_with_several_projects_every_command_says_so_and_names_them(self):
+        """core-09, instructions-19: boot said 'several projects attached' and
+        every later command answered 'no managed project found (attach one, or
+        run: brain init <path>)'."""
+        shop, admin = self.two()
+        before = snapshot(self.ws)
+        for argv in (("resume",), ("checkpoint", "--item", "x"), ("status",), ("handover",), ("req", "list"), ("gate",), ("validate",), ("migrate",)):
+            code, out = self.run_cli(*argv)
+            self.assertEqual(code, 1, (argv, out))
+            self.assertEqual(len(out.strip().splitlines()), 1, out)
+            for needle in ("2 projects attached", "shop", "shop-admin", "--project"):
+                self.assertIn(needle, out, argv)
+            self.assertNotIn("attach one", out)
+            self.assertNotIn("no project found", out)
+        self.assertEqual(snapshot(self.ws), before, "nothing is written while the project is not known")
+
+    def test_project_takes_a_bare_folder_name_and_exact_wins_over_a_longer_match(self):
+        """core-09: 'shop' also occurs in 'shop-admin'; the exact name must
+        win, and a name that fits several or none is refused with the list."""
+        shop, admin = self.two()
+        code, out = self.run_cli("checkpoint", "--item", "T-1 in shop", "--project", "shop")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(state.read_state(shop)["item"], "T-1 in shop")
+        self.assertEqual(state.read_state(admin)["item"], "none")
+        code, out = self.run_cli("checkpoint", "--item", "T-2 in admin", "--project", "admin")  # the only folder with 'admin' in it
+        self.assertEqual(code, 0, out)
+        self.assertEqual(state.read_state(admin)["item"], "T-2 in admin")
+        code, out = self.run_cli("resume", "--project", "SHOP")
+        self.assertEqual(code, 0, out)
+        self.assertIn("T-1 in shop", out)
+        for name in ("sho", "nosuch"):
+            code, out = self.run_cli("resume", "--project", name)
+            self.assertEqual(code, 1, out)
+            self.assertEqual(len(out.strip().splitlines()), 1, out)
+            self.assertIn(name, out)
+            self.assertIn("shop-admin", out)
+        self.assertEqual(c.resolve_project("shop"), shop)
+        self.assertEqual(c.resolve_project(str(admin)), admin)
+
+    def test_pick_named_is_the_one_rule_for_a_spoken_project_name(self):
+        """core-09: one rule shared by --project and (once package A calls it)
+        boot's --name: exact first, then a substring only when it is unique."""
+        shop, admin = self.two()
+        both = [shop, admin]
+        self.assertEqual(c.pick_named("shop", both), [shop])
+        self.assertEqual(c.pick_named("Shop-Admin", both), [admin])
+        self.assertEqual(c.pick_named("admin", both), [admin])
+        self.assertEqual(c.pick_named("sho", both), both)
+        self.assertEqual(c.pick_named("nosuch", both), [])
+        self.assertEqual(c.pick_named("  ", both), [])
+
+    def test_environment_and_current_folder_still_choose_the_project(self):
+        """core-09: the order stays --project, BRAIN_PROJECT, the folder the
+        command is typed in, then the only managed project beside the brain."""
+        shop, admin = self.two()
+        os.environ["BRAIN_PROJECT"] = "shop-admin"
+        self.assertEqual(c.resolve_project(), admin)
+        self.assertEqual(c.resolve_project("shop"), shop, "--project beats the environment")
+        os.environ.pop("BRAIN_PROJECT")
+        (shop / "src").mkdir()
+        os.chdir(shop / "src")
+        self.assertEqual(c.resolve_project(), shop)
+        os.chdir(self.brain)
+        self.assertIsNone(c.resolve_project())
+        shutil.rmtree(admin)
+        self.assertEqual(c.resolve_project(), shop, "a single managed project needs no flag")
+
+    def test_with_no_project_the_message_fits_what_is_attached(self):
+        """core-09: in a brain-only session the advice was 'run: brain init
+        <path>', which the brain refuses on itself; with an unmanaged
+        repository beside the brain it did not name that folder."""
+        code, out = self.run_cli("resume")
+        self.assertEqual(code, 1, out)
+        self.assertIn("no project attached (brain-only session)", out)
+        self.assertNotIn("brain init", out)
+        self.assertEqual(len(out.strip().splitlines()), 1, out)
+        repo = git_repo(self.ws / "newapp")
+        (repo / "main.py").write_text("print(1)\n")
+        code, out = self.run_cli("status")
+        self.assertEqual(code, 1, out)
+        self.assertIn("newapp", out)
+        self.assertIn("brain adopt", out)
+        code, out = self.run_cli("status", "--project", repo)
+        self.assertEqual(code, 1, out)
+        self.assertIn("newapp", out)
+        self.assertIn("not a managed project", out)
+
+
+class StaleBrainTests(Base):
+    def stale(self, name="app") -> Path:
+        p = self.project(name)
+        state.checkpoint(p, item="T-1", stage="build")
+        self.set_manifest(p, contract=c.CONTRACT_VERSION + 1)
+        commit_all(p)
+        return p
+
+    def test_stale_brain_commands_write_nothing(self):
+        """core-11: boot said 'write nothing to .brain/' and then checkpoint,
+        status and boot itself wrote there."""
+        p = self.stale()
+        before = snapshot(p)
+        self.assertEqual(detect.detect(self.brain)["mode"], "stale-brain")
+        boot = detect.boot_lines("Continue with the list view", self.brain)
+        self.assertIn("stale-brain", boot[0])
+        self.assertEqual(snapshot(p), before, "boot wrote into a project with a newer contract")
+        for argv in (("checkpoint", "--item", "x", "--note", "written by an old brain", "--push"), ("status",), ("handover",),
+                     ("req", "add", "--quote", "it must work offline"), ("gate",), ("resume",), ("init", p), ("adopt", p)):
+            extra = () if argv[0] in ("init", "adopt") else ("--project", p)
+            code, out = self.run_cli(*argv, *extra)
+            self.assertEqual(code, 3, (argv, out))
+            self.assertEqual(len(out.strip().splitlines()), 1, out)
+            self.assertTrue(out.startswith("stale brain"), out)
+            self.assertIn("Update the brain", out)
+            self.assertEqual(snapshot(p), before, argv)
+        self.assertEqual(sh(p, "git", "status", "--porcelain").stdout, "")
+        code, out = self.run_cli("validate", "--project", p)
+        self.assertEqual(code, 3, out)
+        self.assertIn("stale brain", out)
+
+    def test_no_engine_write_reaches_a_project_with_a_newer_contract(self):
+        """core-11: commands that do not pass through need_project (recall's
+        log, the session marker, run logs, hire briefs) write through the same
+        three helpers; those refuse too, so the rule holds for every module."""
+        p = self.stale()
+        before = snapshot(p)
+        for write in (lambda: c.write_text(p / ".brain" / "log" / "x.txt", "x"),
+                      lambda: c.write_json(p / ".brain" / "log" / "open-session.json", {"session": "s"}),
+                      lambda: c.append_jsonl(p / ".brain" / "log" / "recall.jsonl", {"ids": []}),
+                      lambda: c.write_jsonl(p / ".brain" / "requirements.jsonl", []),
+                      lambda: c.write_text(p / "STATUS.md", "# Status\n"),
+                      lambda: c.write_json(p / ".brain" / "project.json", {"contract": 1})):
+            with self.assertRaises(c.StaleBrain):
+                write()
+        self.assertEqual(snapshot(p), before)
+        self.assertTrue(issubclass(c.StaleBrain, OSError), "callers that already skip an unwritable log keep working")
+        os.chdir(p)
+        code, out = self.run_cli("run", "--", "true")  # typed inside the stale project: its log would go to .brain/log/run
+        self.assertNotIn("Traceback", out)
+        self.assertEqual(snapshot(p), before)
+        other = self.project("other")  # a project on this brain's contract is written as before
+        c.write_text(other / ".brain" / "log" / "x.txt", "x")
+        c.append_jsonl(other / ".brain" / "log" / "y.jsonl", {"a": 1})
+        self.assertEqual(c.stale_brain(other), "")
+
+    def test_boot_with_a_stale_project_among_several_writes_nothing_to_it(self):
+        """core-11: with several projects boot is in mode 'choose', which never
+        looked at the contract version before marking the session open."""
+        p = self.stale("app")
+        self.project("zeta")
+        os.environ["BRAIN_NOW"] = "2031-01-01T00:00:00Z"
+        text = (p / ".brain" / "STATE.md").read_text().replace("updated: ", "updated: 2031-01-01T00:00:00Z was ")
+        (p / ".brain" / "STATE.md").write_text(text)  # the stale one is the most recently active
+        before = snapshot(p)
+        lines = detect.boot_lines("Continue", self.brain)
+        self.assertIn("app", "\n".join(lines))
+        self.assertEqual(snapshot(p), before)
+
+
 if __name__ == "__main__":
     unittest.main()

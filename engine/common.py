@@ -89,9 +89,45 @@ def read_text(path: Path | str, default: str = "") -> str:
         return default
 
 
+class StaleBrain(OSError):
+    """A write into a project whose contract is newer than this brain knows
+    was refused; the text is the one line to print (exit code 3). It is an
+    OSError so that code which already skips an unwritable log keeps going."""
+
+
+def stale_brain(project: Path | str) -> str:
+    """One line when the project uses a newer contract than this brain, else
+    "". An older brain cannot know what a newer contract's files mean, so it
+    writes nothing there."""
+    try:
+        ver = json.loads((Path(project) / ".brain" / "project.json").read_text(encoding="utf-8")).get("contract")
+    except (OSError, ValueError, AttributeError, RecursionError):
+        return ""
+    if isinstance(ver, int) and not isinstance(ver, bool) and ver > CONTRACT_VERSION:
+        return (f"stale brain: {Path(project).name} uses contract v{clip(str(ver), 12)}, this brain knows v{CONTRACT_VERSION}; "
+                "nothing was written. Update the brain, then run this again")
+    return ""
+
+
+def _refuse_stale(path: Path) -> None:
+    """Every engine write passes here: raise ``StaleBrain`` when the file sits
+    in a project (its .brain/ folder, or beside it) with a newer contract."""
+    parts = path.parts
+    if ".brain" in parts:
+        project = Path(*parts[: parts.index(".brain")])
+    elif (path.parent / ".brain" / "project.json").is_file():
+        project = path.parent
+    else:
+        return
+    line = stale_brain(project)
+    if line:
+        raise StaleBrain(line)
+
+
 def write_text(path: Path | str, text: str) -> None:
     """Atomic write: temp file in the same directory, then rename."""
     p = Path(path)
+    _refuse_stale(p)
     p.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=".tmp-")
     try:
@@ -173,6 +209,7 @@ def write_jsonl(path: Path | str, rows: Iterable[dict]) -> None:
 
 def append_jsonl(path: Path | str, row: dict) -> None:
     p = Path(path)
+    _refuse_stale(p)
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
@@ -288,23 +325,77 @@ def sibling_dirs(brain_root: Path | None = None) -> list[Path]:
     return out
 
 
-def resolve_project(explicit: str | None = None, brain_root: Path | None = None) -> Path | None:
-    """The project to act on: --project, then BRAIN_PROJECT, then the current
-    directory (or a parent) if managed, then the single managed sibling."""
-    for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
-        if cand:
-            return Path(cand).expanduser().resolve()
-    cur = Path.cwd().resolve()
+def pick_named(name: str, folders: list[Path]) -> list[Path]:
+    """The folders a spoken name can mean: the one whose name it is (case
+    aside) alone when there is one, else every folder whose name contains it.
+    One rule for `--project <name>` and for boot's `--name`, so 'shop' means
+    shop even when shop-admin is attached too."""
+    want = (name or "").strip().lower()
+    if not want:
+        return []
+    exact = [p for p in folders if p.name.lower() == want]
+    return exact or [p for p in folders if want in p.name.lower()]
+
+
+def _names(folders: list[Path]) -> str:
+    return ", ".join(p.name for p in folders)
+
+
+def locate_project(explicit: str | None = None, brain_root: Path | None = None) -> tuple[Path | None, str]:
+    """(project, "") or (None, one line saying why not and what to do).
+
+    The one place that decides which project a command means: --project, then
+    BRAIN_PROJECT (each a path, or the name of a folder beside the brain), then
+    the current directory (or a parent) if managed, then the only managed
+    folder beside the brain. With several managed folders and nothing to
+    choose by, the engine does not guess where to write: it names them."""
     root = Path(brain_root or BRAIN_ROOT).resolve()
+    sibs = sibling_dirs(root)
+    managed = [p for p in sibs if is_managed(p)]
+    for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
+        if not cand:
+            continue
+        path = Path(str(cand)).expanduser()
+        if not path.is_dir() and path.name == str(cand):  # a bare name, not a path
+            hits = pick_named(str(cand), managed) or pick_named(str(cand), sibs)
+            if len(hits) > 1:
+                return None, f"'{cand}' fits {len(hits)} attached projects ({_names(hits)}): pass --project with the full name"
+            if hits:
+                path = hits[0]
+        path = path.resolve()
+        if is_managed(path):
+            return path, ""
+        if not path.is_dir():
+            return None, f"no project folder '{cand}'" + (f" (attached: {_names(managed)})" if managed else "") + ": pass --project <path or folder name>"
+        return None, f"{path.name} is not a managed project (no .brain/project.json): run `brain init <path>` if it is empty, else `brain adopt <path> --survey`"
+    cur = Path.cwd().resolve()
     for p in (cur, *cur.parents):
         if p == root:
             break
         if is_managed(p):
-            return p
-    managed = [p for p in sibling_dirs(root) if is_managed(p)]
+            return p, ""
     if len(managed) == 1:
-        return managed[0].resolve()
-    return None
+        return managed[0].resolve(), ""
+    if managed:
+        return None, f"{len(managed)} projects attached ({_names(managed)}): add --project <name> to this command (boot shows the one it used)"
+    repos = [p for p in sibs if (p / ".git").exists()]
+    if repos:
+        return None, (f"no managed project: {_names(repos)} {'has' if len(repos) == 1 else 'have'} no contract yet; "
+                      f"run `brain init <path>` on an empty repository, else `brain adopt <path> --survey`")
+    return None, "no project attached (brain-only session): this command needs one; attach a project repository beside the brain, or pass --project <path>"
+
+
+def resolve_project(explicit: str | None = None, brain_root: Path | None = None) -> Path | None:
+    """The project a command means (see ``locate_project``), or None. A path
+    given with --project or BRAIN_PROJECT is returned even when it is not
+    managed yet, so callers such as `validate` can say what is missing."""
+    found, _why = locate_project(explicit, brain_root)
+    if found is None:
+        for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
+            if cand:
+                path = Path(str(cand)).expanduser()
+                return path.resolve() if path.is_dir() else None
+    return found
 
 
 # The types the contract declares for the keys the engine reads (the same
@@ -450,10 +541,15 @@ def add_project_arg(p) -> None:
 
 
 def need_project(args) -> Path | None:
-    proj = resolve_project(getattr(args, "project", None))
-    if proj is None or not is_managed(proj):
-        print("no managed project found (attach one, or run: brain init <path>)")
+    """The managed, usable project for a command, or None after printing the
+    one line that says why not and what to do next."""
+    proj, why = locate_project(getattr(args, "project", None))
+    if proj is None:
+        print(why)
         return None
+    stale = stale_brain(proj)
+    if stale:
+        raise StaleBrain(stale)  # bin/brain prints the line and exits 3; no caller goes on to write
     problem = manifest_problem(proj)
     if problem:
         print(problem)
