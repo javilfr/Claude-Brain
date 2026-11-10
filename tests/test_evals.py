@@ -337,6 +337,16 @@ class ShippedTasks(unittest.TestCase):
         c.write_text(work / "route.json", '{"tier": 0}')
         self.assertEqual(cli(["eval", "grade", "route-question", str(work)], BRAIN), (0, ["route-question: pass"]))
 
+    def test_setup_lays_out_a_clean_trial_and_refuses_a_used_folder(self):
+        work = Path(tempfile.mkdtemp()) / "trial"
+        self.addCleanup(shutil.rmtree, work.parent)
+        code, out = cli(["eval", "setup", "sw-fix-median", str(work)], BRAIN)
+        self.assertEqual(code, 0)
+        self.assertIn("Fix stats.py", out[0])
+        self.assertTrue((work / "stats.py").is_file())
+        self.assertEqual(cli(["eval", "grade", "sw-fix-median", str(work)], BRAIN)[0], 1)  # unsolved
+        self.assertEqual(cli(["eval", "setup", "sw-fix-median", str(work)], BRAIN)[0], 1)
+
     def test_command_grader_cannot_be_fooled_by_editing_the_test(self):
         task = E.load_task(BRAIN / "evals" / "tasks" / "sw-fix-median.json")
         work = Path(tempfile.mkdtemp())

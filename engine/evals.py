@@ -716,6 +716,22 @@ def cmd_audit(args) -> int:
     return 1 if broken or not results else 0
 
 
+def cmd_setup(args) -> int:
+    """Lay out a task's starting files in a new, empty folder for one trial,
+    and print the prompt the arm is given."""
+    path = _root(args) / "evals" / "tasks" / f"{args.task_id}.json"
+    if not path.is_file():
+        return _fail(f"no task {args.task_id}")
+    task = load_task(path)
+    d = Path(args.dir)
+    if d.exists() and any(d.iterdir()):
+        return _fail(f"{d} is not empty: each trial needs a clean folder")
+    d.mkdir(parents=True, exist_ok=True)
+    _write_files(d, task["setup"])
+    print(task["prompt"])
+    return 0
+
+
 def cmd_grade(args) -> int:
     path = _root(args) / "evals" / "tasks" / f"{args.task_id}.json"
     if not path.is_file():
@@ -816,6 +832,10 @@ def register(sub) -> None:
     s.set_defaults(func=_guarded(cmd_contract))
     s = es.add_parser("audit", help="every task's grader passes its reference and fails its null solution")
     s.set_defaults(func=_guarded(cmd_audit))
+    s = es.add_parser("setup", help="lay out a task's starting files in a clean folder and print its prompt")
+    s.add_argument("task_id")
+    s.add_argument("dir")
+    s.set_defaults(func=_guarded(cmd_setup))
     s = es.add_parser("grade", help="grade a produced directory against a task")
     s.add_argument("task_id")
     s.add_argument("dir")
