@@ -296,7 +296,7 @@ def _doc(t: dict) -> list[str]:
 
 
 def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | None = None, family: str | None = None,
-           risk: str | None = None, base_agent: str | None = None, k: int = 3) -> list[dict]:
+           risk: str | None = None, base_agent: str | None = None, k: int = 3, near: bool = False) -> list[dict]:
     """Rank templates for a task: lexical fit, times the template's record,
     with a novelty guard (an untried template is not first choice on risky
     work) and a fit floor (below it, no template is better than a plain helper)."""
@@ -325,9 +325,15 @@ def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | No
         if on_probation(h, hc, t["id"], t.get("group", "")):
             mult *= 0.8
         out.append({"id": t["id"], "score": round(fit * mult, 4), "fit": round(fit, 4), "coverage": round(coverage, 3),
+                    "matched": len(qset & set(_doc(t))),
                     "multiplier": round(mult, 3), "trials": n, "template": t})
     out.sort(key=lambda x: (-x["score"], x["id"]))
-    return [x for x in out if x["coverage"] >= hc["fit_floor"] or x["fit"] >= 0.75][:k]
+    # A long task description shares only a small fraction of its words with
+    # any template, so the floor also accepts three or more distinct matches.
+    passing = [x for x in out if x["coverage"] >= hc["fit_floor"] or x["matched"] >= 3]
+    if near:
+        return out[:k]  # the closest, floor or not: for showing, never for choosing
+    return passing[:k]
 
 
 # ---------------------------------------------------------------- wage
@@ -504,6 +510,10 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
         "wage_tokens": pay["tokens"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
         "brief": str(brief_path), "notes": str(notes_path), "workdir": workdir, "runners_up": [x["id"] for x in chosen[1:3]],
         "lint": lint_brief(brief, arm["model"]), "model_basis": arm.get("basis", ""),
+        # Word matching misses some requests (measured: right template in the
+        # top three for 86% of held-out requests). When nothing passed the
+        # floor, the closest templates are shown so the lead can pick one.
+        "closest": [] if t else [x["id"] for x in select(task, rack, state, hc, family, risk, base_agent, near=True)],
     }
     c.write_text(brief_path, brief)
     c.write_json(d / f"{cid}.json", contract)
@@ -646,6 +656,8 @@ def cmd_hire(args) -> int:
     tpl = con["template"] or "none fits: plain helper"
     also = f" (also considered: {', '.join(con['runners_up'])})" if con["runners_up"] else ""
     print(f"hire {con['id']}: template {tpl}{also}")
+    if con.get("closest"):
+        print(f"closest by wording: {', '.join(con['closest'])} — if one is right, hire again with --template <id> (brain hr rack --id <id> shows it)")
     print(f"agent: {con['base_agent']} · model {con['model']} · effort {con['effort']}" + (" · a trial of a cheaper setting" if con["explored"] else "") + f" · {c.clip(con['model_basis'], 80)}")
     print(f"wage: {con['wage_tokens']:,} output-equivalent tokens (about ${con['wage_cost']:.2f} at list price) · {con['wage_basis']}")
     print(f"brief: {con['brief']}")

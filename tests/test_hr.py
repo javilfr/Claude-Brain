@@ -280,6 +280,12 @@ class Contracts(Base):
         shuffled = mlearn.fold(mlearn.empty_state(), list(reversed(recs)), cfg)
         self.assertEqual(json.dumps(state, sort_keys=True), json.dumps(shuffled, sort_keys=True))  # order-free
 
+    def test_when_nothing_passes_the_floor_the_closest_are_offered_not_chosen(self):
+        long_task = "Go through the whole thing for defects prior to handing over, covering engine files, guidelines, schema, plan section and tests, then review"
+        con = hr.hire(long_task, brain_root=self.b, project=self.project(), check="true", base_agent="reviewer")
+        self.assertIsNone(con["template"])
+        self.assertEqual(con["closest"], ["code-reviewer"])
+
     def test_explicit_template_and_unknown_template(self):
         con = hr.hire("anything at all", brain_root=self.b, project=self.project(), template_id="code-reviewer", check="true")
         self.assertEqual((con["template"], con["base_agent"]), ("code-reviewer", "reviewer"))
