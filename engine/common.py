@@ -14,6 +14,7 @@ import json
 import math
 import os
 import re
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -129,10 +130,17 @@ def write_text(path: Path | str, text: str) -> None:
     p = Path(path)
     _refuse_stale(p)
     p.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=".tmp-")
+    try:  # a rewritten file keeps its mode; a new one gets what the umask allows
+        mode = stat.S_IMODE(p.stat().st_mode)
+    except OSError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=".tmp-")  # created 0600 whatever the umask
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
+        os.chmod(tmp, mode)
         os.replace(tmp, p)
     except BaseException:
         try:

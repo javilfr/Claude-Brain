@@ -23,7 +23,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from engine import common as c, contract, detect, gate, state  # noqa: E402
+from engine import budget, cache, common as c, contract, detect, state  # noqa: E402
 
 _CLI = None
 
@@ -287,6 +287,8 @@ class FuzzTests(Base):
                     continue
                 if "Traceback" in out or not isinstance(code, int):
                     failures.append(f"#{i} {target} [{what}] brain {' '.join(argv)}: printed a traceback")
+                elif len(out.strip().splitlines()) > 15:  # I-04: damage must not turn into a wall of text either
+                    failures.append(f"#{i} {target} [{what}] brain {' '.join(argv)}: {len(out.strip().splitlines())} lines")
             manifest_path.write_text(good_manifest)
             state_path.write_text(good_state)
         self.assertEqual(failures, [], f"{len(failures)} crash(es):\n" + "\n".join(failures[:12]))
@@ -403,6 +405,15 @@ class ContractTests(Base):
         self.assertNotIn("untouched", out)
         self.assertIn("pointer block", out)
         self.assertTrue((p / "CLAUDE.md").read_text().endswith("# Old handbook\nkeep me\n"))
+
+    def test_needs_you_template_gives_the_spanish_resolved_word_too(self):
+        """owner-docs-05 (template side; reading RESUELTO is package A's): the
+        owner writes Spanish, and the file told him only `RESOLVED:`."""
+        p = self.project()
+        text = (p / "NEEDS_YOU.md").read_text()
+        self.assertIn("`RESOLVED:`", text)
+        self.assertIn("`RESUELTO:`", text)
+        self.assertLessEqual(len(contract.stub_text("T").encode()), contract.STUB_LIMIT)
 
     def test_migrate_writes_back_every_key_as_it_found_it(self):
         """core-06 follow-through: the manifest reader now leaves out
@@ -579,6 +590,217 @@ class StaleBrainTests(Base):
         lines = detect.boot_lines("Continue", self.brain)
         self.assertIn("app", "\n".join(lines))
         self.assertEqual(snapshot(p), before)
+
+
+class SmallSlipTests(Base):
+    """core-14: the slips that live in package B's files. The ones in
+    engine/state.py (cost lines, 'unresolved', parallel checkpoints) are
+    package A's."""
+
+    def test_total_cap_is_enforced_when_each_part_is_within_its_cap(self):
+        """core-14 (4): CLAUDE.md, the stub and every description can each sit
+        just under its own cap while the sum passes the 3,200-token total of
+        I-03; `brain budget` said nothing."""
+        b = self.brain
+        (b / "CLAUDE.md").write_text("x" * 5990)
+        (b / "contract" / "template" / "CLAUDE.stub.md").write_text("y" * 1991)
+        (b / ".claude" / "agents").mkdir(parents=True)
+        for i in range(6):
+            (b / ".claude" / "agents" / f"a{i}.md").write_text(f"---\nname: a{i}\ndescription: {'d' * 299}\nmodel: sonnet\neffort: low\ntools: Read\n---\nbody\n")
+        for i in range(12):
+            (b / ".claude" / "skills" / f"s{i:02d}").mkdir(parents=True)
+            (b / ".claude" / "skills" / f"s{i:02d}" / "SKILL.md").write_text(f"---\nname: s{i:02d}\ndescription: {'d' * 299}\n---\nbody\n")
+        errs, info = budget.check(b)
+        self.assertGreater(info["always_loaded_tokens"], 3200)
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("3200", errs[0])
+        self.assertIn("in total", errs[0])
+        code, out = self.run_cli("budget")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(budget.check(ROOT)[0], [], "the real brain is within the total")
+
+    def test_a_broken_module_is_named_for_any_of_its_commands(self):
+        """core-14 (5): with engine/state.py broken, `brain boot` answered
+        "invalid choice: 'boot'" with no cause; only commands whose name
+        contained the module's name were explained."""
+        copy = self.ws / "broken-brain"
+        shutil.copytree(ROOT / "bin", copy / "bin")
+        shutil.copytree(ROOT / "engine", copy / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+        (copy / "engine" / "state.py").write_text("def broken(:\n")
+        for cmd in ("boot", "checkpoint", "status", "release"):
+            r = subprocess.run([sys.executable, str(copy / "bin" / "brain"), cmd], capture_output=True, text=True, cwd=str(self.ws))
+            out = r.stdout + r.stderr
+            self.assertEqual(r.returncode, 1, out)
+            self.assertNotIn("invalid choice", out)
+            self.assertNotIn("Traceback", out)
+            for needle in (f"'{cmd}'", "state (SyntaxError", "brain doctor"):
+                self.assertIn(needle, out)
+            self.assertEqual(len(out.strip().splitlines()), 1, out)
+        r = subprocess.run([sys.executable, str(copy / "bin" / "brain"), "budget"], capture_output=True, text=True, cwd=str(self.ws))
+        self.assertNotIn("unavailable", r.stdout, "a command whose module loaded still runs")
+
+    def test_written_files_respect_the_umask_and_keep_their_mode(self):
+        """core-14 (6): every file the engine wrote was 0600 (the temp file's
+        mode), and adopt turned a project's 0644 CLAUDE.md into 0600."""
+        old = os.umask(0o022)
+        self.addCleanup(os.umask, old)
+        f = self.ws / "new.txt"
+        c.write_text(f, "a")
+        self.assertEqual(f.stat().st_mode & 0o777, 0o644)
+        script = self.ws / "tool.sh"
+        script.write_text("#!/bin/sh\n")
+        script.chmod(0o755)
+        c.write_text(script, "#!/bin/sh\necho hi\n")
+        self.assertEqual(script.stat().st_mode & 0o777, 0o755)
+        private = self.ws / "private.json"
+        private.write_text("{}")
+        private.chmod(0o600)
+        c.write_json(private, {"a": 1})
+        self.assertEqual(private.stat().st_mode & 0o777, 0o600)
+        p = git_repo(self.ws / "legacy")
+        (p / "CLAUDE.md").write_text("# Old handbook\n")
+        (p / "CLAUDE.md").chmod(0o644)
+        contract.adopt(p)
+        self.assertEqual((p / "CLAUDE.md").stat().st_mode & 0o777, 0o644)
+        self.assertEqual((p / ".brain" / "project.json").stat().st_mode & 0o777, 0o644)
+        os.umask(0o077)
+        g = self.ws / "tight.txt"
+        c.write_text(g, "a")
+        self.assertEqual(g.stat().st_mode & 0o777, 0o600)
+
+    def test_a_leftover_temp_file_is_not_offered_to_git(self):
+        """core-14 (6): an interrupted atomic write leaves `.tmp-*` beside the
+        target; inside .brain/ the next checkpoint would have committed it."""
+        p = self.project()
+        commit_all(p)
+        (p / ".brain" / ".tmp-abc123").write_text("half a file")
+        (p / ".brain" / "log" / ".tmp-def456").write_text("half a file")
+        self.assertEqual(sh(p, "git", "status", "--porcelain").stdout, "")
+
+    def test_the_cache_prunes_itself(self):
+        """core-14 (8): cache.prune had no caller outside the tests, so a
+        project's .brain/cache only ever grew."""
+        d = self.ws / "cache"
+        os.environ["BRAIN_NOW"] = "2026-01-01T00:00:00Z"
+        cache.put(cache.key("old"), 1, d)
+        os.environ["BRAIN_NOW"] = "2026-01-20T00:00:00Z"
+        cache.put(cache.key("mid"), 2, d)
+        self.assertEqual(cache.get(cache.key("old"), d), 1, "19 days old: kept")
+        os.environ["BRAIN_NOW"] = "2026-02-15T00:00:00Z"
+        cache.put(cache.key("new"), 3, d)
+        self.assertIsNone(cache.get(cache.key("old"), d), "45 days old: dropped by the put itself")
+        self.assertEqual((cache.get(cache.key("mid"), d), cache.get(cache.key("new"), d)), (2, 3))
+        # At most once a day, so a put stays one small write: an entry that
+        # turns old during the day waits for the next day's first put.
+        entry = d / cache.key("mid")[:2] / f"{cache.key('mid')}.json"
+        entry.write_text(entry.read_text().replace("2026-01-20", "2025-12-01"))
+        cache.put(cache.key("again"), 4, d)
+        self.assertTrue(entry.is_file())
+        os.environ["BRAIN_NOW"] = "2026-02-16T00:00:01Z"
+        cache.put(cache.key("next-day"), 5, d)
+        self.assertFalse(entry.is_file())
+
+
+class DoctorProjectTests(Base):
+    """core-19: `brain doctor` looked at the brain only; a project with no git
+    identity, no remote or a broken contract was found by a later command
+    failing with a raw git message."""
+
+    def healthy(self, name="shop") -> Path:
+        p = self.project(name)
+        remote = self.ws / f"{name}-remote.git"
+        sh(self.ws, "git", "init", "-q", "--bare", "-b", "main", str(remote))
+        sh(p, "git", "remote", "add", "origin", str(remote))
+        commit_all(p)
+        sh(p, "git", "push", "-q", "-u", "origin", "work")
+        return p
+
+    def test_a_healthy_project_is_one_ok_line(self):
+        p = self.healthy()
+        before = snapshot(p)
+        code, out = self.run_cli("doctor", "--project", p)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(out.strip().splitlines()), 1, out)
+        self.assertTrue(out.startswith("ok"), out)
+        for needle in ("shop", "work"):
+            self.assertIn(needle, out)
+        self.assertEqual(snapshot(p), before, "a preflight only looks")
+        code, out2 = self.run_cli("doctor", "--project")  # no value: the attached project
+        self.assertEqual((code, out2), (0, out))
+
+    def test_project_preflight_names_each_fault_and_its_fix(self):
+        p = self.project("shop")
+        commit_all(p)
+        self.set_manifest(p, gates=[{"id": "checks", "kind": "command", "command": "true"},
+                                    {"id": "checks", "kind": "command", "command": "false"}])
+        sh(p, "git", "checkout", "-q", "--detach")
+        sh(p, "git", "config", "--unset", "user.email")
+        sh(p, "git", "config", "--unset", "user.name")
+        sh(p, "git", "config", "user.useConfigOnly", "true")
+        home = self.ws / "empty-home"
+        home.mkdir()
+        os.environ.update(HOME=str(home), GIT_CONFIG_NOSYSTEM="1", XDG_CONFIG_HOME=str(home))
+        for k in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL"):
+            os.environ.pop(k, None)
+        code, out = self.run_cli("doctor", "--project", "shop")
+        lines = out.strip().splitlines()
+        self.assertEqual(code, 1, out)
+        self.assertLessEqual(len(lines), 8, out)
+        self.assertTrue(all(l.startswith("FAIL ") for l in lines), out)
+        for what, fix in (("identity", "git config"), ("remote", "remote add origin"), ("detached", "switch"), ("used twice", "own id")):
+            hit = [l for l in lines if what in l]
+            self.assertEqual(len(hit), 1, (what, out))
+            self.assertIn(fix, hit[0])
+            self.assertIn(": ", hit[0])
+
+    def test_preflight_covers_the_release_branch_unpushed_work_and_damaged_files(self):
+        p = self.healthy("app")
+        self.set_manifest(p, release={"rule": "main-on-green", "branch": "work"})
+        commit_all(p, "rule")
+        code, out = self.run_cli("doctor", "--project", p)
+        self.assertEqual(code, 1, out)
+        self.assertIn("release branch", out)
+        self.assertIn("switch -c", out)
+        self.assertIn("not pushed", out)
+        self.assertIn("brain release --push", out)  # on the release branch a checkpoint cannot push unreleased work
+        self.set_manifest(p, release={"rule": "none", "branch": "main"})
+        code, out = self.run_cli("doctor", "--project", p)
+        self.assertEqual(code, 1, out)
+        self.assertEqual(len(out.strip().splitlines()), 1, out)
+        self.assertIn("1 commit(s) on work are not pushed: run `brain checkpoint --push`", out)
+        state_file = p / ".brain" / "STATE.md"
+        state_file.write_text("<<<<<<< HEAD\n" + state_file.read_text() + "=======\n>>>>>>> other\n")
+        code, out = self.run_cli("doctor", "--project", p)
+        self.assertEqual(code, 1, out)
+        self.assertIn("conflict markers", out)
+        self.assertIn(".brain/STATE.md", out)
+        state_file.write_bytes(b"# State\n\nstage: build\xff\n")
+        code, out = self.run_cli("doctor", "--project", p)
+        self.assertIn(".brain/STATE.md", out)
+        self.assertIn("checkout -- .brain/STATE.md", out)
+        plain = self.project("plain", git=False)
+        code, out = self.run_cli("doctor", "--project", plain)
+        self.assertEqual(code, 1, out)
+        self.assertIn("not a git repository", out)
+        self.assertIn("init -b work", out)
+
+    def test_preflight_says_which_project_when_it_cannot_tell(self):
+        self.project("shop")
+        self.project("shop-admin")
+        code, out = self.run_cli("doctor", "--project")
+        self.assertEqual(code, 1, out)
+        self.assertIn("2 projects attached", out)
+        self.assertEqual(len(out.strip().splitlines()), 1, out)
+
+    def test_plain_doctor_stays_as_it_is(self):
+        r = subprocess.run([sys.executable, str(ROOT / "bin" / "brain"), "doctor"], capture_output=True, text=True, cwd=str(self.ws),
+                           env={**os.environ, "BRAIN_NO_NETWORK": "1"})
+        lines = r.stdout.strip().splitlines()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual([l.split(":")[0] for l in lines[:-1]],
+                         ["ok   python", "ok   full-text search", "ok   engine modules", "ok   version file", "ok   model facts",
+                          "ok   memory items", "ok   always-loaded budget", "ok   contract template"])
+        self.assertEqual(lines[-1], "brain is healthy")
 
 
 if __name__ == "__main__":

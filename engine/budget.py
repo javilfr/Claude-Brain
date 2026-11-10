@@ -11,7 +11,8 @@ from pathlib import Path
 
 from . import common as c
 
-LIMITS = {"claude_md": 6000, "stub": 2000, "description": 300, "agents": 6, "skills": 12, "skill_lines": 500}
+LIMITS = {"claude_md": 6000, "stub": 2000, "description": 300, "agents": 6, "skills": 12, "skill_lines": 500,
+          "total_tokens": 3200}  # I-03: the parts can each be within their cap while the sum is not
 VOLATILE = [re.compile(r"\b20\d\d-\d\d-\d\d\b"), re.compile(r"(?i)last updated|as of today|current ticket|in progress:")]
 
 
@@ -80,6 +81,9 @@ def check(brain_root: Path | None = None) -> tuple[list[str], dict]:
                 if not fm.get(need):
                     errs.append(f"agent {label}: '{need}' must be set explicitly (an unset model inherits the lead's)")
     info["always_loaded_tokens"] = c.est_tokens(claude) + c.est_tokens(stub) + desc_chars // 4
+    if info["always_loaded_tokens"] > LIMITS["total_tokens"]:
+        errs.append(f"always-loaded text is about {info['always_loaded_tokens']} tokens in total (limit {LIMITS['total_tokens']}): "
+                    "shorten CLAUDE.md, the project stub or a description")
     return errs, info
 
 

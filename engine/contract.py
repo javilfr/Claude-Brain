@@ -136,7 +136,7 @@ def init(project: Path, title: str, family: str, manifest_overrides: dict | None
     _create(b / "memory" / "lessons.jsonl", "", made, project)
     _create(b / "ext" / "README.md", "# Project extensions\n\nSkills, agents, tools and playbook overrides that belong only to this project. They add to the brain's defaults for this project; they cannot change the contract.\n", made, project)
     _create(b / "log" / ".gitkeep", "", made, project)
-    _create(b / ".gitignore", "cache/\nlog/run/\n", made, project)
+    _create(b / ".gitignore", "cache/\nlog/run/\n.tmp-*\n", made, project)  # .tmp-*: what an interrupted atomic write leaves
     _create(project / "NEEDS_YOU.md", c.read_text(TEMPLATE / "NEEDS_YOU.md"), made, project)
     _create(project / "STATUS.md", f"# Status: {title}\n\nNothing has been built yet. Say what you want in the chat to begin.\n", made, project)
     ensure_stub(project, title, made)

@@ -24,8 +24,10 @@ def main(argv=None) -> int:
         except Exception as e:
             broken.append(f"{name} ({type(e).__name__}: {str(e)[:60]})")
     wanted = (argv if argv is not None else sys.argv[1:])[:1]
-    if broken and wanted and any(b.split(" ")[0] in wanted[0] or wanted[0] in ("plan", "close", "learn", "map") for b in broken) and wanted[0] not in sub.choices:
-        print(f"the '{wanted[0]}' command is unavailable: " + "; ".join(broken))
+    if broken and wanted and not wanted[0].startswith("-") and wanted[0] not in sub.choices:
+        # A command that is missing while a module failed to load is that
+        # module's (or needs it): name the cause, not "invalid choice".
+        print(f"'{wanted[0]}' is unavailable: failed to load " + "; ".join(broken) + ". Run `brain doctor`, fix that file, then run this again")
         return 1
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
