@@ -1,0 +1,192 @@
+{
+ "package": "F",
+ "findings": [
+  {
+   "id": "redteam-03",
+   "status": "fixed",
+   "note": "owner_turns keeps a row only when origin.kind is human; rows flagged isMeta, isSidechain, isCompactSummary or isVisibleInTranscriptOnly, rows of another sessionId, and rows without origin beside rows that have one are dropped. A transcript with no origin field at all (older client) falls back to the flags and markers, with the compaction summary's opening words added as a marker. Checked against the field names of this session's real transcript.",
+   "tests": "tests/test_r4_f.py OwnerTurnsTest (3 tests, 12 sub-cases)"
+  },
+  {
+   "id": "learning-01",
+   "status": "fixed",
+   "note": "A note with --quote stores a proof (session, turn, start, length, hash). At consolidation an owner-stated note is active only when reverify_owner finds the quote again in a transcript on disk; otherwise it is added as a candidate with trust observed and awaiting_owner, never promoted, listed by learn status, the digest and consolidate's output. Chosen over the analyst's 'reject the record' because the lead's decision 1(c) says keep it waiting. An owner note that contradicts an existing owner item also waits, with a one-sided conflict; his item is not touched.",
+   "tests": "OwnerProofTest: test_note_stores_a_proof_that_can_be_rechecked, test_forged_inbox_line_waits_for_the_owner_and_is_never_shown, test_forged_line_with_a_transcript_that_disagrees_is_not_active, test_verified_note_is_active_and_listed_as_his_instruction, test_his_new_words_against_his_standing_instruction_wait_for_him, test_unverified_correction_cannot_demote"
+  },
+  {
+   "id": "redteam-02",
+   "status": "partial",
+   "note": "Inbox path closed as in learning-01, plus brain learn confirm <id> --quote (activates, in-process, quote checked in the current transcript) and brain learn reject <id> (retires a waiting claim). Not done: the second acceptance test (a gate or run command that writes into the brain's inbox makes brain gate exit non-zero and removes the file) is in engine/gate.py, package C.",
+   "tests": "OwnerProofTest: test_confirm_needs_his_words_and_activates, test_reject_retires_the_claim, test_reject_of_an_owner_item_needs_his_words; SoakTest (forged line at session 20 never becomes his rule)"
+  },
+  {
+   "id": "redteam-04",
+   "status": "partial",
+   "note": "Workspace.rule_problem enforces the promotion rules per operation: a delta file may ADD only a fresh candidate (trust observed or external, note provenance, no votes, outside owner/), and EDIT_TEXT, MOVE_SCOPE, SET_STATUS, LINK, UNLINK, SUPERSEDE, RESTORE and INC_HARMFUL refuse owner-stated, standing and owner/ items. Owner-level ops carry an owner proof and are accepted only in a delta built in this process (trusted_delta) or in verify's replay; learn apply refuses any op with an owner key. verify fails, locked or not, when a recorded delta breaks the rules, and prints how many owner-level changes it replayed. Not done: verify does not re-derive a delta from the inbox (proposal 2: fragile, would give false alarms), so a delta file can still vote for and promote a non-owner lesson and a forged history with a well-shaped owner proof replays; the hook and CI parts (proposals 3 and 4) are package E.",
+   "tests": "HandWrittenDeltaTest (5 tests), VerifyRulesTest: test_verify_fails_on_a_delta_that_breaks_the_rules, test_verify_counts_owner_level_changes"
+  },
+  {
+   "id": "redteam-01",
+   "status": "fixed",
+   "note": "build_decay fades only learned lessons (provenance note:*, trust observed, type rule or pitfall); seed, derived, owner/, playbooks/ and owner-stated items are never touched; an overdue fact is reported as stale. Retirement counts 180 days from demoted_on, not from last use. New RESTORE op and brain learn restore <id> --reason (learned lesson returns on probation, shipped knowledge as it was, owner items need --quote). On a copy of the real memory, decay one year ahead leaves 141 active. A used record with followed false and shown true now refreshes last_used; writing such records is package E.",
+   "tests": "ForgettingTest: test_a_year_without_use_fades_no_shipped_item, test_retirement_counts_from_the_demotion, test_restore_brings_back_demoted_and_retired_items, test_day_counts_in_the_rules_page_match_the_code; SoakTest"
+  },
+  {
+   "id": "learning-02",
+   "status": "fixed",
+   "note": "learn note prints the id the note will get and up to two nearest existing items (candidates included); --confirms <id> records a confirmation in other words (re-noting the same text replaces the earlier pending note). A candidate is credited from a used record only when shown is true; learn.replace_session_records sets shown from the project's recall log (learn.shown_ids). A never-shown candidate is not demoted before 180 days. The rehearsal has a second session that confirms the lesson and reaches probation. The recall trial slot is package M.",
+   "tests": "LoopTest: test_note_prints_the_nearest_items_and_the_id_it_will_get, test_confirms_votes_for_the_named_item_whatever_the_wording, test_a_candidate_is_credited_only_when_recall_showed_it, test_used_records_are_marked_with_what_the_injection_log_shows; ForgettingTest.test_a_candidate_never_shown_gets_180_days; tests/test_rehearsal.py::test_full_story"
+  },
+  {
+   "id": "learning-03",
+   "status": "fixed",
+   "note": "A project-scoped note is written on probation (active when the owner's quote was verified), always with trust observed so it fits package M's cap on project files. Votes for ids that live in the project's .brain/memory are applied there by learn.project_votes (called from replace_session_records): once per session, only when shown, probation to active on two supporting sessions, and never sent to the brain inbox.",
+   "tests": "LoopTest: test_project_lesson_is_on_probation_and_recalled, test_project_lesson_earns_its_place_in_the_project_file"
+  },
+  {
+   "id": "learning-06",
+   "status": "fixed",
+   "note": "Demotions per run are capped at max(1, a tenth of the file's live items), least retained first, and the output says how many wait. Revival: a helpful vote or a new note of the same lesson brings a demoted lesson back on probation (not one the owner corrected or withdrew).",
+   "tests": "ForgettingTest: test_demotions_are_capped_per_run_least_retained_first, test_a_demoted_lesson_is_revived_by_a_helpful_vote_or_a_new_note, test_an_overdue_learned_fact_is_stale_not_demoted"
+  },
+  {
+   "id": "learning-07",
+   "status": "fixed",
+   "note": "An external fact that restates a live fact with different numbers, number words or identifiers (or opposite polarity) is added and SUPERSEDEs it, starting on probation so recall shows the new text; with the same keys it emits the new REVERIFY op (verified_on moves, no votes). brain learn reverify <id> --source <https> does the same by command. Platform and ecosystem file names (CLAUDE.md, SKILL.md, settings.json, package.json and others) no longer make a lesson project-specific. Consolidation prints up to five official leads and names the inbox file for the rest.",
+   "tests": "FactTest (5 tests)"
+  },
+  {
+   "id": "learning-08",
+   "status": "fixed",
+   "note": "_shape_problem rejects a malformed record with file and line before anything touches it, each record is handled inside a guard, and a rejected record counts as processed so its file is marked. A record whose id was already seen in the batch, already folded (stats/ml.json seen list) or already in the month's ledger file is skipped; a note from a session that already supports the item gives no second vote. learning/digest/ is outside the replay comparison. Not done: the doctor dry-run line (engine/doctor.py, package B).",
+   "tests": "RobustnessTest: test_malformed_records_are_rejected_with_file_and_line, test_a_record_delivered_twice_counts_once; DigestCommandTest"
+  },
+  {
+   "id": "learning-09",
+   "status": "fixed",
+   "note": "A lesson that does not fit a full file is rejected alone with the next step (run: brain learn decay) and the rest of the delta applies; only items in use (not demoted) count against the 400 budget; an item keeps its first 8 evidence entries and the 20 newest session:/outcome: entries. The analyst's 'retire demoted first near the budget' was not needed once demoted items stopped counting.",
+   "tests": "RobustnessTest: test_a_full_file_rejects_the_new_lesson_and_applies_the_rest, test_demoted_items_do_not_count_against_the_budget, test_vote_evidence_is_capped"
+  },
+  {
+   "id": "learning-10",
+   "status": "fixed",
+   "note": "build_note runs the actionable test, so a refusal is immediate and one line. actionable is looser: any clause that opens with a verb or states a norm passes, with Spanish cues; clauses that open with a pronoun or auxiliary, or a noun phrase tied to a copula or past tense, do not. All 123 non-fact items of the real memory pass (32 failed before); eight sample observations are refused.",
+   "tests": "AdmissionTest: test_seed_style_lessons_pass_and_observations_do_not (frozen list of 25), test_a_note_that_is_not_actionable_is_refused_when_it_is_made"
+  },
+  {
+   "id": "learning-13",
+   "status": "fixed",
+   "note": "A pitfall needs an outcome of the note's own session whose gate_runs show a red run then a green run of the same gate; the two-session pairing by class is gone.",
+   "tests": "CreditTest: test_fail_then_fix_in_one_session_makes_a_pitfall, test_unrelated_sessions_do_not_make_a_pitfall"
+  },
+  {
+   "id": "learning-14",
+   "status": "fixed",
+   "note": "Polarity is read from the main clause ('stop and ask' is positive, a reason after 'because' does not flip it). New UNLINK op; a conflict with a demoted, retired or superseded item no longer blocks, and status counts only live conflicts. brain learn confirm <keep> --quote settles a conflict (the other side is demoted and unlinked). INC_HARMFUL on an owner item is refused and consolidation never emits one. The items.confidence change is package M.",
+   "tests": "CreditTest: test_polarity_is_read_from_the_main_clause, test_a_conflict_with_a_demoted_item_no_longer_blocks, test_unlink_clears_a_conflict; SettleTest.test_confirm_settles_a_conflict_in_his_words"
+  },
+  {
+   "id": "redteam-11",
+   "status": "fixed",
+   "note": "Facts and owner items take no votes from outcomes (the use is recorded, marked failed for the digest). Demotion from outcomes applies only to learned lessons and needs 8 followed uses, harm in 3 different weeks and a harm share whose lower bound is above one half; a correction whose quote re-verifies demotes at once. Shipped items followed in failed sessions are listed in the digest as 'In question'. Not done from the proposal: skipping votes inside an open drift alarm or when the red gate turned green on the same commit.",
+   "tests": "CreditTest: test_three_red_sessions_demote_nothing_and_are_put_to_the_owner, test_a_learned_item_with_a_lower_bound_case_is_demoted"
+  },
+  {
+   "id": "redteam-09",
+   "status": "fixed",
+   "note": "tests/test_rehearsal.py builds its brain with frozen_brain: this repository's engine with a ten-item frozen memory and no inbox, deltas or statistics. The labelled recall test is package M (learning-12).",
+   "tests": "FrozenRehearsalTest.test_the_rehearsal_brain_ignores_what_the_real_brain_learned; tests/test_rehearsal.py::test_full_story"
+  },
+  {
+   "id": "redteam-14",
+   "status": "partial",
+   "note": "(a) done as in learning-02; (c) done as in learning-09. Not done: (b) the routing learner that can never start is engine/mlearn.py, package G. Restatements are still compared on plain words, not stems: --confirms covers rewordings without tying learn.py to the recall tokenizer that M is changing.",
+   "tests": "LoopTest, RobustnessTest.test_a_full_file_rejects_the_new_lesson_and_applies_the_rest, SoakTest"
+  },
+  {
+   "id": "owner-docs-12",
+   "status": "fixed",
+   "note": "learn digest prints only; it writes learning/digest/<week>.md only with --write. Naming the uncommitted paths in handover's message is engine/state.py, package A.",
+   "tests": "DigestCommandTest.test_digest_prints_only_and_can_be_rewritten_under_lock; rehearsal asserts no digest folder is left"
+  },
+  {
+   "id": "redteam-17",
+   "status": "fixed",
+   "note": "The digest opens with 'What I now treat as your instruction', 'What I stopped using' and, when any, 'Did you say this? Answer yes or no', numbered across sections, each a plain sentence with its id; still 15 lines at most ('Retired' is folded into 'What I stopped using'). brain learn reject <id> --quote \"no 2\" reverses a line: a short answer counts only when it is a whole line he typed.",
+   "tests": "OwnerDigestTest (2 tests)"
+  },
+  {
+   "id": "redteam-16",
+   "status": "fixed",
+   "note": "SoakTest runs 60 sessions over 354 days in about 0.7 s with the real statistics and forgetting curve, consolidating and decaying after each, with malformed records, repeated deliveries and one forged owner line. It asserts no refusal, every shipped item still active, one ledger row per session, bounded rows and state, and that learned lessons both rise and fade. On the old engine it stops at the first malformed record.",
+   "tests": "SoakTest.test_sixty_sessions_with_weekly_consolidate_and_decay"
+  },
+  {
+   "id": "core-20",
+   "status": "not-done",
+   "note": "The two-container continuity rehearsal fails today for the reasons package A is fixing (a new chat on main does not find the last chat's branch). Those fixes are not in this worktree, so the test would be red here and cannot be committed. To do after A is merged: add test_continue_in_a_new_chat_resumes_the_same_item to tests/test_rehearsal.py, using its frozen_brain and session helpers."
+  }
+ ],
+ "suite": "Ran 475 tests in 44.545s\n\nOK\nbrain is healthy\nlint: 0 error(s), 0 note(s) — instruction surface is consistent with the engine\n(also: learn verify: 1 delta(s) replayed on origin/main; learned zone matches; hr audit, items check and eval audit exit 0)",
+ "head_commit": "93098ced79694cf2056f9b2b156a0183c8070ac4",
+ "existing_tests_changed": [
+  "tests/test_learn.py::ConsolidateTest::test_owner_stated_note_is_enough_alone (learning-01, redteam-02): a bare inbox line with owner-shaped evidence and no transcript is now expected as a candidate awaiting the owner, not active",
+  "tests/test_learn.py::ConsolidateTest::test_harm_demotes_but_never_an_owner_item (redteam-11, learning-14): four red sessions in one batch no longer demote the lesson, and the owner item's harmful count stays 0 instead of 4",
+  "tests/test_learn.py::ConsolidateTest::test_one_session_is_not_enough (learning-02): the used record for a candidate now carries shown=True",
+  "tests/test_learn.py::ConsolidateTest::test_pitfall_needs_a_fail_then_pass_pair (learning-13): the fail and the fix are in the note's own session (gate_runs), not in two sessions; one outcome id in the evidence",
+  "tests/test_learn.py::PathTraversalTest::test_owner_stated_add_needs_verified_evidence (redteam-04): a hand-written ADD of an owner-stated item with well-formed evidence is now refused; the same ADD passes only in a trusted delta with a proof",
+  "tests/test_learn.py::PathTraversalTest::test_plain_item_files_still_work (redteam-04): hand ADDs are candidates with note provenance; the playbook line is put on probation to appear in the rendered page",
+  "tests/test_learn.py::ApplyTest::test_invalid_item_and_budget_are_refused (redteam-04): the added item is a candidate with note provenance; the budget assertion is unchanged",
+  "tests/test_learn.py::CanonicalSeedTest::test_one_add_changes_only_the_added_line (redteam-04): items enter as candidates; the owner/preferences add goes through a trusted delta with an owner proof",
+  "tests/test_learn.py::DecayDigestTest::test_decay_without_retention_uses_days_and_flags_stale_facts (redteam-01, learning-06): fixture items get provenance note:s1, since only learned lessons fade",
+  "tests/test_learn.py::DecayDigestTest::test_decay_uses_retention_and_never_touches_owner_items (redteam-01, learning-06): same fixture change",
+  "tests/test_rehearsal.py::Rehearsal::test_full_story (redteam-09, learning-02, owner-docs-12): the brain is built from a frozen memory; a second session confirms the lesson and reaches probation; asserts that learn digest leaves no file. No earlier assertion was removed or weakened"
+ ],
+ "new_commands_and_flags": [
+  "brain learn confirm <id> --quote \"<his words>\": the owner said yes; the item becomes his active instruction and whatever it conflicted with is demoted and unlinked",
+  "brain learn reject <id> [--quote \"<his words>\"]: retires a claim that only waits for him (no quote needed); with --quote withdraws any item in use (a short answer such as \"no 2\" counts when it is a whole line he typed)",
+  "brain learn restore <id> --reason \"<why>\" [--quote \"<his words>\"]: brings back a demoted or retired item; --quote is needed for an item that is his or that he withdrew",
+  "brain learn reverify <id> --source <https address>: a fact was read again at its source; moves its re-check date",
+  "brain learn note --confirms <id>: this note is one more confirmation of that existing item, in other words",
+  "brain learn digest --write: also keep the digest as learning/digest/<week>.md (without it the command only prints)",
+  "Delta operations added: UNLINK {a, b}, OWNER_CONFIRM {id, owner}, RESTORE {id, reason}, REVERIFY {id, session}; an op may carry owner: {session, turn, start, len, sha}",
+  "Inbox record fields added: note.proof, note.confirms, correction.proof, used.shown. Item fields added: awaiting_owner, demoted_on, corrected, harm_weeks (and voted, in project lesson files)"
+ ],
+ "cross_package": [
+  "Nothing was appended to a module I do not own.",
+  "E, engine/ledger.py capture(): pass project=project to learn.replace_session_records so 'shown' is read from the project close resolved (without it learn falls back to common.resolve_project, which differs only when --project was given). Until 'shown' is true on a used record, a candidate gets no credit from it.",
+  "E, engine/ledger.py: write a used record with followed false for each id the recall log shows that the lead did not declare; learn now turns shown-not-followed into a refreshed last_used (redteam-01 part 2, learning-06 part 2).",
+  "E, learning-04: the learn.py half is done here (one status move per item per consolidation; test LoopTest.test_a_candidate_is_not_activated_in_one_consolidation). Dropping unshown --used ids at close is still E's.",
+  "E, hooks, CI and guard (redteam-04 parts 3 and 4): the write hook should block kernel files and VERSION.json, CI should run the guard on pushes to main, and close or handover could run learn verify. learning/digest/ is now a report outside verify's comparison; guard diff should not count it as a learned-zone edit.",
+  "M, engine/recall.py: the trial slot for candidates must skip items with awaiting_owner true (they must never be shown as a rule). learn.shown_ids(project, sid) and learn.nearest_items exist if useful.",
+  "M, engine/items.py confidence(): ignore harmful for owner-stated items (learning-14 part 3). On my side no harm vote reaches an owner item any more.",
+  "M, redteam-13: project lessons are now written with trust observed and status probation or active, so capping project-file trust at observed stays compatible.",
+  "C, engine/gate.py (redteam-02 second half): a project command that writes into the brain during brain gate or brain run should fail the gate and the file be removed.",
+  "A, engine/state.py and detect.py: handover's 'uncommitted change' message should name the paths (owner-docs-12); a boot line can use learn.awaiting_owner(root) and learn.status_lines(root) for items waiting for the owner and files near the 400 budget (redteam-14 c, redteam-20). core-20's continuity rehearsal should be added to tests/test_rehearsal.py after A is merged.",
+  "B, engine/doctor.py (learning-08): optional line that runs learn.build_consolidation as a dry run and reports an exception.",
+  "G, engine/mlearn.py (redteam-14 b): the routing learner that never starts.",
+  "Lead: while seeing a new test fail, the old cmd_consolidate and cmd_digest ignored the test's brain_root and wrote one delta and a digest file into this worktree's learned zone. I restored the three tracked files with git checkout and removed the two untracked ones before any commit; /home/user/Claude-Brain was never touched. Every learn command now honours brain_root."
+ ],
+ "instruction_notes": [
+  ".claude/skills/brain-learn/SKILL.md, 'Something he said is recorded with `--trust owner-stated --quote \"<his exact words>\"`, which is checked against what he typed.' Add: it becomes his instruction only if `BRAIN learn consolidate` runs in the same session (the quote is checked again against the transcript on disk); consolidated later it waits for him, is listed by `BRAIN learn status` and the digest, and needs `BRAIN learn confirm <id> --quote \"<his words>\"` or `BRAIN learn reject <id>`.",
+  ".claude/skills/brain-learn/SKILL.md, 'Commit the inbox file ... consolidation only sees what has reached `main`.' This now conflicts with owner-stated notes: say to consolidate in the session that recorded the owner's words, before closing.",
+  ".claude/skills/brain-learn/SKILL.md, 'Add a lesson by hand only after a signal ...: `BRAIN learn note ...`'. Add: a note that does not say what to do is refused at once; the command prints the id the lesson will get and up to two close existing lessons; if one is the same lesson, note it again with `--confirms <id>`.",
+  ".claude/skills/brain-learn/SKILL.md, 'add `--used <id>:1` if you followed it or `--used <id>:0` if not ...: that is how items earn or lose weight.' Now: a candidate earns only in a session where recall showed it; facts and the owner's instructions take no votes; three failed sessions demote nothing.",
+  ".claude/skills/brain-learn/SKILL.md, 'Add `--scope project` ... it then goes to the project's `.brain/`.' Add: it is usable from the next session (on probation; active with the owner's verified words) and its votes stay in the project.",
+  ".claude/skills/brain-learn/SKILL.md, '`BRAIN learn decay` demotes unused items.' Now: it demotes only lessons learned from sessions (never shipped knowledge, playbooks, preferences, owner instructions or facts), at most a tenth of a file per run; `BRAIN learn restore <id> --reason \"<why>\"` brings one back; stale facts are cleared with `BRAIN learn reverify <id> --source <url>`.",
+  ".claude/skills/brain-learn/SKILL.md, 'Answer from `BRAIN learn digest --weeks <weeks since the last digest>`'. Still correct. Add: the digest numbers what it treats as his instruction and what it stopped using; his answer 'no 2' is applied with `BRAIN learn reject <id> --quote \"no 2\"`; under Consolidate, `BRAIN learn digest --weeks N --write` keeps the weekly file with the delta.",
+  "README.md line 25, 'until the learned zone is locked at version 1.0 the replay only warns'. Now: a recorded change that breaks the promotion rules fails `brain learn verify` even before the lock; other mismatches still only warn until then.",
+  "docs/ENGINE_SPEC.md, file table row '`learning/manifest.jsonl`, `learning/CHANGELOG.md`, `learning/deltas/`, `learning/digest/` | `learn apply`, `learn digest`'. The digest is written only by `learn digest --write` and is outside `learn verify`.",
+  "docs/ENGINE_SPEC.md, 'An `ADD` of an owner-stated item needs verified owner evidence (below).' Now: it also needs an owner proof on the op and is accepted only in a delta built in-process by a command that checked his words, or on replay; a delta file may ADD only a fresh candidate (trust observed or external, provenance note:*, no votes, outside owner/).",
+  "docs/ENGINE_SPEC.md, inbox record shape: add `proof` {session, turn, start, len, sha} on notes and corrections recorded with --quote, `confirms` on notes, `shown` on used records.",
+  "docs/ENGINE_SPEC.md, 'Credit (I-07): a followed item gets `INC_HELPFUL` when every outcome of that session passed on the first run, `INC_HARMFUL` when one failed ... An owner correction is `INC_HARMFUL`.' Now: facts and owner-level items get a recorded use only; a candidate needs shown true; a correction on an owner item is rejected with the next step; a correction whose quote re-verifies also marks the item corrected.",
+  "docs/ENGINE_SPEC.md, 'Admission gate for notes: actionable (an imperative, a modal cue such as should/must/never, or a condition followed by a verb)'. Now: any clause that opens with a verb or states a norm, with Spanish cues; checked at `learn note` time as well; generic file names (CLAUDE.md, package.json) are not project-specific.",
+  "docs/ENGINE_SPEC.md, 'Pitfalls: ... only when the batch holds a failed outcome followed by a passing one in a class the note names; both outcome ids join its evidence.' Now: only when an outcome of the note's own session shows a red run then a green run of the same gate; that one outcome id joins the evidence.",
+  "docs/ENGINE_SPEC.md, 'Promotion: ... One owner-stated record is enough alone. Conflicting items are not promoted; harm (>= 3, more than help) demotes'. Now: one move per item per consolidation; an owner-stated record is enough only when its quote re-verifies, else it waits (awaiting_owner); a conflict blocks only while the other side is live; demotion needs 8 uses, harm in 3 weeks and a lower bound above one half, or a verified correction, and only for learned lessons; facts move on sessions that read them.",
+  "docs/ENGINE_SPEC.md, '`learn decay` demotes when `mlearn.retention(item, now)` < `retention.threshold` (fallback: 90 days unused), retires items demoted for a further 180 days, never touches owner-stated items'. Now: only learned lessons; never seed, derived, owner/, playbooks/ or facts; at most a tenth of a file's live items per run; a never-shown candidate not before 180 days; retirement counts from demoted_on.",
+  "docs/ENGINE_SPEC.md, 'Delta operations (`learn apply`): `ADD`, `INC_HELPFUL`, ... `MARK_INBOX`.' Add `UNLINK`, `OWNER_CONFIRM`, `RESTORE`, `REVERIFY`, the per-operation promotion rules, and that only items in use count against the 400 budget.",
+  "docs/EXECUTION_PLAN.md I-08 row, checked by 'tests/test_learn.py, tests/test_mlearn.py': add tests/test_r4_f.py (HandWrittenDeltaTest, ForgettingTest, SoakTest).",
+  "OWNER_GUIDE.md, 'Undoing something the brain learned': besides reverting the pull request, he can now answer a numbered digest line with 'no <number>', and say 'yes' or 'no' to a line under 'Did you say this?'."
+ ],
+ "remaining": "Green and committed on r4/f at 93098ce (5 commits; worktree clean). Files: /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/wt/f/engine/learn.py, learning/PROMOTION_RULES.md, tests/test_r4_f.py (60 tests), tests/test_rehearsal.py, tests/test_learn.py (10 tests changed, listed).\n\nNot done or only part done:\n1. core-20: needs package A merged first (would be red here).\n2. redteam-04: verify does not re-derive deltas from the inbox. A delta file can still add a candidate and vote it up (non-owner items only), and a forged history carrying a well-shaped owner proof replays; verify counts and prints owner-level changes and the digest lists them for the owner. Hook and CI parts are E's.\n3. redteam-02: the gate-side check is C's.\n4. redteam-14 (b) is G's; redteam-11's 'no votes during a drift alarm or after a same-commit re-run' was not built.\n5. Until E passes the project and M adds the trial slot, a candidate is credited through close --used only when recall happened to show it; today the working route is learn note --confirms <id>.\n\nKnown limits worth a decision:\n- A delta id is the date plus a hash of its ops, so the same command with the same ops twice in one day (reject, restore, reject again) answers 'already applied; nothing changed' the second time.\n- An owner-stated note consolidated in a later chat always waits for the owner, because that chat has no transcript of the first one. This is decision 1(c) working as written; it makes 'consolidate before closing' matter, and the skill should say so.\n- engine/learn.py grew from 1,679 to about 2,650 lines."
+}

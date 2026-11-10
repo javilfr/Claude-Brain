@@ -482,7 +482,7 @@ class UsageTests(Base):
         times (3.8 kB). The braces list is gone; each command keeps its line."""
         r = self.brain("--help")
         self.assertEqual(r.returncode, 0)
-        self.assertLessEqual(len(r.stdout.encode()), 2800)
+        self.assertLessEqual(len(r.stdout.encode()), 3000)  # 2,800 before package D added `done`; one line per command
         self.assertNotIn("{detect,boot", r.stdout)
         self.assertEqual(r.stdout.count("checkpoint"), 1)
 

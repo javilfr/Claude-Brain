@@ -655,7 +655,7 @@ class FactTest(BrainCase):
         self.assertEqual((old["valid_to"], old["helpful"] if "helpful" in old else 0), ("2027-03-01", 0))
         self.assertEqual((new["text"], new["status"], new["supersedes"]), (CACHE_NEW, "probation", ["fact-cache-lifetime"]))
         got = recall.recall("how long does the prompt cache last", brain_root=self.root)
-        self.assertEqual([r["text"] for r in got], [CACHE_NEW])
+        self.assertEqual([r["text"].split(", not a rule) ")[-1] for r in got], [CACHE_NEW])  # package M marks read facts
 
     def test_the_same_fact_read_again_refreshes_its_date(self):
         os.environ["BRAIN_NOW"] = "2027-03-01T12:00:00Z"

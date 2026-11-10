@@ -577,11 +577,10 @@ class ReleaseRecord(Base):
         """quality-path-14: 'refusing: uncommitted changes' named no file."""
         p = self.project()
         (p / "tests").mkdir()
-        (p / "tests" / "cache.pyc").write_text("x")
+        (p / "tests" / "notes.txt").write_text("x")  # a .pyc is now ignored by the .gitignore init writes (package B2)
         code, out = self.release(p, push=True, run_gates=True)
         self.assertEqual(code, 1, out)
         self.assertIn("tests/", out)
-        self.assertIn(".gitignore", out)
 
     def test_gate_record_and_log_do_not_keep_a_secret_from_the_command(self):
         """redteam-07 (decision 12): the gate command went into gates.jsonl as typed."""

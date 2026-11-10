@@ -638,6 +638,8 @@ def _answer(items: list[dict], query: str, family: str | None, k: int, budget_to
     """What ``recall`` returns for loaded ``items``: the trusted pack, then the unconfirmed slot."""
     pool, waiting = [], []
     for item in items:
+        if item.get("awaiting_owner"):
+            continue  # an owner claim not yet confirmed in his own words is never shown, not even as unconfirmed
         if _in_scope(item, family):
             (waiting if item.get("status") == "candidate" and not include_candidates else pool).append(item)
     result = select(query, pool, k, budget_tokens, cfg["floor"], mult, cfg["standing_coverage"], cfg["companion"],
