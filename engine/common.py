@@ -102,20 +102,50 @@ def write_json(path: Path | str, data: Any) -> None:
     write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
-def read_jsonl(path: Path | str) -> list[dict]:
-    """Read a JSONL file; blank and malformed lines are skipped."""
+def read_jsonl_counted(path: Path | str) -> tuple[list[dict], int]:
+    """(objects, unreadable line count) of a JSONL file. Each line is decoded
+    on its own with ``errors="replace"``, so one bad byte costs one line, not
+    the whole file. A line is unreadable when it is not valid UTF-8 or not a
+    JSON object; blank lines are not counted. A missing file is ([], 0)."""
+    try:
+        raw = Path(path).read_bytes()
+    except (FileNotFoundError, IsADirectoryError, NotADirectoryError):
+        return [], 0
     out: list[dict] = []
-    for line in read_text(path).splitlines():
-        line = line.strip()
-        if not line:
+    bad = 0
+    for bline in raw.splitlines():
+        if not bline.strip():
+            continue
+        try:
+            line = bline.decode("utf-8")
+        except UnicodeDecodeError:
+            bad += 1
+            line = bline.decode("utf-8", "replace")
+            # A line with a replaced byte may still be a record (inside a
+            # string); it is kept, but the line is counted as damaged.
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict):
+                out.append(obj)
             continue
         try:
             obj = json.loads(line)
         except json.JSONDecodeError:
+            bad += 1
             continue
         if isinstance(obj, dict):
             out.append(obj)
-    return out
+        else:
+            bad += 1
+    return out, bad
+
+
+def read_jsonl(path: Path | str) -> list[dict]:
+    """Read a JSONL file; blank and malformed lines are skipped (decoding is
+    per line, so an undecodable byte loses only its own line)."""
+    return read_jsonl_counted(path)[0]
 
 
 def dump_jsonl(rows: Iterable[dict]) -> str:

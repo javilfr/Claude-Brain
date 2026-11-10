@@ -18,6 +18,7 @@ every rule here downgrades to a warning.
 """
 from __future__ import annotations
 
+import posixpath
 import re
 import subprocess
 from pathlib import Path
@@ -30,12 +31,25 @@ KERNEL_FILES = ("memory/models.json", "memory/ml_config.json", "memory/radar_sou
 STATE_DIRS = ("learning/radar/",)
 
 
+def normalise_rel(relative_path: str) -> str | None:
+    """The canonical brain-relative form of a path (``posixpath.normpath``),
+    or None when it escapes the brain root through ``..`` or is empty. A
+    leading ``/`` or ``./`` is read as the brain root, as before; the
+    normalisation is what stops ``memory/../evals/x`` passing for ``memory/``."""
+    rel = str(relative_path).replace("\\", "/").lstrip("/")
+    if not rel or "\0" in rel:
+        return None
+    rel = posixpath.normpath(rel)
+    if rel in (".", "..") or rel.startswith("../"):
+        return None
+    return rel
+
+
 def zone_of(relative_path: str) -> str:
     """"inbox", "state", "learned" or "kernel" for a path relative to the brain root."""
-    rel = str(relative_path).replace("\\", "/")
-    while rel.startswith("./"):
-        rel = rel[2:]
-    rel = rel.lstrip("/")
+    rel = normalise_rel(relative_path)
+    if rel is None:
+        return "kernel"  # outside the brain, or not a plain path: the strictest zone
     if rel.startswith(c.INBOX_DIR):
         return "inbox"
     if rel.startswith(STATE_DIRS):
