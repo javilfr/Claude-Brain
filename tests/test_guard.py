@@ -206,7 +206,10 @@ class HookTest(unittest.TestCase):
         finally:
             shutil.rmtree(env_cwd)
         self.assertEqual((code, out), (0, ""))
-        files = list((self.brain / "learning" / "inbox").glob("*-sess-1.jsonl"))
+        # lead-02 (2026-11-10 audit): the hook writes the git-ignored live file,
+        # not the tracked inbox file, which left the tree dirty after every turn.
+        self.assertEqual(list((self.brain / "learning" / "inbox").glob("*.jsonl")), [])
+        files = list((self.brain / "learning" / "inbox" / ".live").glob("*-sess-1.jsonl"))
         self.assertEqual(len(files), 1)
         (rec,) = c.read_jsonl(files[0])
         self.assertEqual(rec["kind"], "ledger")

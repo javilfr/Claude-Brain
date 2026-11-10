@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Stop hook: record this session's real token use into the brain's inbox
-(the same capture as `brain close`), quietly.
+"""Stop hook: keep this session's real token use on disk after every turn,
+quietly, because a session can die without `brain close`.
+
+The capture goes to ``learning/inbox/.live/``, which git ignores: rewriting a
+tracked file after every turn left the tree dirty after every turn. It is
+provisional. `brain close` writes the tracked record and removes the live
+file, and a later boot that finds the session unclosed reads it.
 
 It never blocks and never prints: it always exits 0, and it does nothing when
 ``stop_hook_active`` is set (Claude is already continuing because of a stop
 hook). Capture is keyed by session id, so running after every turn simply
-refreshes the same records.
+refreshes the same file.
 """
 import contextlib
 import io
@@ -34,7 +39,7 @@ def main() -> int:
         if project is not None and not c.is_managed(project):
             project = None
         with contextlib.redirect_stdout(io.StringIO()):
-            ledger.capture(BRAIN, sid, main_path, subs, project)
+            ledger.capture(BRAIN, sid, main_path, subs, project, live=True)
     except Exception:  # never block the session
         return 0
     return 0

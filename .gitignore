@@ -4,3 +4,5 @@ __pycache__/
 .tmp-*
 *.sqlite
 .DS_Store
+# what the session-end hook captures between closes; `brain close` writes the tracked record
+learning/inbox/.live/
