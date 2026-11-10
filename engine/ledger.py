@@ -290,7 +290,11 @@ def _outcomes(sid: str, at: str, family: str, classes: list[str], tier, s: dict,
                "has_check": bool(has_check),
                "passed": all(g["exit_code"] == 0 for g in last.values()),
                "first_pass": all(g["exit_code"] == 0 for g in first.values()),
-               "rework": reds, "tokens": _tokens(s["totals"]) // n, "cost": round(s["totals"]["cost"] / n, 6),
+               # The lead's own usage is what its model and effort are judged
+               # on; helpers have their own contracts (brain hr). The whole
+               # task's usage is kept beside it for estimates and drift.
+               "rework": reds, "tokens": _tokens(s["main"]) // n, "cost": round(s["main"]["cost"] / n, 6),
+               "tokens_all": _tokens(s["totals"]) // n, "cost_all": round(s["totals"]["cost"] / n, 6),
                "minutes": round(s["wall_minutes"] / n, 1),
                "est_tokens": declared.get("est_tokens"), "est_minutes": declared.get("est_minutes"),
                "explored": bool(declared.get("explored")),
@@ -306,7 +310,7 @@ def _outcomes(sid: str, at: str, family: str, classes: list[str], tier, s: dict,
             rec["words"], rec["rule_tier"] = list(declared["words"]), declared["rule_tier"]
         if not usage_known:
             # No transcript: the gates still say what happened; the cost does not exist.
-            rec.update(tokens=None, cost=None, minutes=None, usage="unknown")
+            rec.update(tokens=None, cost=None, tokens_all=None, cost_all=None, minutes=None, usage="unknown")
         out.append(rec)
     return out
 
@@ -514,6 +518,13 @@ def cmd_close(args) -> int:
         print(f"main conversation read from cache: {s['cache_read_share']:.0%}")
     print(f"run record: {r['run_record'] or 'none (no managed project)'}")
     print(f"inbox: {r['skipped'] or str(r['inbox_records']) + ' record(s) in ' + Path(r['inbox']).name}")
+    try:  # helpers hired this session are settled here, so no wage goes unrecorded
+        from . import hr
+        line = hr.settle_open(project, brain_root=getattr(args, "brain_root", None), sub_paths=subs if known else [])
+        if line:
+            print(line)
+    except Exception as e:  # settlement must never stop a session from closing
+        print(f"hr: contracts not settled ({type(e).__name__})")
     return 0
 
 

@@ -44,8 +44,8 @@ from .guard import zone_of
 
 OPS = ("ADD", "INC_HELPFUL", "INC_HARMFUL", "EDIT_TEXT", "SET_STATUS", "MOVE_SCOPE", "LINK", "SUPERSEDE",
        "APPEND_STAT", "ML_FOLD", "MARK_INBOX")
-KINDS = ("ledger", "outcome", "used", "note", "review", "correction", "lead")
-FOLD_KINDS = ("outcome", "used", "review", "correction")   # inbox records mlearn learns from
+KINDS = ("ledger", "outcome", "used", "note", "review", "correction", "lead", "hire")
+FOLD_KINDS = ("outcome", "used", "review", "correction", "hire")   # inbox records mlearn learns from
 # ML_FOLD also carries "promotion" records the consolidation itself makes, so
 # a drift alarm can name the item promoted just before a shift.
 ML_KINDS = FOLD_KINDS + ("promotion",)

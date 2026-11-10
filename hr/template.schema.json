@@ -1,0 +1,27 @@
+{
+  "$comment": "One agent template in the HR rack (hr/rack/*.jsonl, one JSON object per line). Limits are enforced by `brain hr audit`. Words are counted by whitespace.",
+  "required": ["id", "name", "group", "base_agent", "families", "when", "keywords", "role_line", "method", "scope_rule", "done_check", "return_contract", "pitfalls", "size", "risk", "sources", "version", "status"],
+  "fields": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,29}$"},
+    "name": {"type": "string", "max_words": 6},
+    "group": {"type": "string", "enum": ["discovery", "planning", "build", "quality-ops", "data", "writing", "language", "design", "review", "support"]},
+    "base_agent": {"type": "string", "enum": ["scout", "researcher", "builder", "writer", "reviewer", "redteam"]},
+    "families": {"type": "list", "of": ["software", "data", "knowledge", "language", "operations"], "min": 1},
+    "when": {"type": "string", "max_words": 35},
+    "keywords": {"type": "list", "min": 4, "max": 14},
+    "role_line": {"type": "string", "max_words": 15},
+    "method": {"type": "list", "min": 3, "max": 5, "item_max_words": 32},
+    "drift": {"type": "string", "max_words": 40, "optional": true},
+    "scope_rule": {"type": "string", "max_words": 40},
+    "done_check": {"type": "string", "max_words": 40},
+    "return_contract": {"type": "string", "max_words": 60},
+    "pitfalls": {"type": "list", "min": 1, "max": 3, "item_max_words": 22},
+    "needs": {"type": "list", "max": 5, "optional": true},
+    "size": {"type": "string", "enum": ["S", "M", "L", "XL"]},
+    "risk": {"type": "string", "enum": ["trivial", "standard", "high", "one-way-door"]},
+    "sources": {"type": "list", "min": 1, "max": 4},
+    "version": {"type": "integer"},
+    "status": {"type": "string", "enum": ["active", "probation", "retired"]}
+  },
+  "stable_body_max_words": 230
+}

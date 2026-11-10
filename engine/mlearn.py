@@ -42,9 +42,10 @@ from typing import Callable
 from . import common as c
 from . import items as items_mod
 
-KIND_ORDER = {"promotion": 0, "used": 1, "correction": 2, "review": 3, "outcome": 4}
+KIND_ORDER = {"promotion": 0, "used": 1, "correction": 2, "review": 3, "outcome": 4, "hire": 6}
 SKELETON = {
     "version": 1, "n": 0, "last_at": "", "seen": [],
+    "hr": {"t": {}, "g": {}, "ratios": {}, "settled": 0},
     "bandit": {"g": {}, "f": {}, "c": {}, "raw_g": {}, "raw_c": {}, "ids": {}, "cost": {"g": {}, "f": {}, "c": {}}},
     "window": [], "log": [],
     "calib": {"c": {}, "f": {}, "g": {}},
@@ -773,14 +774,17 @@ def _fold_outcome(st: dict, cfg: dict, rid: str, r: dict) -> None:
         explored = bool(r.get("explored"))
         st["window"] = (st["window"] + [[int(eligible), int(explored), cost,
                                          cost if explored and r.get("passed") is not True else 0.0]])[-ex["window"]:]
-    for metric, act, est in (("tok", tokens, _num(r.get("est_tokens"))), ("min", _num(r.get("minutes")), _num(r.get("est_minutes")))):
+    # Estimates and drift are about the whole task (lead plus helpers); the
+    # arm's cost above is the lead's own usage only.
+    task_tokens = _num(r.get("tokens_all")) or tokens
+    for metric, act, est in (("tok", task_tokens, _num(r.get("est_tokens"))), ("min", _num(r.get("minutes")), _num(r.get("est_minutes")))):
         if act and est:
             lr = math.log(act / est)
             for level, key in (("c", cls), ("f", fam), ("g", "all")):
                 _ew(st["calib"][level].setdefault(key, {}).setdefault(metric, {"mu": 0.0, "n": 0, "r": []}), lr, cfg)
     fail = None if y is None or "first_pass" not in r else int(r.get("first_pass") is not True)
-    if tokens or fail is not None:
-        _drift_step(st, cfg, cls, math.log(tokens) if tokens else None, fail, at)
+    if task_tokens or fail is not None:
+        _drift_step(st, cfg, cls, math.log(task_tokens) if task_tokens else None, fail, at)
     if y is not None:
         base = st["baseline"].get(cls, cfg["credit"]["baseline_prior"])
         _pending(st, str(r.get("session") or "_"))["adv"].append([y, base])
@@ -824,6 +828,9 @@ def _fold_one(st: dict, cfg: dict, rid: str, r: dict) -> None:
         vals = [r.get("found_a"), r.get("found_b"), r.get("both")]
         if all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in vals) and vals[2] <= min(vals[:2]):
             st["reviews"] = (st["reviews"] + [vals])[-cfg["state"]["review_cap"]:]
+    elif kind == "hire":
+        from . import hr  # a settled HR contract: template record and wage accuracy
+        hr.fold_hire(st, cfg, r)
     elif kind == "promotion" and r.get("item"):
         st["promotions"] = (st["promotions"] + [[str(r.get("at", "")), str(r["item"])]])[-cfg["state"]["promotion_cap"]:]
 
