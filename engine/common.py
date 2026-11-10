@@ -465,6 +465,8 @@ def _shaped(value: Any, spec: Any, where: str, problems: list[str]) -> Any:
     want = dict if isinstance(spec, dict) else list if isinstance(spec, list) else spec
     if not isinstance(value, want) or (want is int and isinstance(value, bool)):
         problems.append(f'"{where}" must be {_SHAPE_WORDS[want]} (found {_found(value)})')
+        if spec == [str] and isinstance(value, str) and value.strip():
+            return [value.strip()]  # "languages": "es" plainly means ["es"]: read it, and still say it
         return None
     if isinstance(spec, dict):
         out = dict(value)

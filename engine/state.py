@@ -52,7 +52,8 @@ def _run(path: Path, *args: str, timeout: int = 15) -> tuple[int, str, str]:
     """(exit code, stdout, stderr) of a git command. Never raises: a timeout
     is code 124, a missing git 127. No prompt can hang it."""
     try:
-        r = subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True, timeout=timeout,
+        r = subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=timeout,  # a diff can carry a damaged byte from a tracked file
                            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
         return r.returncode, r.stdout, r.stderr
     except subprocess.TimeoutExpired:
@@ -875,10 +876,23 @@ def req_counts(project: Path) -> dict:
         rows = req.load(project)
     except req.LedgerError:
         return {"total": 0, "done": 0, "open": 0, "dropped": 0, "broken": True}
-    out = {"total": len(rows), "done": 0, "open": 0, "dropped": 0}
+    out = {"total": len(rows), "done": 0, "open": 0, "dropped": 0, "verified": 0, "unverified": 0}
     for r in rows:
         out[r.get("status", "open") if r.get("status") in ("done", "dropped") else "open"] += 1
+        if r.get("status") == "done":  # "done" on a note is not proof: the page must not call it checked
+            out["verified" if req.verified(r) else "unverified"] += 1
     return out
+
+
+def requests_line(rq: dict, L: dict) -> str:
+    """The status page's one line about requirements, in the owner's language."""
+    parts = [f"{rq.get('verified', 0)} {L['r_checked']}"]
+    if rq.get("unverified"):
+        parts.append(f"{rq['unverified']} {L['r_unchecked']}")
+    parts.append(f"{rq['open']} {L['r_open']}")
+    if rq.get("dropped"):
+        parts.append(f"{rq['dropped']} {L['r_dropped']}")
+    return f"{L['r_head']}: " + ", ".join(parts) + f" ({L['r_of']} {rq['total']})"
 
 
 def _run_records(project: Path) -> list[dict]:
@@ -925,7 +939,8 @@ LABELS = {
         "last_pub": "Last published", "nothing_open": "Nothing to open yet.",
         "stand": "Where things stand", "working": "Working on", "finished": "Last finished", "next": "Next",
         "blocked": "Blocked", "nothing_yet": "nothing yet",
-        "requests": "Your requests: {done} of {total} done with evidence, {open} open", "n_dropped": ", {n} dropped",
+        "r_head": "Your requests", "r_checked": "done and checked", "r_unchecked": "done but not checked", "r_open": "open",
+        "r_dropped": "dropped", "r_of": "of",
         "reversed": "Reversed by you, not applied yet", "dropped": "Dropped (will not be done)", "no_reason": "no reason given",
         "more": "… {n} more", "more_dropped": "… {n} more in .brain/REQUIREMENTS.md",
         "needs": "Needs you", "needs_none": "Nothing right now.", "needs_details": "Details and click steps are in `NEEDS_YOU.md`.",
@@ -941,7 +956,8 @@ LABELS = {
         "last_pub": "Última publicación", "nothing_open": "Todavía no hay nada que abrir.",
         "stand": "Cómo va", "working": "Trabajando en", "finished": "Lo último terminado", "next": "Siguiente",
         "blocked": "Bloqueado por", "nothing_yet": "nada todavía",
-        "requests": "Tus peticiones: {done} de {total} hechas con evidencia, {open} abiertas", "n_dropped": ", {n} descartadas",
+        "r_head": "Tus peticiones", "r_checked": "hechas y comprobadas", "r_unchecked": "hechas sin comprobar", "r_open": "abiertas",
+        "r_dropped": "descartadas", "r_of": "de",
         "reversed": "Decisiones que cambiaste, aún sin aplicar", "dropped": "Descartado (no se hará)", "no_reason": "sin motivo anotado",
         "more": "… {n} más", "more_dropped": "… {n} más en .brain/REQUIREMENTS.md",
         "needs": "Te necesita", "needs_none": "Nada por ahora.", "needs_details": "Los detalles y los pasos están en `NEEDS_YOU.md`.",
@@ -1010,7 +1026,7 @@ def _status(project: Path) -> tuple[str, list[str]]:
         stand.append(f"{L['blocked']}: {st['blockers']}")
     rq, needs = req_counts(project), open_needs(project)
     if rq["total"]:
-        stand.append(L["requests"].format(**rq) + (L["n_dropped"].format(n=rq["dropped"]) if rq["dropped"] else ""))
+        stand.append(requests_line(rq, L))
     reversed_ = overturned(project)
     if reversed_:
         stand.append(f"{L['reversed']}: {', '.join(reversed_[:5])}")

@@ -401,7 +401,8 @@ class ContractTests(Base):
         p = self.project()
         key = "sk" + "_live_" + "Ab3dEf6hIj" * 2
         (p / "NEEDS_YOU.md").write_text((p / "NEEDS_YOU.md").read_text() + f"\n## 1. Payments\nthe staging key is {key}\n")
-        state.checkpoint(p, note="payment key for staging is " + key)
+        with open(p / ".brain" / "STATE.md", "a", encoding="utf-8") as f:  # checkpoint itself now refuses a key (package A)
+            f.write("- payment key for staging is " + key + "\n")
         (p / ".brain" / "log" / "hr").mkdir(parents=True)
         (p / ".brain" / "log" / "hr" / "h-1.md").write_text(f"Deploy using token {key}\n")
         (p / ".brain" / "log" / "run").mkdir(parents=True)
@@ -558,7 +559,7 @@ class ResolverTests(Base):
         """core-09: in a brain-only session the advice was 'run: brain init
         <path>', which the brain refuses on itself; with an unmanaged
         repository beside the brain it did not name that folder."""
-        code, out = self.run_cli("resume")
+        code, out = self.run_cli("req", "check")  # resume works with the brain alone since package A
         self.assertEqual(code, 1, out)
         self.assertIn("no project attached (brain-only session)", out)
         self.assertNotIn("brain init", out)

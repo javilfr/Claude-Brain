@@ -1,0 +1,251 @@
+{
+ "package": "A",
+ "findings": [
+  {
+   "id": "core-01",
+   "status": "fixed",
+   "note": "state.newer_checkpoints makes one bounded fetch of branch heads (6 s, no --depth, silent on failure, skipped with BRAIN_NO_NETWORK or no remote) and compares `updated:` in <ref>:.brain/STATE.md with the checkout's. Boot prints one priority-0 line naming the branch, the item and `brain resume --adopt`, and leaves the stale checkout untouched (no marker, no recall log). `brain resume --adopt [branch]` fast-forwards only, opens the session and prints the position; a refusal gives the next step. I used the fetch from decision D-17, not the analyst's local-refs-only proposal.",
+   "tests": "ContinuityTests.test_a_new_chat_is_told_where_the_last_checkpoint_is_and_adopts_it, test_boot_fetches_branch_heads_once_and_stays_silent_when_it_cannot, test_adopt_is_fast_forward_only_and_a_refusal_gives_the_next_step, test_adopt_with_nothing_newer_says_so_and_resumes"
+  },
+  {
+   "id": "e2e-trial-01",
+   "status": "fixed",
+   "note": "push_bookkeeping returns a PushResult (a str with .status pushed|side|local|failed and .branch). When the release branch may not take the push, the same commit goes to origin/brain/wip by plain push (brain/wip-<session> if that cannot fast-forward), the release branch is untouched, and newer_checkpoints finds it. `checkpoint --push` exits 0 only when the state is on the remote. Not in my files: init still leaves its own files uncommitted (contract.py, package B); the first checkpoint now says so and gives the commit to make.",
+   "tests": "ContinuityTests.test_a_checkpoint_on_an_unreleased_release_branch_still_reaches_the_remote, test_a_side_branch_that_cannot_fast_forward_gets_a_session_name_never_a_forced_push, test_checkpoint_push_exit_code_says_whether_the_remote_has_the_state, BookkeepingTests.test_first_checkpoint_after_init_says_the_contract_is_not_committed"
+  },
+  {
+   "id": "e2e-trial-02",
+   "status": "fixed",
+   "note": "In bootstrap or adopt mode boot replaces the init hint when a remote branch holds a state, and names the branch and item; `brain resume --adopt` works without --project in a checkout that is not managed yet. Handover's line to paste is now `Continue (branch <name>)` (it routes as resume).",
+   "tests": "ContinuityTests.test_state_on_a_work_branch_is_found_when_main_has_no_contract, test_handover_names_the_branch_in_the_line_to_paste"
+  },
+  {
+   "id": "owner-docs-01",
+   "status": "fixed",
+   "note": "Same defect as core-01, fixed once. Also: `brain status` ends with the GitHub address of STATUS.md on the branch that holds the state (credentials in the remote address are never printed). The skill and guide sentences are listed under instruction_notes.",
+   "tests": "ContinuityTests.test_a_new_chat_is_told_where_the_last_checkpoint_is_and_adopts_it, StatusTests.test_status_gives_the_link_to_the_page_on_this_branch"
+  },
+  {
+   "id": "core-04",
+   "status": "fixed",
+   "note": "Bookkeeping is an allow-list (state.BOOK_FILES, BOOK_DIRS with record file types only) passed to git add and git commit as explicit paths. The manifest, .brain/ext and anything else under .brain/ are left for their author; the count is true and up to three files are named. release_branch_block covers rule pr as well as main-on-green. Handover names the uncommitted files.",
+   "tests": "BookkeepingTests.test_checkpoint_never_commits_the_manifest_or_project_tools, test_checkpoint_cannot_push_work_to_the_release_branch_under_the_pr_rule, test_bookkeeping_alone_still_reaches_the_release_branch, test_first_checkpoint_after_init_says_the_contract_is_not_committed"
+  },
+  {
+   "id": "core-05",
+   "status": "fixed",
+   "note": "state.state_problem reports a missing file, a damaged byte, conflict markers and an empty or cut file. Boot and resume print it as a PROBLEM line; checkpoint raises StateError and writes nothing (exit 1, one line with the git command). read_state decodes with errors=replace. A missing file may be created again. No --force flag: deleting the file is the way to start over. contract.validate does not call it yet (package B).",
+   "tests": "StateFileTests.test_a_damaged_state_file_is_reported_and_never_overwritten"
+  },
+  {
+   "id": "core-07",
+   "status": "fixed",
+   "note": "Boot builds (priority, line) pairs, clips every line by bytes, fills by priority within 1,500 bytes and 15 lines, skips a line that does not fit instead of stopping, and ends with `… N more line(s) left out: brain resume` when anything was dropped. Title, folder name and the attached list are clipped.",
+   "tests": "BootTests.test_boot_keeps_problem_and_warning_lines_when_the_state_is_full, StateFileTests.test_long_fields_never_cost_the_position"
+  },
+  {
+   "id": "core-08",
+   "status": "fixed",
+   "note": "Every not-pushed outcome is one line with the next step and a non-zero exit: no repository, no remote, detached HEAD, no author identity, rejected push (git pull --rebase), timeout (no traceback; both pushes guarded). Only existing paths are staged, so a missing NEEDS_YOU.md no longer blocks the commit. Handover is not ready for a project that is not a git repository. A brain commit left unpushed by a failed push is pushed by the next call.",
+   "tests": "ContinuityTests.test_checkpoint_push_exit_code_says_whether_the_remote_has_the_state, test_a_slow_or_refused_push_is_one_line_not_a_traceback, test_a_missing_owner_file_does_not_block_the_checkpoint_commit, test_handover_is_not_ready_without_a_git_repository, BrainRecordTests.test_a_slow_brain_push_is_one_line, test_records_committed_earlier_are_pushed_by_the_next_call"
+  },
+  {
+   "id": "core-10",
+   "status": "fixed",
+   "note": "state.notes_tail shows the newest notes first with a count of older ones; boot and resume use it. Notes are capped at 8 and the same note twice in a row is stored once. Resume's first line names the project, the branch and the commits not pushed; file names are shown unquoted; resume stays within 12 lines of 240 characters.",
+   "tests": "StateFileTests.test_boot_and_resume_show_the_newest_note, test_resume_names_project_branch_and_unpushed_commits"
+  },
+  {
+   "id": "core-12",
+   "status": "fixed",
+   "note": "Boot sizes the request with the checkpointed tier, not the manifest's first one. Handover releases the lease (session: none) before the push, so the next boot has no 'another session' warning; a chat that left without handover still triggers it. `brain route` itself still reads the manifest's tier (route.py, package G).",
+   "tests": "BootTests.test_boot_resumes_at_the_checkpointed_size, test_no_second_session_warning_after_a_ready_handover"
+  },
+  {
+   "id": "core-13",
+   "status": "fixed",
+   "note": "For a request routed as resume, boot's recall query is the recorded item, next and blockers; with nothing recorded, recall is skipped.",
+   "tests": "BootTests.test_recall_on_a_bare_trigger_follows_the_recorded_work"
+  },
+  {
+   "id": "e2e-trial-04",
+   "status": "fixed",
+   "note": "Without --next, what was finished or is now in progress leaves the next list (a bare id matches its titled entry). `--next ''` empties the list and the help says so.",
+   "tests": "StateFileTests.test_finished_work_leaves_the_next_list"
+  },
+  {
+   "id": "e2e-trial-11",
+   "status": "fixed",
+   "note": "push_brain_records commits only this session's inbox files and the radar state, honours BRAIN_NO_PUSH and BRAIN_NO_NETWORK for a remote that is not a local folder (no commit, no push attempt), never pushes from a checkout under the system temp folder or a scratchpad path, and its line says what went where. The --push help names the brain repository. No override variable was added: a scratch copy with a local remote still pushes, which is what tests need. The lint rule the analyst proposed belongs to package E.",
+   "tests": "BrainRecordTests.test_no_push_and_no_commit_when_pushing_is_switched_off, test_only_this_sessions_inbox_files_are_committed, test_a_scratch_copy_of_the_brain_never_pushes_to_a_real_remote, test_checkpoint_help_says_the_brain_is_pushed_too"
+  },
+  {
+   "id": "instructions-04",
+   "status": "fixed",
+   "note": "Same defect as core-13, fixed once. In addition the trigger phrase is removed from the query for other requests (\"Go deep: …\"), and recall is skipped for the classes handover, status, learned and stop.",
+   "tests": "BootTests.test_recall_on_a_bare_trigger_follows_the_recorded_work"
+  },
+  {
+   "id": "instructions-05",
+   "status": "fixed",
+   "note": "state.owner_marks gives one line, printed by boot and resume, naming OVERTURNED decisions and RESOLVED answers that carry no applied mark: `APPLIED <date>` on the next line, or `(applied <date>)` on the same one. The template's own sentence (the word inside backticks) is not counted.",
+   "tests": "OwnerMarkTests.test_overturned_decisions_are_listed_until_marked_applied, test_an_answer_under_a_needs_you_item_is_shown_until_applied"
+  },
+  {
+   "id": "owner-docs-04",
+   "status": "fixed",
+   "note": "Same engine change as instructions-05: state.overturned reads OVERTURNED, REVERTIDA or ANULADA at the start of a line or in capitals anywhere on it, takes the decision id from the row or the row above, and STATUS.md gets a line 'Reversed by you, not applied yet'. The three differing wordings are in files I may not edit (instruction_notes).",
+   "tests": "OwnerMarkTests.test_overturned_decisions_are_listed_until_marked_applied"
+  },
+  {
+   "id": "owner-docs-05",
+   "status": "fixed",
+   "note": "An item is resolved only by a line that starts with RESOLVED, RESUELTO, RESUELTA, HECHO or LISTO (any case, after list, quote or bold marks). The word inside a sentence no longer hides an open item.",
+   "tests": "OwnerMarkTests.test_resolved_is_a_mark_at_the_start_of_a_line_in_english_or_spanish"
+  },
+  {
+   "id": "owner-docs-06",
+   "status": "partial",
+   "note": "Done: with no project attached `brain status` prints at most 12 lines about the brain and exits 0; `brain handover` checks the brain alone; `brain resume` and `brain checkpoint --push` work; boot shows the brain's open owner items and names a remote branch that is ahead, which `brain resume --adopt` fast-forwards to. Remains: `brain plan done <file> <id>` (schedule.py, package G), the lint check on ticket states (package E), and a generated block in docs/NEXT_SESSION.md (docs/ is not mine to edit).",
+   "tests": "BrainOnlyTests.test_status_with_only_the_brain_attached_reports_on_the_brain, test_handover_with_only_the_brain_attached_checks_the_brain_alone, test_resume_and_checkpoint_work_with_only_the_brain_attached, test_a_new_brain_only_chat_finds_the_branch_with_the_last_chats_work"
+  },
+  {
+   "id": "owner-docs-08",
+   "status": "fixed",
+   "note": "STATUS.md opens with `# <title>: <stage in plain words>`, then what to open (live address with the last publication date, or deliverables, or the last release, or 'Nothing to open yet.'). Labels come from state.LABELS (en, es) chosen by languages[0]; the time is written as '8 Nov 2026, 10:00 UTC' on the last line; the short view keeps both cost lines within 15 lines. Not in my files: init's first STATUS.md and the NEEDS_YOU header in Spanish (contract.py, package B). The analyst's reworded cost line (tokens in all) was not adopted; units are package E's.",
+   "tests": "StatusTests.test_status_says_what_to_open_first_and_in_plain_words, test_status_is_written_in_the_owners_language, test_short_status_keeps_the_cost_lines_within_fifteen_lines"
+  },
+  {
+   "id": "owner-docs-11",
+   "status": "fixed",
+   "note": "Same defect as e2e-trial-11 and quality-path-06, fixed once. A file is this session's when no record in it names another session; the radar's leads file and state are included; a session that boot repaired counts as this chat's own (noted in the brain checkout's git folder, never committed). Other files are left alone and named.",
+   "tests": "BrainRecordTests.test_only_this_sessions_inbox_files_are_committed, test_a_session_this_chat_repaired_counts_as_its_own, test_a_scratch_copy_of_the_brain_never_pushes_to_a_real_remote"
+  },
+  {
+   "id": "quality-path-06",
+   "status": "fixed",
+   "note": "state.may_push refuses a push to a non-local remote when BRAIN_NO_PUSH or BRAIN_NO_NETWORK is set; push_bookkeeping and push_brain_records use it, and local remotes stay allowed. Staged inbox lines are scanned with common.find_secrets before the commit and a hit refuses, unstages and never prints the value. gate.cmd_release's own push does not use may_push yet (gate.py, package C).",
+   "tests": "BrainRecordTests.test_no_push_and_no_commit_when_pushing_is_switched_off, test_a_local_remote_is_pushed_even_when_network_use_is_off, test_a_credential_in_the_inbox_is_refused_before_the_commit, test_a_project_push_honours_the_same_switch"
+  },
+  {
+   "id": "quality-path-11",
+   "status": "fixed",
+   "note": "Explicit pathspecs and the allow-list (see core-04). Because gate.py imports state.is_bookkeeping, a changed script elsewhere under .brain/ now makes a green gate stale, and a staged rename line ('old -> new') is never bookkeeping.",
+   "tests": "BookkeepingTests.test_bookkeeping_is_an_allow_list_not_the_whole_folder, test_checkpoint_never_commits_the_manifest_or_project_tools, test_a_green_gate_goes_stale_when_a_script_or_a_moved_file_changes_under_brain"
+  },
+  {
+   "id": "quality-path-12",
+   "status": "fixed",
+   "note": "release_branch_block applies to rule pr on release.branch: unreleased work goes to the side branch and the line says a pull request is the way; a bookkeeping-only push still reaches the branch. I did not add the extra line for rule none: it would be printed on every push for no decision.",
+   "tests": "BookkeepingTests.test_checkpoint_cannot_push_work_to_the_release_branch_under_the_pr_rule, test_bookkeeping_alone_still_reaches_the_release_branch"
+  },
+  {
+   "id": "redteam-06",
+   "status": "fixed",
+   "note": "release_branch_block diffs with --no-renames and status is read with --no-renames, so a work file moved into a bookkeeping folder still shows as deleted work; the allow-list makes .brain/app.py work for the gate's staleness check too. Residual, outside my files: gate.same_work's own diff still follows renames, so a work file with a record suffix (.json, .md, .txt, .log, .jsonl) moved into .brain/log or .brain/memory is hidden from it until package C adds --no-renames.",
+   "tests": "BookkeepingTests.test_a_file_moved_into_the_bookkeeping_folders_is_still_work, test_a_green_gate_goes_stale_when_a_script_or_a_moved_file_changes_under_brain, test_checkpoint_cannot_push_work_to_the_release_branch_under_the_pr_rule"
+  },
+  {
+   "id": "redteam-10",
+   "status": "fixed",
+   "note": "last_done is clipped to 160 on write; every boot line is clipped by bytes and filled by priority, so next and blockers survive 5,000-character fields; resume lines are clipped to 240.",
+   "tests": "StateFileTests.test_long_fields_never_cost_the_position"
+  },
+  {
+   "id": "redteam-12",
+   "status": "fixed",
+   "note": "Done as decision 4 states: only this session's files are committed; with a remote on the network the push is refused when other unpushed commits change files outside learning/inbox and learning/radar (the records are committed, the push is left to a person). Not done because the decision does not include it: refusing whenever the brain is on its default branch. A local remote is always pushed, as decided.",
+   "tests": "BrainRecordTests.test_other_unpushed_commits_are_not_carried_along, test_only_this_sessions_inbox_files_are_committed, test_no_push_and_no_commit_when_pushing_is_switched_off"
+  },
+  {
+   "id": "e2e-trial-13",
+   "status": "fixed",
+   "note": "STATUS.md is in the owner's language (see owner-docs-08). A bare id given to --item, --done or --next is stored with its title from .brain/PLAN.md (title clipped to 60). STATUS.md shows the last release when there is no live address. HANDOVER.md stays in English: it is read by the next chat. Not in my files: the NEEDS_YOU.md template and the help text of --language (contract.py and contract/, package B).",
+   "tests": "StatusTests.test_status_is_written_in_the_owners_language, StateFileTests.test_a_bare_id_is_stored_with_its_title_from_the_plan"
+  },
+  {
+   "id": "core-15",
+   "status": "fixed",
+   "note": "End: `brain handover --note --item --outcome --class --request --tier` does checkpoint, the same call `brain close` makes (through its own parser), lease release, both pushes and the cleanliness checks, and prints at most 6 lines ending with the line to paste. With none of the new options it prints the two lines it printed before. Start: boot names the newer checkpoint; `brain resume --adopt` adopts it, opens the session and prints the position. checkpoint and close are unchanged commands.",
+   "tests": "OneCommandTests.test_one_call_ends_a_session, test_handover_without_new_options_prints_what_it_did_before (the second is a compatibility pin; it also passed before)"
+  },
+  {
+   "id": "e2e-trial-16",
+   "status": "fixed",
+   "note": "Same change as core-15. A second identical call stays ready and doubles nothing (the note and the ledger record are stored once).",
+   "tests": "OneCommandTests.test_one_call_ends_a_session"
+  },
+  {
+   "id": "instructions-20",
+   "status": "partial",
+   "note": "Done: STATUS.md, CHECKLIST.md and HANDOVER.md are written only when their content changed, so two status calls leave the tree clean; `brain status` appends this chat's list-price cost when its transcript is on disk, and the page link. Not done: the live check result. It is a network call inside gate.py, which package C is changing; `brain release --check-live` remains the way.",
+   "tests": "StatusTests.test_status_file_is_rewritten_only_when_its_content_changes, test_short_status_keeps_the_cost_lines_within_fifteen_lines"
+  },
+  {
+   "id": "redteam-20",
+   "status": "partial",
+   "note": "detect.learning_line prints one `learning:` line only when something needs attention: more than 8 pending inbox files (memory/ml_config.json key boot.pending_inbox_max overrides), unreadable inbox lines, a memory file at 90% of its item budget, facts overdue for a re-check. Not done: 'last consolidation refused, with its reason' and 'owner statements awaiting confirmation'; the engine records neither today (learn.py, package F).",
+   "tests": "BootTests.test_one_boot_line_only_when_the_learning_loop_needs_attention"
+  }
+ ],
+ "suite": "suite (python3 bin/brain run -- python3 -m unittest discover -s tests -t ., exit 0):\nok in 54.5s · 5 lines · full output: /tmp/brain-run/20261110-190516-4cda924a.log\n  Ran 477 tests in 54.305s\n  OK\ndoctor (exit 0): brain is healthy\nlint (exit 0): lint: 0 error(s), 0 note(s) — instruction surface is consistent with the engine\nNew tests alone: Ran 62 tests ... OK (tests.test_r4_a). Against the engine as it was at dddff2f, 61 of the 62 fail; the one that passes is the compatibility pin test_handover_without_new_options_prints_what_it_did_before.",
+ "head_commit": "5cff8ef63f03eb45a52569f5d88cbdf7f86e804b",
+ "existing_tests_changed": [
+  "tests/test_core.py::StateTests::test_checkpoint_round_trip_and_status — it asserted that after checkpoint(done=\"A\", item=\"B\") the next list still held three entries, B among them. Finding e2e-trial-04 proved that wrong. It now asserts the cap of three right after the first checkpoint and next_list == [\"C\", \"D\"] after the second. Nothing was skipped or weakened."
+ ],
+ "cross_package": [
+  "Nothing was appended to a module I do not own. Files changed: engine/state.py, engine/detect.py, tests/test_r4_a.py (new), tests/test_core.py (one test, above).",
+  "Package B, contract.py: init and adopt still leave their files uncommitted. With the allow-list the first `checkpoint --push` no longer commits .brain/project.json, .brain/ext/README.md or CLAUDE.md; it prints 'the contract itself is not committed, so a new chat cannot resume: git add -A && git commit -m \"chore(brain): contract\"'. Either init commits what it creates (e2e-trial-01, core-04, e2e-trial-15) or brain-new must say so.",
+  "Package B, contract.validate: call state.state_problem(project) and return its line (core-05).",
+  "Package B, contract.py: `init --language es` should write the first STATUS.md and the NEEDS_YOU.md header in Spanish, and --language needs help text. state.owner_language(manifest) and state.LABELS are there to use (owner-docs-08, e2e-trial-13).",
+  "Package B findings whose code is in my files, done here so nobody has to edit state.py or detect.py twice. core-06: state and boot no longer crash on a manifest section of the wrong type (StateFileTests.test_a_manifest_section_of_the_wrong_type_never_crashes_state_or_boot). core-09: brain-only resume, checkpoint --push, status and handover work (BrainOnlyTests). core-11: boot writes nothing into a project from a newer contract (BootTests.test_boot_writes_nothing_into_a_project_from_a_newer_contract); checkpoint and status in that mode still go through common.need_project. core-14 (2): the last session is picked by time, the open-session marker is not a run record, unknown usage is not shown as $0.00 (StatusTests.test_cost_lines_use_the_latest_record_and_never_show_unknown_usage_as_zero). core-14 (3): RESOLVED at line start. core-14 (7): checkpoint holds an flock on the .brain folder, no lock file (StateFileTests.test_parallel_checkpoints_lose_nothing).",
+  "Package B, redteam-07: the commit sites are in state.py, so the scan before the engine commits is done here. push_bookkeeping and push_brain_records scan the staged added lines and refuse on a hit (BookkeepingTests.test_a_credential_in_an_owner_file_is_refused_before_the_commit, BrainRecordTests.test_a_credential_in_the_inbox_is_refused_before_the_commit).",
+  "Package C, gate.py: add --no-renames to the diff in same_work and to the status in tree_dirty (redteam-06, quality-path-11). Until then a work file with a record suffix moved into .brain/log or .brain/memory is hidden from the staleness check.",
+  "Package C, gate.py: cmd_release's push should ask state.may_push(project) first (quality-path-06).",
+  "Package C, behaviour change through the shared function: state.is_bookkeeping is now an allow-list. `.brain/` as one untracked folder, `.brain/project.json`, `.brain/ext/*` and any other file under .brain/ are work for tree_dirty and same_work. push_bookkeeping returns a PushResult (a str with .status, .branch, .on_remote), so callers that treat it as text keep working.",
+  "Package E, ledger.py: handover runs `brain close` through ledger.register and the parsed func, with --project, --outcome, --class, --tier, --request, --note, and sets args.brain_root when given. Those names must keep working. detect now calls ledger.repair_unclosed(project, previous, root) with the brain root (before, a stand-in brain in tests wrote into the real inbox).",
+  "Package E, core-03: `brain resume --adopt` now opens the session after adopting (detect.open_session), so the stub-over-a-real-ledger path of repair_unclosed can be reached from there as well as from boot. With `brain handover --outcome …` the marker is cleared before the push, so the remote no longer holds it.",
+  "Package E, lint.py: the analysts asked for two lint rules I cannot add: the --push help must mention the brain (e2e-trial-11), and a ticket named in a Brain-Bootstrap trailer must not be open (owner-docs-06).",
+  "Package G, route.py: `brain route` still reads the manifest's tier; boot passes a view with the checkpointed one (core-12). detect uses route._trigger and route._tokens (private names, guarded by try/except) to remove the trigger phrase from the recall query: keep them or give a public function.",
+  "Package G, schedule.py: `brain plan done <file> <id>` (owner-docs-06).",
+  "Package I, hr/GUIDELINES.md: the line about `git remote remove origin` in a copy of the brain (owner-docs-11). The engine now refuses to push from a copy under the temp folder in any case.",
+  "Lead: a new untracked file inside the brain checkout's git folder, <git dir>/brain-session.json, lists earlier sessions this chat repaired; it is never committed. The side branch name is state.SIDE_BRANCH = 'brain/wip'."
+ ],
+ "instruction_notes": [
+  "docs/EXECUTION_PLAN.md, I-01: 'No install, no network at boot except the bounded radar (I-14).' Correction: boot also makes one bounded fetch of the remote's branch heads (6 s, silent on failure, skipped with BRAIN_NO_NETWORK), of the project, or of the brain in a brain-only chat.",
+  "docs/EXECUTION_PLAN.md 4.5: 'commit the bookkeeping files (`.brain/` except the manifest and `ext/`, `STATUS.md`, `NEEDS_YOU.md`) and push the current branch … otherwise it refuses and points to `brain release` (I-12).' Correction: bookkeeping is an allow-list (STATE.md, PLAN.md, DECISIONS.md, REQUIREMENTS.md, requirements.jsonl, CHECKLIST.md, HANDOVER.md, .brain/.gitignore, record files under .brain/log and .brain/memory, STATUS.md, NEEDS_YOU.md); on the release branch under main-on-green or pr with unreleased work, the same commit is pushed to origin/brain/wip instead of being refused; it also pushes this session's own records in the brain; exit 0 only when the state is on the remote.",
+  "docs/EXECUTION_PLAN.md 4.5: '`brain resume`: compaction-proof restatement (≤ 12 lines): state, open checklist items, files in flight, last gate result.' Add: first line names project, branch and unpushed commits; `--adopt [branch]` fast-forwards to the newest checkpoint on another remote branch first.",
+  "docs/ENGINE_SPEC.md, 'Rules for every module': 'No installs, no network.' Add the boot fetch and the variables BRAIN_NO_PUSH and BRAIN_NO_NETWORK (no push to a remote that is not a local folder; BRAIN_NO_NETWORK also skips the fetch). Add under files: `<git dir>/brain-session.json` in the brain checkout.",
+  "CLAUDE.md rule 7: '`BRAIN checkpoint --push` after each finished item and before long work'. Still true; it could add that the command exits non-zero when the state did not reach the remote, and that a new chat runs `BRAIN resume --adopt` when boot names a newer checkpoint.",
+  "CLAUDE.md rule 9: 'Before the final message of a working session run `BRAIN close`.' Now one command does checkpoint, close, pushes and checks: `BRAIN handover --note … --outcome … --class … --tier … --request …`. close alone still works.",
+  ".claude/skills/brain-handover/SKILL.md: 'Order matters here: 1. `BRAIN checkpoint --item <current id> --note \"…\" --push`. 2. `BRAIN close`. Commit the learning inbox file it wrote in the brain repository and push the brain's working branch (brain-learn says where it goes next). 3. `BRAIN handover`.' Correction: one call, `BRAIN handover --item <id> --note \"…\" --outcome ok|partial|failed --class <class> --tier <n> --request \"<his request>\"`; the inbox file is committed and pushed by the engine, never by hand; the line to paste is now `Continue (branch <name>)`; with only the brain attached the same command checks the brain alone.",
+  ".claude/skills/brain-start/SKILL.md, Orient: add 'If boot says `newer checkpoint on origin/<branch>` (or, with only the brain attached, `brain work is ahead on origin/<branch>`), run `BRAIN resume --adopt` first: it fast-forwards this chat's branch and prints the position. If it refuses, do what its line says.'",
+  ".claude/skills/brain-start/SKILL.md: 'Apply any lines he marked `RESOLVED:` in `NEEDS_YOU.md` or `OVERTURNED` in `.brain/DECISIONS.md` before resuming.' Correction: boot and resume list them in one line ('owner marks to apply: …'); apply each and write `APPLIED <date>` on the line under his mark (or `(applied <date>)` at the end of it) so it is listed once.",
+  ".claude/skills/brain-start/SKILL.md: 'If a warning says another session holds the lease …'. Still true, but the warning no longer appears after a handover; it now means the other chat left without one or is still running.",
+  ".claude/skills/brain-start/SKILL.md, `stale-brain` and `brain-only` bullets: with only the brain attached, `BRAIN status`, `BRAIN resume`, `BRAIN handover` and `BRAIN checkpoint --push` now work and report on the brain itself.",
+  ".claude/skills/brain-build/SKILL.md: 'It commits only bookkeeping files and pushes, so a new session sees the state; commit the work itself first.' Add: it also pushes this session's records in the brain repository; a non-zero exit means the state is not on the remote; on the release branch with unreleased work the state goes to `origin/brain/wip`; `--done` removes the item from the next list, so `--next` is needed only to add items; a bare id is stored with its title from `.brain/PLAN.md` when a plan line starts with that id.",
+  ".claude/skills/brain-status/SKILL.md: '`BRAIN status` regenerates `STATUS.md` from `.brain/STATE.md` (the only checkpoint) and prints the summary.' Correction: it writes the file only when the content changed, prints this chat's cost and the GitHub address of the page on the current branch (give him that link), and with only the brain attached reports on the brain. The separate `BRAIN ledger` call is needed only for the breakdown by model.",
+  ".claude/skills/brain-new/SKILL.md: '`BRAIN init <path> --family F --title \"T\" --release R --language L`'. Add what L means: the language he reads STATUS.md in (`es` or `en`); it is now read. Add: commit the contract files before the first `checkpoint --push`, unless init starts doing it.",
+  "OWNER_GUIDE.md:36 '**STATUS.md**: what is done, what is next, and what it cost.' Correction: it now starts with the project and its stage in plain words and what to open, in his language, and lists up to five dropped requests with their reasons.",
+  "OWNER_GUIDE.md:38 'To reverse one, edit the line on GitHub and write **OVERTURNED** with what you want instead. The next chat applies it.' Now backed by the engine; REVERTIDA and ANULADA are read too. One wording is still needed in OWNER_GUIDE.md, docs/DECISIONS.md:3 and contract/template/.brain/DECISIONS.md:3 (they differ: 'edit the line', 'under the row', 'on the line below it').",
+  "OWNER_GUIDE.md:44 and contract/template/NEEDS_YOU.md:3 and NEEDS_YOU.md:3: 'write `RESOLVED:` under an item'. Add: RESUELTO, RESUELTA, HECHO or LISTO at the start of a line work too; the word must start the line.",
+  "OWNER_GUIDE.md:21 and wherever the line to paste is quoted as a bare 'Continue': handover now prints `Continue (branch <name>)`; a bare 'Continue' still works because boot looks for the branch itself.",
+  "method/lifecycle.md:32: 'A new chat resumes from that file alone.' Correction: from that file on the newest branch; boot names it and `BRAIN resume --adopt` takes it."
+ ],
+ "new_commands_and_flags": [
+  "brain resume --adopt [BRANCH]: fast-forward this checkout to the newest checkpoint on another remote branch (or to BRANCH), then print the position; never merges or forces; exit 1 with the next step when a fast-forward is impossible. With only the brain attached it fast-forwards the brain to the remote branch that is ahead.",
+  "brain handover --note TEXT / --item TEXT: checkpoint first with this note and item.",
+  "brain handover --outcome ok|partial|failed, --class CLASS (repeatable), --tier 0-3, --request TEXT: also close the session, exactly as `brain close` does, before the pushes. At most 6 lines, the last one the line to paste.",
+  "brain handover with no project attached: checks the brain repository alone and prints `Continue (branch <name>)` for a brain-only chat.",
+  "brain status with no project attached: at most 12 lines about the brain (version, branch, commits not on main, open tickets and the next one, open NEEDS_YOU item numbers, pending inbox files), exit 0.",
+  "brain resume with no project attached: the same brain lines, exit 0.",
+  "brain checkpoint --push with no project attached: pushes this session's brain records and reports uncommitted or unpushed work; position flags are not stored and it says so.",
+  "brain checkpoint --push exit code: 0 only when the state is on the remote (current branch or the side branch origin/brain/wip); 1 otherwise, with one line and the next step.",
+  "brain checkpoint --next '': empties the next list.",
+  "brain checkpoint (any text flag): refused with exit 1 when the text holds something shaped like a credential, or when .brain/STATE.md is damaged.",
+  "Environment variable BRAIN_NO_PUSH (new) and BRAIN_NO_NETWORK (now honoured by pushes): no push to a remote that is not a local folder; BRAIN_NO_NETWORK also skips boot's fetch.",
+  "Owner marks: `APPLIED <date>` (or APLICADA/APLICADO) on the line under an OVERTURNED or RESOLVED mark, or `(applied <date>)` on the same line, stops boot listing it. RESUELTO, RESUELTA, HECHO, LISTO count as RESOLVED; REVERTIDA, ANULADA as OVERTURNED.",
+  "memory/ml_config.json, optional key boot.pending_inbox_max (default 8): how many pending inbox files boot tolerates before its `learning:` line. I did not add the key; the default is in engine/detect.py."
+ ],
+ "remaining": "Everything is committed on r4/a at 5cff8ef (four commits on top of dddff2f); the worktree is clean and nothing was pushed.\n\nThree findings are partial, each for a part outside engine/state.py and engine/detect.py:\n- owner-docs-06: `brain plan done` (schedule.py), the ticket lint (lint.py) and a generated block in docs/NEXT_SESSION.md.\n- instructions-20: the live check result inside `brain status`.\n- redteam-20: two of the six conditions (refused consolidation, owner statements awaiting confirmation) have no data in the engine yet.\n\nThings a reviewer should know:\n- Brain-only adoption (state.ahead_branches, adopt_brain, the boot line 'brain work is ahead on origin/<branch>') goes beyond the listed decisions. I added it because the same gap exists for the brain itself and the paste line now names a branch; it is fast-forward only. Say if you want it removed.\n- A file in the inbox with no `session` field in any record is treated as this session's, because the existing test test_brain_records_are_pushed_and_nothing_else_in_the_brain (which had to pass unchanged) commits exactly such a file. A file with no readable record is left alone.\n- The secret scan before a bookkeeping commit can refuse a checkpoint on a false positive; the line names the file. I ran the scan over the current learning/inbox: no line is flagged.\n- With a newer checkpoint elsewhere, boot prints the project line and the adopt line and leaves out the local position, the lease warning and recall, since they are stale until adoption.\n- Notes older than the last 8 are dropped from STATE.md (they stay in git history), not moved to the log, so STATUS.md's Recent section stays clean.\n- I did not verify behaviour against a real network remote: every push and fetch test uses a local bare repository, and the non-local rules are tested through the decision function (brain_push_block) and by asserting that no push is attempted."
+}

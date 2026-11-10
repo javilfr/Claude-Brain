@@ -65,7 +65,7 @@ MACHINE_READ = (".brain/project.json", ".brain/STATE.md", ".brain/requirements.j
 def _git(project: Path, *args: str) -> tuple[int, str]:
     """(exit code, output) of a read-only git command; 127 when git cannot run."""
     try:
-        r = subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=True, timeout=15)
+        r = subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
     except (OSError, subprocess.SubprocessError):
         return 127, ""
     return r.returncode, r.stdout.strip()
