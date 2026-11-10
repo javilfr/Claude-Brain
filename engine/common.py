@@ -109,8 +109,8 @@ def write_text(path: Path | str, text: str) -> None:
 def read_json(path: Path | str, default: Any = None) -> Any:
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
-        return default
+    except (FileNotFoundError, IsADirectoryError, NotADirectoryError, ValueError, RecursionError):
+        return default  # missing, not UTF-8, not JSON, or nested too deep to read
 
 
 def write_json(path: Path | str, data: Any) -> None:
@@ -307,9 +307,80 @@ def resolve_project(explicit: str | None = None, brain_root: Path | None = None)
     return None
 
 
-def load_manifest(project: Path) -> dict:
+# The types the contract declares for the keys the engine reads (the same
+# types as contract/v1.schema.json, kept here so that reading a manifest needs
+# no second file). A key of the wrong type used to surface as a traceback in
+# whichever command touched it first. Unknown keys are not looked at.
+MANIFEST_SHAPE: dict = {
+    "project": {"id": str, "title": str, "created": str},
+    "family": str, "types": [str], "stage": str, "tier": int,
+    "commands": {"setup": str, "check_fast": str, "check_full": str, "run": str},
+    "gates": [{"id": str, "kind": str, "command": str, "file": str}],
+    "release": {"rule": str, "branch": str, "live_url": str, "live_expect": str},
+    "paths": {"deliverables": [str], "evidence": str, "never_touch": [str]},
+    "languages": [str], "risk": str,
+    "privacy": {"share_lessons": str},
+    "brain": {"last_seen": str, "min_contract": int},
+}
+_SHAPE_WORDS = {dict: "an object", list: "a list", str: "text", int: "a whole number"}
+
+
+def _found(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true/false"
+    return {dict: "an object", list: "a list", str: "text", int: "a number", float: "a number"}.get(type(value), type(value).__name__)
+
+
+def _shaped(value: Any, spec: Any, where: str, problems: list[str]) -> Any:
+    """``value`` with every part of the wrong type left out (a section becomes
+    empty, a list loses the entry, a key is dropped so its default applies);
+    each such part adds one line to ``problems``."""
+    want = dict if isinstance(spec, dict) else list if isinstance(spec, list) else spec
+    if not isinstance(value, want) or (want is int and isinstance(value, bool)):
+        problems.append(f'"{where}" must be {_SHAPE_WORDS[want]} (found {_found(value)})')
+        return None
+    if isinstance(spec, dict):
+        out = dict(value)
+        for key, sub in spec.items():
+            if key in out:
+                got = _shaped(out[key], sub, f"{where}.{key}" if where else key, problems)
+                if got is None:
+                    del out[key]
+                else:
+                    out[key] = got
+        return out
+    if isinstance(spec, list):
+        kept = []
+        for i, v in enumerate(value):
+            got = _shaped(v, spec[0], f"{where}[{i}]", problems)
+            if got is not None:
+                kept.append(got)
+        return kept
+    return value
+
+
+def manifest_shape(data: dict) -> tuple[dict, list[str]]:
+    """(usable copy, problems) of a parsed manifest. In the copy a wrong-typed
+    section is empty rather than absent, so ``m["gates"]`` and
+    ``m.get("release", {})`` both behave."""
+    problems: list[str] = []
+    out = _shaped(data, MANIFEST_SHAPE, "", problems) or {}
+    for key, spec in MANIFEST_SHAPE.items():
+        if key in data and key not in out and isinstance(spec, (dict, list)):
+            out[key] = type(spec)()
+    return out, problems
+
+
+def load_manifest(project: Path, raw: bool = False) -> dict:
+    """The project's manifest, with wrong-typed parts left out so no reader
+    crashes on them (``manifest_problem`` is what says them out loud).
+    ``raw=True`` gives the file as it is, for code that writes it back."""
     m = read_json(Path(project) / ".brain" / "project.json", {})
-    return m if isinstance(m, dict) else {}
+    if not isinstance(m, dict):
+        return {}
+    return m if raw else manifest_shape(m)[0]
 
 
 def manifest_problem(project: Path) -> str:
@@ -319,12 +390,22 @@ def manifest_problem(project: Path) -> str:
     path = Path(project) / ".brain" / "project.json"
     if not path.is_file():
         return ""
+    fix = "fix it or restore it from git before anything else"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        return f".brain/project.json is not valid JSON ({clip(str(e), 60)}); fix it or restore it from git before anything else"
-    if not isinstance(data, dict) or not isinstance(data.get("contract"), int):
-        return ".brain/project.json has no integer 'contract'; fix it or restore it from git before anything else"
+    except (ValueError, RecursionError) as e:  # not JSON, not UTF-8, or nested beyond reading
+        return f".brain/project.json is not valid JSON ({clip(str(e), 60)}); {fix}"
+    except OSError as e:
+        return f".brain/project.json cannot be read ({clip(str(e), 60)}); {fix}"
+    ver = data.get("contract") if isinstance(data, dict) else None
+    if not isinstance(ver, int) or isinstance(ver, bool):
+        return f".brain/project.json has no integer 'contract'; {fix}"
+    if ver > CONTRACT_VERSION:
+        return ""  # a newer contract may have other shapes: that is `stale_brain`'s line, not this one
+    problems = manifest_shape(data)[1]
+    if problems:
+        more = f" (and {len(problems) - 1} more: brain validate)" if len(problems) > 1 else ""
+        return f".brain/project.json: {problems[0]}{more}; {fix}"
     return ""
 
 
