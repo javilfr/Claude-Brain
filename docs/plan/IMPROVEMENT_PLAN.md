@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 190 from 11 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, quality-path, quality2, redteam, research-platform). Decisions: 161 do, 2 do in part, 0 reproduce first, 27 later.
+Findings in: 205 from 12 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, redteam, research-platform). Decisions: 172 do, 3 do in part, 0 reproduce first, 30 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -114,6 +114,7 @@ Owns: `engine/state.py`, `engine/detect.py`. New tests go in `tests/test_r4_a.py
 | owner-docs-06 | should-fix | M | do | In a chat with only the brain attached, "Status" and "Hand over" have no engine support (exit 1), the brain's own open owner items are not shown, and the handover note and ticket states are kept by hand |  |
 | owner-docs-08 | should-fix | M | do | Generated STATUS.md does not say what to open, starts with a machine timestamp and a stage name, and stays in English for a project created with --language es (the field is never read) |  |
 | owner-docs-11 | should-fix | S | do | Three engine commands commit and push whatever is in learning/inbox to the origin of whichever copy of the brain they run from; today test records reached the real branch that way |  |
+| performance-05 | should-fix | S | do | On resume, half of boot's output is recall matched on the trigger word (adds numbers to plan items core-13 and instructions-04) |  |
 | quality-path-06 | should-fix | S | do | Pushes ignore BRAIN_NO_NETWORK, and `push_brain_records` commits and pushes every inbox file it finds (this caused a real unintended push during the audit) |  |
 | quality-path-11 | should-fix | S | do | `checkpoint --push` commits the manifest and project tools as bookkeeping while saying it left them, and a gate script elsewhere under .brain/ can change without making the gate stale |  |
 | quality-path-12 | should-fix | S | do | Under release rule `pr` (or `none`), `checkpoint --push` on the release branch pushes ungated work straight to main |  |
@@ -139,16 +140,20 @@ Owns: `engine/common.py`, `engine/contract.py`, `engine/doctor.py`, `engine/budg
 | core-06 | should-fix | S | do | Boot, status, checkpoint and handover crash with a Python traceback when a manifest section is null or the wrong type |  |
 | core-09 | should-fix | M | do | Boot and the other commands disagree about the project: with two projects every command after boot says 'no managed project found', an exact --name loses to a substring, and in a brain-only session resume/chec… |  |
 | core-11 | should-fix | S | do | 'stale-brain' mode says 'write nothing to .brain/' but checkpoint, status and boot itself write there |  |
+| performance-03 | should-fix | S | do | Every brain call costs about 240 ms in a fresh clone: no bytecode cache, and all 21 modules imported for any command |  |
 | quality-path-10 | should-fix | S | do | The secret scanner misses 13 of 20 common credential formats |  |
 | redteam-07 | should-fix | M | do | No secret scan before the brain commits and pushes; a key written into a note, evidence, NEEDS_YOU or a helper brief reaches the remote, and the patterns miss 13 of 19 common formats |  |
 | research-platform-05 | should-fix | S | do | `brain adopt` on a repository that relies on AGENTS.md silently switches its instructions off |  |
 | core-14 | minor | M | do | Smaller slips, each reproduced: adopt accepts the brain itself, STATUS.md cost lines are wrong, an open owner item with the word 'unresolved' vanishes, the total token cap is not enforced by `brain budget`, a … |  |
+| performance-08 | minor | S | do | Help pages and usage errors are among the largest outputs: 3,553 B for `--help`, 250-760 B per mistyped flag |  |
 | core-16 | idea | L | part | Idea: one project context with a health check that every command goes through, plus a seeded fuzz test that no core command ever tracebacks on malformed contract files | fuzz test only; rest deferred: the refactor is large; its fuzz test is done under package B, the single project context is deferred |
 | core-18 | idea | M | part | Idea: make the contract's dormant keys real (paths.never_touch, privacy.share_lessons, owner and checklist gates) or mark them reserved | validate names reserved keys; never_touch is implemented under quality2-05; rest deferred: implemented only as: reserved keys are named by … |
 | core-19 | idea | M | do | Idea: `brain doctor --project`: a preflight of the attached project and git setup that prints the fix for each problem, run by boot when something changed |  |
 | e2e-trial-15 | idea | S | do | Idea: let `init` finish the set-up in one call |  |
 | instructions-15 | idea | L | later | Idea: let the brain be its own managed project, so brain work uses the same ledger, checkpoint, resume and handover as any project | a change to the kernel's shape (the brain as its own managed project); this programme gives brain-only chats a working path instead (method… |
 | instructions-19 | idea | S | do | Idea: with several projects attached, say so instead of "no managed project found" |  |
+| performance-12 | idea | S | later | Idea: record each brain call (command, milliseconds, bytes printed) so the next audit ranks by measured use | useful for the next audit, not for the owner; revisit before the next audit |
+| performance-13 | idea | M | part | Idea: a `brain perf` self-benchmark with stored baselines, and byte caps as tests for the frequent commands | byte caps for the frequent commands as tests; rest deferred: the byte caps become tests now; the self-benchmark command waits |
 
 ### Package C: Run, gate and release (CB-214)
 
@@ -161,6 +166,8 @@ Owns: `engine/gate.py`. New tests go in `tests/test_r4_c.py`.
 | redteam-05 | blocking | M | do | A release can be green without the work being green: forged gate record, gates ending in `/ tail` or `// true`, duplicate gate ids |  |
 | e2e-trial-03 | should-fix | M | do | After a release, main never holds the record of that release: "Continue" from main repeats the release item, and a second release duplicates the release log |  |
 | e2e-trial-08 | should-fix | S | do | `brain run` runs where it was typed, not in the detected project: from the documented stance the project's tests fail to import, from the brain folder the brain's own tests run and report ok; same-second logs … |  |
+| performance-01 | should-fix | M | do | The failure digest of `brain run` often omits the cause, so the lead has to open the log |  |
+| performance-04 | should-fix | S | do | Frequent commands print bytes the lead cannot use: log path on every success, blank lines, duplicated lines |  |
 | quality-path-03 | should-fix | M | do | A gate is green on exit 0 even when the command cannot fail, a pipe hides the failure, or the output says FAILED; the detectors miss removed tests and common skip markers |  |
 | quality-path-04 | should-fix | M | do | Release prints 'gates green' and pushes while `owner` and `checklist` gates are unmet |  |
 | quality-path-05 | should-fix | M | do | `brain run` and gates: stderr lost and children left running on timeout, caller's stdin inherited, whole output held in memory, no record when killed, one-hour default above the tool's limit |  |
@@ -169,6 +176,7 @@ Owns: `engine/gate.py`. New tests go in `tests/test_r4_c.py`.
 | quality2-05 | should-fix | M | do | Every project manifest carries paths.never_touch and paths.evidence, and no code reads either |  |
 | e2e-trial-20 | idea | S | do | Idea: shorter digests with paths relative to the project |  |
 | instructions-16 | idea | S | do | Idea: a `gate --last` that answers "why is the build red?" from the recorded run without running the build again |  |
+| performance-14 | idea | M | do | Idea: a labelled set of failing logs that scores the digest on 'cause shown' and bytes |  |
 | quality-path-16 | idea | S | do | Idea: a test-count ratchet in gate records |  |
 | quality-path-17 | idea | M | later | Idea: seal gate records the way HR seals checks, and keep red results out of git's reach | protects against a lead that forges records; lower value than the items done now |
 | quality-path-19 | idea | M | later | Idea: a detached gate runner for checks longer than a tool call | needs a real project whose gate outlasts a tool call |
@@ -236,10 +244,12 @@ Owns: `engine/learn.py`, `learning/`, `tests/test_rehearsal.py`. New tests go in
 | learning-10 | should-fix | M | do | The admission gate refuses 28% of the brain's own seed lessons, and only after `learn note` said "recorded" |  |
 | learning-13 | should-fix | S | do | The pitfall rule cannot fire for a fail-then-fix inside one session and can fire across unrelated sessions |  |
 | learning-14 | should-fix | M | do | Conflicts are detected by keyword, can never be cleared, and harm votes lower an owner item's rank |  |
+| performance-06 | should-fix | S | do | Consolidation re-tokenises both texts four times for every note-item pair: 0.8 s becomes 9.9 s at 2,000 items |  |
 | redteam-09 | should-fix | S | do | The brain's own test suite goes red after the first real lesson is consolidated, and again after the first decay |  |
 | redteam-11 | should-fix | M | do | Three red sessions in a row demote the rules that were followed, including facts and the release rule |  |
 | redteam-14 | should-fix | L | do | Learning dead ends: lessons noted once are never shown again, the routing learner can never start, and one item over 400 stops every later consolidation |  |
 | owner-docs-12 | minor | S | do | After "What did you learn?" the next "Hand over" cannot pass: the digest command writes a file in the brain that no command commits |  |
+| performance-11 | minor | M | later | Every consolidated record is stored twice and never pruned: about 7 KB of git history per session | about 7 KB of history per session; changing the delta format risks the replay check, so it waits with the yearly archive (redteam-19) |
 | core-20 | idea | M | do | Idea: a two-container continuity rehearsal in the test suite, so CB-104 ('Continue in a new chat resumes the same item') is checked on every change instead of waiting for a live session |  |
 | learning-18 | idea | M | later | Idea: let proven family lessons graduate into the playbooks the lead actually reads | no learned family lesson has three supporting sessions yet; revisit after real use |
 | redteam-16 | idea | M | do | Idea: keep the year-in-a-minute simulation as a standing gate |  |
@@ -256,6 +266,8 @@ Owns: `engine/recall.py`, `engine/items.py`, `evals/recall_golden.jsonl`, `tests
 | learning-11 | should-fix | M | do | Recall returns noise instead of silence, and owner standing items take slots they do not earn |  |
 | learning-12 | should-fix | S | do | The golden recall test measures a configuration nobody runs and reads the brain's live learned state |  |
 | redteam-13 | should-fix | S | do | A file in the project's .brain/memory/ can present itself as an owner standing instruction in boot |  |
+| performance-07 | minor | S | do | Recall stems the whole memory in Python on every call: 80% of its time, linear in items |  |
+| performance-10 | minor | S | do | Golden recall MRR is 0.830, not the documented 0.853, since the first consolidation created stats/ml.json |  |
 | learning-16 | idea | M | do | Idea: make recall work for Spanish and dictated requests |  |
 | learning-20 | idea | M | do | Idea: mark what was only read, and give the owner a one-step undo for a single lesson |  |
 
@@ -276,6 +288,7 @@ Owns: `engine/mlearn.py`, `engine/route.py`, `engine/schedule.py`, `memory/ml_co
 | ml-planning-08 | should-fix | M | do | The learner compares arms on dollars per session, so task size decides the choice instead of the arm |  |
 | ml-planning-09 | should-fix | M | do | Drift alarms are tuned for a noise level real sessions are unlikely to have: many false alarms on heavy-tailed sizes, little power at realistic spread |  |
 | owner-docs-09 | should-fix | M | do | Phrases the owner is told to type are not recognised by route or by any skill, and his real opening message today was sized "1 small task, data" |  |
+| performance-02 | should-fix | S | do | `plan schedule` takes 85 s on 200 tickets for the same answer it gives in 0.26 s |  |
 | ml-planning-10 | minor | S | do | Review stopping asks for another round in most small cases even when the estimate says nothing remains, and `learn review` is not in any skill |  |
 | ml-planning-11 | minor | S | do | The scheduler's file-conflict check is literal text, tickets without files run in parallel silently, --agents above the cap is accepted, and parallelism is shown as free by default |  |
 | ml-planning-12 | minor | S | do | `plan schedule` takes 16 s for 100 tickets and 74 s for 200 while changing nothing |  |
@@ -289,6 +302,7 @@ Owns: `engine/mlearn.py`, `engine/route.py`, `engine/schedule.py`, `memory/ml_co
 | ml-planning-19 | idea | M | later | Idea: have the scheduler choose how many helpers to use by showing time against tokens, not time alone | the cold-start price is added now (instructions-10); the time-against-tokens table waits for a plan that needs it |
 | ml-planning-20 | idea | S | do | Idea: a learner health table so a learner with no data source is visible the day it happens |  |
 | owner-docs-15 | idea | M | do | Idea: one source for owner phrases |  |
+| performance-15 | idea | S | later | Idea: `plan schedule` prints the next wave, not the timeline | changes a default output that the plan skill describes; revisit with the skill |
 
 ### Package H: Radar, repo map and evaluation (CB-219)
 
@@ -296,6 +310,7 @@ Owns: `engine/radar.py`, `engine/repomap.py`, `engine/evals.py`, `evals/`, `memo
 
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
+| performance-09 | minor | M | do | The repo map's cache is defeated by the brain's own bookkeeping, and bookkeeping files are ranked as source (measurement and fix for open item M8) |  |
 | learning-19 | idea | S | do | Idea: a `brain eval recall` command that reports recall, precision, silence and token cost under production settings |  |
 
 ### Package I: HR engine and selection (CB-220)
