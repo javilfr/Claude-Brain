@@ -325,6 +325,8 @@ class ContinuityTests(Base):
         rc, out = cli("checkpoint", "--item", "y", "--push", "--project", str(p))
         self.assertEqual(rc, 1)
         self.assertIn("git switch -c", out)
+        state.handover(p, brain_root=self.brain)
+        self.assertNotIn("Branch with the work: HEAD", (p / ".brain" / "HANDOVER.md").read_text())
         sh(p, "git", "switch", "-q", "work")
         # no remote
         sh(p, "git", "remote", "remove", "origin")
@@ -396,8 +398,52 @@ class BookkeepingTests(Base):
                      ".brain/log/gates.jsonl", ".brain/log/2026-11-08-s.json", ".brain/memory/lessons.jsonl"):
             self.assertTrue(state.is_bookkeeping(path), path)
         for path in (".brain/project.json", ".brain/ext/tool.sh", ".brain/tests/check.sh", ".brain/app.py",
-                     ".brain/", ".brain", "src/app.ts", "CLAUDE.md", ".brain/logs.py", "STATUS.md.bak"):
+                     ".brain/", ".brain", "src/app.ts", "CLAUDE.md", ".brain/logs.py", "STATUS.md.bak",
+                     ".brain/log/app.py", ".brain/memory/run.sh", ".brain/log/x.json -> x.json", "app.py -> .brain/log/gates.jsonl"):
             self.assertFalse(state.is_bookkeeping(path), path)
+        for path in (".brain/log/", ".brain/log/hr/c-1.md", ".brain/log/salt", ".brain/log/.gitkeep", ".brain/log/backup/project.v1.json"):
+            self.assertTrue(state.is_bookkeeping(path), path)
+
+    def test_a_green_gate_goes_stale_when_a_script_or_a_moved_file_changes_under_brain(self):
+        """quality-path-11, redteam-06: everything under .brain/ used to count
+        as bookkeeping, so the staleness check could not see these."""
+        p = self.project()
+        (p / ".brain" / "tests").mkdir()
+        (p / ".brain" / "tests" / "check.sh").write_text("exit 0\n")
+        (p / "app.py").write_text("x = 1\n")
+        commit_all(p, "gated")
+        gated = git(p, "rev-parse", "HEAD")
+        state.checkpoint(p, item="x")
+        commit_all(p, "bookkeeping only")
+        self.assertTrue(gate.same_work(p, gated, git(p, "rev-parse", "HEAD")))
+        (p / ".brain" / "tests" / "check.sh").write_text("true\n")
+        commit_all(p, "the check now passes whatever happens")
+        self.assertFalse(gate.same_work(p, gated, git(p, "rev-parse", "HEAD")))
+        sh(p, "git", "reset", "-q", "--hard", gated)
+        sh(p, "git", "mv", "app.py", ".brain/app.py")
+        commit_all(p, "tidy")
+        self.assertFalse(gate.same_work(p, gated, git(p, "rev-parse", "HEAD")))
+        sh(p, "git", "mv", ".brain/app.py", "app2.py")       # a staged rename out of .brain is uncommitted work
+        self.assertTrue(gate.tree_dirty(p))
+
+    def test_a_credential_in_an_owner_file_is_refused_before_the_commit(self):
+        """redteam-07: the bookkeeping commit is where a key written into
+        NEEDS_YOU.md or a log would reach git history."""
+        p = self.project()
+        sh(p, "git", "push", "-q", "-u", "origin", "work")
+        head = git(p, "rev-parse", "HEAD")
+        secret = "gh" + "p_" + "Ab3dEf6hIj" * 3
+        (p / "NEEDS_YOU.md").write_text("# Needs you\n\n## 1. Deploy\nUse the token " + secret + "\n")
+        state.checkpoint(p, item="x")
+        res = state.push_bookkeeping(p)
+        self.assertEqual(res.status, "failed")
+        self.assertIn("NEEDS_YOU.md", res)
+        self.assertNotIn(secret, res)
+        self.assertEqual(git(p, "rev-parse", "HEAD"), head)
+        self.assertEqual(sh(p, "git", "diff", "--cached", "--name-only").stdout, "")
+        rc, out = cli("checkpoint", "--item", "y", "--push", "--project", str(p))
+        self.assertEqual(rc, 1)
+        self.assertNotIn(secret, out)
 
     def test_checkpoint_never_commits_the_manifest_or_project_tools(self):
         """core-04, quality-path-11: they change what green means, so they are
@@ -474,19 +520,19 @@ class BookkeepingTests(Base):
         """redteam-06, quality-path-11: rename detection must not hide a change
         from the release-branch check."""
         p = self.released_on_main("main-on-green")
-        (p / "app.py").write_text("print('the app')\n" * 5)
-        commit_all(p, "app")
+        (p / "prices.json").write_text('{"the": "data the app ships with"}\n' * 5)
+        commit_all(p, "data")
         sh(p, "git", "push", "-q", "origin", "main")
         before = self.remote_head("main")
-        sh(p, "git", "mv", "app.py", ".brain/log/app.py")
+        sh(p, "git", "mv", "prices.json", ".brain/log/prices.json")
         commit_all(p, "tidy")
-        self.assertEqual(git(p, "diff", "--name-only", "origin/main", "HEAD"), ".brain/log/app.py",
+        self.assertEqual(git(p, "diff", "--name-only", "origin/main", "HEAD"), ".brain/log/prices.json",
                          "git's rename detection shows only the bookkeeping side")
         state.checkpoint(p, done="tidy")
         res = state.push_bookkeeping(p)
         self.assertEqual(self.remote_head("main"), before, res)
         self.assertEqual(res.status, "side")
-        self.assertIn("app.py", state.release_branch_block(p, "main"))
+        self.assertIn("prices.json", state.release_branch_block(p, "main"))
 
 
 # ---------------------------------------------------------------- the brain's own records
@@ -614,6 +660,23 @@ class BrainRecordTests(Base):
     def remote_head_of(self, remote: Path, branch: str) -> str:
         return git(remote, "rev-parse", "--verify", "-q", f"refs/heads/{branch}")
 
+    def test_records_committed_earlier_are_pushed_by_the_next_call(self):
+        """core-08: after a failed push nothing ever pushed the commit again."""
+        b = self.brain_repo()
+        self.record(b, "2026-11-08-chat-one.jsonl", "chat-one")
+        real = subprocess.run
+
+        def slow(cmd, *a, **k):
+            if "push" in cmd:
+                raise subprocess.TimeoutExpired(cmd, 120)
+            return real(cmd, *a, **k)
+        with mock.patch.object(state.subprocess, "run", slow):
+            self.assertIn("PUSH FAILED", state.push_brain_records(b))
+        self.assertEqual(self.remote_head_of(self.bremote, "work"), "")
+        self.assertIn("brain records pushed to work", state.push_brain_records(b))
+        self.assertEqual(self.remote_head_of(self.bremote, "work"), git(b, "rev-parse", "HEAD"))
+        self.assertEqual(state.push_brain_records(b), "", "and then there is nothing left to do")
+
     def test_a_slow_brain_push_is_one_line(self):
         """core-08: the brain push had the same unguarded timeout."""
         b = self.brain_repo()
@@ -691,6 +754,23 @@ class StateFileTests(Base):
         rc, _ = cli("checkpoint", "--item", "fresh start", "--project", str(p))   # nothing is left to lose
         self.assertEqual(rc, 0)
         self.assertEqual(state.state_problem(p), "")
+
+    def test_a_manifest_section_of_the_wrong_type_never_crashes_state_or_boot(self):
+        """core-06 (the part in state.py and detect.py): null or mistyped
+        sections gave a traceback in boot, status, checkpoint and handover."""
+        p = self.project()
+        base = c.load_manifest(p)
+        for key in ("project", "release", "paths", "languages", "stage", "family", "tier"):
+            for val in (None, [], "es", 3, {"a": None}):
+                c.write_json(p / ".brain" / "project.json", {**base, key: val})
+                with self.subTest(key=key, val=val):
+                    detect.boot_lines("Continue", self.brain)
+                    state.write_status(p)
+                    state.checkpoint(p, item="x")
+                    state.resume_lines(p)
+                    state.handover(p, self.brain)
+        c.write_json(p / ".brain" / "project.json", {**base, "languages": "es"})
+        self.assertIn("Trabajando en", state.write_status(p))
 
     def test_finished_work_leaves_the_next_list(self):
         """e2e-trial-04: the checklist kept an open line for finished work."""
@@ -779,6 +859,45 @@ class StateFileTests(Base):
         self.assertLessEqual(len(res), 12)
         self.assertLessEqual(max(len(l) for l in res), 240)
 
+    def test_a_bare_id_is_stored_with_its_title_from_the_plan(self):
+        """e2e-trial-13: the owner's status said "P2" and never what P2 is."""
+        p = self.project()
+        (p / ".brain" / "PLAN.md").write_text("# Plan\n\n1. **P1 · formulario de gasto**\n2. **P2 · resumen mensual** (R-002)\n"
+                                              "- P3: exportar a una hoja de cálculo con todas las columnas y más texto del que cabe\n")
+        st = state.checkpoint(p, done="P1", item="P2", nxt=["P3", "P9"])
+        self.assertEqual(st["item"], "P2 · resumen mensual")
+        self.assertEqual(st["last_done"], "P1 · formulario de gasto")
+        self.assertTrue(st["next_list"][0].startswith("P3 · exportar a una hoja"), st["next_list"])
+        self.assertLessEqual(len(st["next_list"][0]), 66)
+        self.assertEqual(st["next_list"][1], "P9", "an id the plan does not name is kept as typed")
+        self.assertIn("P2 · resumen mensual", state.write_status(p))
+        self.assertEqual(state.checkpoint(p, done="P2", item="P3")["next"], "P9")
+        self.assertEqual(state.checkpoint(p, item="a whole sentence about P1")["item"], "a whole sentence about P1")
+
+    def test_parallel_checkpoints_lose_nothing(self):
+        """core-14 (7): read-modify-write without a lock lost notes."""
+        p = self.project()
+        env = dict(os.environ)
+        holder = subprocess.Popen([sys.executable, "-c", "import fcntl, os, sys, time; fd = os.open(sys.argv[1], os.O_RDONLY); "
+                                   "fcntl.flock(fd, fcntl.LOCK_EX); print('held', flush=True); time.sleep(0.6)",
+                                   str(p / ".brain")], stdout=subprocess.PIPE, text=True)
+        self.assertEqual(holder.stdout.readline().strip(), "held")
+        import time
+        began = time.monotonic()
+        state.checkpoint(p, note="written while another checkpoint held the state")
+        self.assertGreater(time.monotonic() - began, 0.3, "a checkpoint waits for the one in progress")
+        holder.wait()
+        holder.stdout.close()
+        state.checkpoint(p, clear_notes=True)
+        procs = [subprocess.Popen([sys.executable, str(ROOT / "bin" / "brain"), "checkpoint", "--project", str(p),
+                                   "--done", f"job {i}", "--note", f"note {i}"], env=env, stdout=subprocess.DEVNULL)
+                 for i in range(8)]
+        self.assertEqual([x.wait() for x in procs], [0] * 8)
+        st = state.read_state(p)
+        self.assertEqual(sorted(l.split("done: ")[1] for l in st["log"]), sorted(f"job {i}" for i in range(8)))
+        self.assertEqual(len(st["notes"].splitlines()), 8)
+        self.assertEqual(git(p, "status", "--porcelain", "--untracked-files=all", "--", ".brain/.lock"), "", "no lock file is left behind")
+
 
 # ---------------------------------------------------------------- what boot prints
 class BootTests(Base):
@@ -828,6 +947,23 @@ class BootTests(Base):
         state.checkpoint(p, item="y")
         os.environ["BRAIN_SESSION_ID"] = "chat-four"
         self.assertIn("WARNING: another session", "\n".join(self.boot()))
+
+    def test_boot_writes_nothing_into_a_project_from_a_newer_contract(self):
+        """core-11 (boot's part): 'write nothing to .brain/' was not kept by boot itself."""
+        p = self.project()
+        m = c.load_manifest(p)
+        m["contract"] = c.CONTRACT_VERSION + 1
+        c.write_json(p / ".brain" / "project.json", m)
+        commit_all(p, "newer contract")
+
+        def snapshot():
+            return {str(f.relative_to(p)): f.read_bytes() for f in sorted(p.rglob("*")) if f.is_file() and ".git/" not in str(f)}
+        before = snapshot()
+        with mock.patch("engine.recall.recall", return_value=[]) as fake:
+            blob = "\n".join(self.boot("fix the importer for the March file"))
+        self.assertIn("stale-brain", blob)
+        self.assertEqual(snapshot(), before)
+        self.assertTrue(all(k.kwargs.get("project") is None for k in fake.call_args_list))
 
     def test_recall_on_a_bare_trigger_follows_the_recorded_work(self):
         """core-13, instructions-04: recall matched the trigger word."""
@@ -1015,6 +1151,36 @@ class StatusTests(Base):
         self.assertIn("Project to date", out)
         self.assertIn("$4.36", out)
         self.assertIn("5", [l for l in out.splitlines() if "Needs you" in l][0])
+
+    def test_cost_lines_use_the_latest_record_and_never_show_unknown_usage_as_zero(self):
+        """core-14 (2): the last session was picked by file name, the
+        open-session marker hid it, and unknown usage printed as $0.00."""
+        p = self.project()
+        log = p / ".brain" / "log"
+        c.write_json(log / "2026-11-08-zzz-early.json", {"session": "zzz-early", "at": "2026-11-08T08:00:00Z", "totals": {"cost": 1.11, "out": 10}, "helpers": 0})
+        c.write_json(log / "2026-11-08-aaa-late.json", {"session": "aaa-late", "at": "2026-11-08T16:00:00Z", "totals": {"cost": 9.99, "out": 20}, "helpers": 2})
+        c.write_json(log / "open-session.json", {"session": "chat-one", "at": T0})
+        text = state.write_status(p)
+        self.assertIn("Last session: about $9.99", text)
+        self.assertIn("$11.10", text)
+        c.write_json(log / "2026-11-08-bbb-last.json", {"session": "bbb-last", "at": "2026-11-08T17:00:00Z", "usage": "unknown",
+                                                         "totals": {"cost": 0, "out": 0}, "helpers": 0})
+        text = state.write_status(p)
+        self.assertIn("usage was not recorded", text)
+        self.assertNotIn("$0.00", text)
+        self.assertIn("$11.10 at list prices over 2 recorded session(s)", text)
+
+    def test_status_gives_the_link_to_the_page_on_this_branch(self):
+        """owner-docs-01: between releases the newest STATUS.md is on the
+        chat's branch, not on the repository's front page."""
+        p = self.project()
+        sh(p, "git", "remote", "set-url", "origin", "https://user:pw@github.com/owner/gastos.git")
+        os.environ["BRAIN_NO_NETWORK"] = "1"
+        rc, out = cli("status", "--project", str(p))
+        self.assertEqual(rc, 0)
+        self.assertIn("https://github.com/owner/gastos/blob/work/STATUS.md", out)
+        self.assertNotIn("pw@", out)
+        self.assertLessEqual(len(out.strip().splitlines()), 15)
 
 
 # ---------------------------------------------------------------- the brain on its own

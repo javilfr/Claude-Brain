@@ -38,6 +38,8 @@ BOOK_FILES = frozenset({
     "STATUS.md", "NEEDS_YOU.md", ".brain/STATE.md", ".brain/PLAN.md", ".brain/DECISIONS.md", ".brain/REQUIREMENTS.md",
     ".brain/requirements.jsonl", ".brain/CHECKLIST.md", ".brain/HANDOVER.md", ".brain/.gitignore"})
 BOOK_DIRS = (".brain/log/", ".brain/memory/")
+BOOK_SUFFIXES = (".json", ".jsonl", ".md", ".log", ".txt")   # what the engine writes in those folders
+BOOK_NAMES = ("salt", ".gitkeep")
 RECORD_DIRS = ("learning/inbox/", "learning/radar/")   # what a working session may commit in the brain
 
 
@@ -257,6 +259,24 @@ def _same_item(a: str | None, b: str | None) -> bool:
     return " " not in short and long.startswith(short) and long[len(short)] in " :·"
 
 
+_ID = r"[A-Za-z]{1,6}-?\d{1,4}[a-z]?"
+_PLAN_LINE = re.compile(rf"^\s*(?:[-*+]|\d+[.)])?\s*(?:\[[ xX]\]\s*)?\**\s*({_ID})\**\s*[·:—–|-]\s*\**\s*(.+?)\s*$")
+
+
+def plan_titles(project: Path) -> dict[str, str]:
+    """``id -> "id · title"`` for the lines of ``.brain/PLAN.md`` that start
+    with an item id, so a status never shows a bare "P2"."""
+    out: dict[str, str] = {}
+    for line in c.read_text(Path(project) / ".brain" / "PLAN.md").splitlines():
+        m = _PLAN_LINE.match(line.lstrip("| "))
+        if not m:
+            continue
+        title = re.split(r"\*\*|\s\|", m.group(2))[0].strip(" *|·:—–-")
+        if title:
+            out.setdefault(m.group(1).lower(), f"{m.group(1)} · {c.clip(title, 60)}")
+    return out
+
+
 def checkpoint(project: Path, item: str | None = None, done: str | None = None, nxt: list[str] | None = None,
                stage: str | None = None, tier: int | None = None, note: str | None = None,
                blockers: str | None = None, clear_notes: bool = False) -> dict:
@@ -274,6 +294,12 @@ def checkpoint(project: Path, item: str | None = None, done: str | None = None, 
                 raise StateError("checkpoint refused, nothing written: " + problem)
         st = read_state(project)
         st["contract"] = st["contract"] or str(c.CONTRACT_VERSION)
+        if any(x and re.fullmatch(_ID, x.strip()) for x in (item, done, *(nxt or []))):
+            titles = plan_titles(project)   # a bare id is stored with what it is
+
+            def named(x: str | None) -> str | None:
+                return titles.get(x.strip().lower(), x) if x else x
+            item, done, nxt = named(item), named(done), ([named(n) for n in nxt] if nxt is not None else None)
         if done:
             st["last_done"] = c.clip(done, 160)
             st["log"].append(f"{c.today()} done: {c.clip(done, 120)}")
@@ -334,9 +360,17 @@ def is_bookkeeping(path: str) -> bool:
     """Contract files that record the work but are not the work (an allow-list).
     The manifest, the project's own tools and anything else under ``.brain/``
     are work: changing a gate command, a project tool or a script changes what
-    "green" means, so it must not ride along as bookkeeping."""
+    "green" means, so it must not ride along as bookkeeping. Inside the log
+    and memory folders only the record file types count, so a program moved
+    there is still a program."""
     path = path.strip().strip('"')
-    return path in BOOK_FILES or (path.startswith(BOOK_DIRS) and ".." not in path.split("/"))
+    if path in BOOK_FILES:
+        return True
+    # "old -> new" is a status line for a rename: one side may be work.
+    if " -> " in path or not path.startswith(BOOK_DIRS) or ".." in path.split("/"):
+        return False
+    name = path.rsplit("/", 1)[-1]
+    return not name or name in BOOK_NAMES or name.endswith(BOOK_SUFFIXES)   # "" is the folder itself
 
 
 def _release(project: Path) -> dict:
@@ -599,7 +633,8 @@ def push_brain_records(brain_root: Path | None = None) -> str:
     code, _, err = _run(root, "push", "-q", "-u", "origin", branch, timeout=PUSH_SECONDS)
     if code != 0:
         return "brain records committed; PUSH FAILED: " + _push_problem(code, err, branch) + left
-    return f"brain records pushed to {branch} ({len(own)} file(s))" + left
+    what = f"{len(own)} file(s)" if own else "committed earlier"
+    return f"brain records pushed to {branch} ({what})" + left
 
 
 # ---------------------------------------------------------------- continuity between chats
@@ -883,6 +918,7 @@ def owner_language(manifest: dict) -> str:
     """``en`` or ``es``: the language of the files the owner reads, from the
     manifest's first ``languages`` entry."""
     langs = manifest.get("languages")
+    langs = [langs] if isinstance(langs, str) else langs
     first = str(langs[0]).lower() if isinstance(langs, list) and langs else "en"
     return "es" if first.startswith("es") else "en"
 
@@ -997,6 +1033,19 @@ def write_status(project: Path) -> str:
     return text
 
 
+def status_link(project: Path) -> str:
+    """Where STATUS.md can be opened on GitHub for the branch that holds the
+    state ("" when the remote is elsewhere). Between releases the newest page
+    is on the chat's branch, not on the repository's front page."""
+    m = re.search(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$", git(project, "config", "--get", "remote.origin.url"))
+    branch = current_branch(project)
+    if not m or branch in ("", "HEAD"):
+        return ""
+    if release_branch_block(project, branch):
+        branch = SIDE_BRANCH
+    return f"https://github.com/{m.group(1)}/{m.group(2)}/blob/{branch}/STATUS.md"
+
+
 def session_cost_line() -> str:
     """This chat's list-price cost so far, from its transcript; "" when unknown."""
     try:
@@ -1090,8 +1139,8 @@ def handover(project: Path, brain_root: Path | None = None, details: dict | None
     rq, needs = req_counts(project), open_needs(project)
     repo = is_repo(project)
     branch = current_branch(project) if repo else ""
-    where = branch or "unknown"
-    if repo and release_branch_block(project, branch):
+    where = "none: detached HEAD (git switch -c <name>)" if branch == "HEAD" else (branch or "unknown")
+    if repo and branch != "HEAD" and release_branch_block(project, branch):
         where += f" (kept on the remote as {SIDE_BRANCH} until it is released)"
     meta = m.get("project") if isinstance(m.get("project"), dict) else {}
     lines = [
@@ -1206,8 +1255,9 @@ def cmd_status(args) -> int:
     if args.full:
         print(text.rstrip())
         return 0
-    cost = session_cost_line()
-    print("\n".join((short + ([cost] if cost else []))[:15]))
+    link = status_link(project)
+    extra = [x for x in (session_cost_line(), f"page: {link}" if link else "") if x]
+    print("\n".join(short[:15 - len(extra)] + extra))
     return 0
 
 
