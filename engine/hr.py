@@ -454,6 +454,9 @@ def wage(size: str, model_alias: str, tid: str | None, state: dict | None, hc: d
     return {"tokens": tokens, "band": int(band), "cost": round(tokens * out_price(model_alias, models_cfg) / 1e6, 2), "basis": basis}
 
 
+PLAIN = "plain"  # --template value that forces a plain brief
+
+
 def hire_or_not(material_tokens: int | None, has_check: bool, parallel: bool, hc: dict) -> tuple[bool, str]:
     """Whether a helper pays. A helper starts cold, so it is worth it only when
     it keeps bulk out of the lead's context, or runs beside other work, and
@@ -585,7 +588,9 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     family, task_class = family or "software", task_class or "general"
     if risk not in RISKS:
         raise ValueError(f"unknown risk '{risk}'")
-    if template_id:
+    if template_id == PLAIN:
+        chosen = []  # a plain brief on purpose: the control arm of a template evaluation
+    elif template_id:
         chosen = [{"id": t["id"], "score": 1.0, "fit": 1.0, "coverage": 1.0, "multiplier": 1.0, "trials": 0, "template": t} for t in rack if t["id"] == template_id]
         if not chosen:
             raise ValueError(f"no template '{template_id}' in the rack")
@@ -988,7 +993,7 @@ def register(sub) -> None:
     h.add_argument("--tier", type=int, choices=(1, 2, 3), default=2)
     h.add_argument("--size", choices=("S", "M", "L", "XL"))
     h.add_argument("--agent", choices=BASE_AGENTS, help="restrict to templates for one base agent")
-    h.add_argument("--template", help="use this template instead of choosing")
+    h.add_argument("--template", help=f"use this template instead of choosing ('{PLAIN}' forces a plain brief)")
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")
     h.add_argument("--force", action="store_true", help="hire even when the rule says the lead should do it")

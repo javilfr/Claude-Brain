@@ -544,6 +544,14 @@ class ReviewFindings(Base):
             hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "M", "band_tokens": 1000, "actual_tokens": 1000})
         self.assertEqual(len(hr.hr_state(state)["ratios"]["_all"]), hr.DEFAULT_CFG["ratio_cap"])
 
+    def test_template_plain_forces_a_plain_brief(self):
+        # The control arm of a template evaluation needs a brief with no template
+        # even when one would fit.
+        code, out = self.run_cli("hr", "hire", "--dry-run", "--check", "true", "--template", "plain",
+                                 "Build the settings screen for the phone layout")
+        self.assertEqual(code, 0, out)
+        self.assertIn("plain helper", out)
+
     def test_staff_counts_only_independent_tickets_as_parallel(self):
         # A small ticket is worth a helper only when it runs beside other work;
         # a chain (T-2 waits for T-1) is not "beside", so the lead does both.

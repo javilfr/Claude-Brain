@@ -1,0 +1,25 @@
+{
+  "change": "template-vs-plain-2026-11-10",
+  "hypothesis": "A brief built from the HR template the selector picks uses fewer tokens than a plain brief for the same task, with no lower pass rate (both arms haiku via the builder agent)",
+  "metric": "tokens",
+  "direction": "down",
+  "tasks": [
+    "data-csv-total",
+    "know-memo-facts",
+    "lang-es-glossary",
+    "ops-idempotent-dirs",
+    "route-question",
+    "route-small-edit",
+    "sw-add-slugify",
+    "sw-fix-median"
+  ],
+  "min_pairs": 8,
+  "decision": {
+    "alpha": 0.05,
+    "ship_prob": 0.95,
+    "revert_prob": 0.8,
+    "cost_guard": 1.1
+  },
+  "decision_text": "revert if P(B worse) >= revert_prob; ship if exact sign test p <= alpha and P(B better) >= ship_prob and the guard holds; otherwise keep A; fewer than 8 paired tasks is always not proven",
+  "created": "2026-11-10T22:58:17Z"
+}
