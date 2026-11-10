@@ -42,6 +42,8 @@ from . import common as c
 
 SOURCES_FILE = "memory/radar_sources.json"
 STATE_FILE = "learning/radar/state.json"
+CHECKED_FILE = "learning/radar/checked.json"  # git-ignored: when each source was last checked (M20)
+VOLATILE = ("last_checked", "last_status", "last_error")
 USER_AGENT = "brain-radar/1.0"
 MAX_BYTES = 2_000_000          # response size cap: read no more than this
 REQUEST_TIMEOUT = 6.0          # seconds per request
@@ -478,9 +480,13 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     ids = {s["id"] for s in sources}
     if trust:
         sources = [s for s in sources if s.get("trust") == trust]
-    state_path = root / STATE_FILE
-    state = c.read_json(state_path, {})
-    state = {k: v for k, v in state.items() if k in ids and isinstance(v, dict)} if isinstance(state, dict) else {}
+    state_path, checked_path = root / STATE_FILE, root / CHECKED_FILE
+    stored = c.read_json(state_path, {})
+    state = {k: dict(v) for k, v in stored.items() if k in ids and isinstance(v, dict)} if isinstance(stored, dict) else {}
+    checked = c.read_json(checked_path, {})
+    for k, v in (checked if isinstance(checked, dict) else {}).items():
+        if k in state and isinstance(v, dict):
+            state[k].update({f: x for f, x in v.items() if f in VOLATILE})
     stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
     timeout = min(REQUEST_TIMEOUT, max(1.0, float(max_seconds)))
 
@@ -563,7 +569,12 @@ def _run(root: Path, force: bool, max_lines: int, max_seconds: float, trust: str
     result["lines"] = [_line(p) for p in chosen]
 
     try:
-        c.write_json(state_path, state)
+        # Only content (seen ids, hashes, validators) is tracked in git; check
+        # times go to an ignored file, so a quiet day leaves the tree clean.
+        tracked = {k: {f: x for f, x in v.items() if f not in VOLATILE} for k, v in state.items()}
+        if tracked != stored:
+            c.write_json(state_path, tracked)
+        c.write_json(checked_path, {k: {f: x for f, x in v.items() if f in VOLATILE} for k, v in state.items()})
         _write_leads(root, leads, when)
     except OSError as e:
         result["errors"].append(f"write failed: {type(e).__name__}")

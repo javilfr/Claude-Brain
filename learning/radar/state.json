@@ -1,7 +1,5 @@
 {
   "platform-relnotes": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "hash": "7feb28c93a47326ec1c467f1a817571c34902c3163db0ecb20f0a7ea3f0a1cff",
     "seen": [
       "c43dc535a9ba",
@@ -13,8 +11,6 @@
     ]
   },
   "platform-llms": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "last_modified": "Tue, 10 Nov 2026 09:02:54 GMT",
     "hash": "cb07fc76ea4055c0e4557dd577165f0a739398524014788f208db3dfa02cb874",
     "seen": [
@@ -914,8 +910,6 @@
     ]
   },
   "cc-docs-llms": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "etag": "W/\"zIMRNefB17kyGR9LpL6s-p1_XFW-xZLnNGSqKk6WAT8\"",
     "hash": "fe04a609e137986ef60ff7fc649beebc563902b81150b81151f5b6092e6c4e54",
     "seen": [
@@ -1161,8 +1155,6 @@
     ]
   },
   "cc-changelog": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "etag": "W/\"b7ab7a9a085774730004ed723e04957cb56a2a94984cb725b891a9af054e6c34\"",
     "hash": "a074556107911c423a449df2f0b1dbbabb51aaa66383b81c3ba4fea1c52679cf",
     "seen": [
@@ -1184,8 +1176,6 @@
     ]
   },
   "anthropic-sitemap": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "hash": "28ec142be91bbf32182091fb57696f68b642c8fbea36ff89c6a9dfad50fc9a28",
     "seen": [
       "f75de63b48df",
@@ -1216,15 +1206,11 @@
     ]
   },
   "status": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "etag": "W/\"1b619beed9c914248f69a2564479b9c9\"",
     "hash": "1b619beed9c914248f69a2564479b9c93c7221de92cb30d483bcdbd405f5d8ac",
     "seen": []
   },
   "hf-daily-papers": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "etag": "W/\"2b9f7-hVnHvQMPyvmjPypvwwtMB57bDug\"",
     "hash": "e87f7dafd0f91e2178757ec4579ad5943f3375783980a646670cb6293309359d",
     "seen": [
@@ -1261,8 +1247,6 @@
     ]
   },
   "hf-blog": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "etag": "W/\"40f2f-T2jo6TYXuYHZ56xAp6s3ALjzrfI\"",
     "hash": "a75a6d41b8f5dec543fd3576818df3346e885dbdfc4f7e99ef1e36940084c8dc",
     "seen": [
@@ -1294,8 +1278,6 @@
     ]
   },
   "arxiv-agent-memory": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "hash": "637f8ba0aac10d9a576bed448493bc781d93275536ffbb4bdbe20d33edefe446",
     "seen": [
       "089abb17cac2",
@@ -1311,8 +1293,6 @@
     ]
   },
   "hn-claude": {
-    "last_checked": "2026-11-10T09:10:07Z",
-    "last_status": "baseline",
     "hash": "7361e9d112036b41bdba9ee5f419c0158678aad72b5073718790d6c7ac506a1e",
     "seen": [
       "4aedb2675db1",

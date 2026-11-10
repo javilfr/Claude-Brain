@@ -97,7 +97,11 @@ class RadarCase(unittest.TestCase):
         return f
 
     def state(self):
-        return c.read_json(self.root / "learning" / "radar" / "state.json")
+        """Tracked content merged with the ignored check times (M20 split)."""
+        st = c.read_json(self.root / "learning" / "radar" / "state.json") or {}
+        for k, v in (c.read_json(self.root / "learning" / "radar" / "checked.json") or {}).items():
+            st.setdefault(k, {}).update(v)
+        return st
 
     def inbox(self):
         rows = []
@@ -185,6 +189,17 @@ class Conditional(RadarCase):
             self.assertEqual(after[sid]["last_status"], "304")
             self.assertEqual(after[sid]["hash"], before[sid]["hash"])
             self.assertEqual(after[sid]["seen"], before[sid]["seen"])
+
+    def test_a_quiet_run_leaves_the_tracked_state_untouched(self):
+        # M20: every networked boot rewrote the tracked state and dirtied the brain tree
+        self.baseline(etags=True)
+        tracked = self.root / "learning" / "radar" / "state.json"
+        text, mtime = tracked.read_text(), tracked.stat().st_mtime_ns
+        self.go(Fake("v1", etags=True), now=NOW + dt.timedelta(days=2))
+        self.assertEqual(tracked.read_text(), text)
+        self.assertEqual(tracked.stat().st_mtime_ns, mtime)
+        self.assertNotIn("last_checked", text)
+        self.assertIn("last_checked", (self.root / "learning" / "radar" / "checked.json").read_text())
 
     def test_changed_content_after_validators_is_picked_up(self):
         self.baseline(etags=True)
@@ -532,7 +547,7 @@ class Records(RadarCase):
         self.baseline()
         self.go(Fake("v2"))
         written = sorted(str(p.relative_to(self.root)) for p in self.root.rglob("*") if p.is_file())
-        self.assertEqual(written, ["learning/inbox/2026-11-10-radar.jsonl", "learning/radar/state.json",
+        self.assertEqual(written, ["learning/inbox/2026-11-10-radar.jsonl", "learning/radar/checked.json", "learning/radar/state.json",
                                    "memory/radar_sources.json"])
 
     def test_determinism_with_fixed_now(self):
