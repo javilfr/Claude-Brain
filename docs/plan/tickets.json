@@ -196,6 +196,91 @@
       "est": 30,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint",
       "status": "done"
+    },
+    {
+      "id": "CB-120",
+      "title": "HR research: briefs and templates, archetypes, selection and wages, domain methods",
+      "deps": [],
+      "files": [
+        "docs/research/round3"
+      ],
+      "est": 40,
+      "accept": "test -f docs/research/round3/02-archetypes.md",
+      "status": "open"
+    },
+    {
+      "id": "CB-121",
+      "title": "HR guidelines and template schema",
+      "deps": [
+        "CB-120"
+      ],
+      "files": [
+        "hr/GUIDELINES.md",
+        "hr/template.schema.json"
+      ],
+      "est": 30,
+      "accept": "python3 bin/brain hr audit",
+      "status": "open"
+    },
+    {
+      "id": "CB-122",
+      "title": "Rack of 100 templates",
+      "deps": [
+        "CB-121"
+      ],
+      "files": [
+        "hr/rack"
+      ],
+      "est": 120,
+      "accept": "python3 bin/brain hr audit",
+      "status": "open"
+    },
+    {
+      "id": "CB-123",
+      "title": "HR engine: hire, staff, settle, rack, audit; learning from settled hires",
+      "deps": [
+        "CB-121"
+      ],
+      "files": [
+        "engine/hr.py",
+        "tests/test_hr.py",
+        "engine/mlearn.py",
+        "engine/learn.py"
+      ],
+      "est": 120,
+      "accept": "python3 -m unittest tests.test_hr tests.test_mlearn tests.test_learn",
+      "status": "open"
+    },
+    {
+      "id": "CB-124",
+      "title": "Skills, method, guide and plan updated for HR; lint green",
+      "deps": [
+        "CB-122",
+        "CB-123"
+      ],
+      "files": [
+        ".claude/skills",
+        "method",
+        "OWNER_GUIDE.md",
+        "docs/EXECUTION_PLAN.md"
+      ],
+      "est": 30,
+      "accept": "python3 bin/brain lint",
+      "status": "open"
+    },
+    {
+      "id": "CB-125",
+      "title": "Fresh-context review of HR and fixes; build status",
+      "deps": [
+        "CB-124"
+      ],
+      "files": [
+        "docs/review",
+        "docs/BUILD_STATUS.md"
+      ],
+      "est": 60,
+      "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain hr audit",
+      "status": "open"
     }
   ],
   "live_checks": [
