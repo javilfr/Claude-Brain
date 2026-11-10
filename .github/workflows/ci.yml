@@ -1,0 +1,38 @@
+name: brain
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  brain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests, fixtures and rehearsal (standard library only)
+        env:
+          BRAIN_NO_NETWORK: "1"
+        run: python3 -m unittest discover -s tests -t .
+      - name: Self-test
+        env:
+          BRAIN_NO_NETWORK: "1"
+        run: python3 bin/brain doctor
+      - name: Instruction lint (commands exist, budgets, imports, links)
+        run: python3 bin/brain lint
+      - name: Memory items
+        run: python3 bin/brain items check
+      - name: Evaluation tasks can tell a right answer from a wrong one
+        run: python3 bin/brain eval audit
+      - name: Guard (secrets, project names, zones) and learning replay
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 bin/brain guard diff --base "origin/${{ github.base_ref }}"
+          python3 bin/brain learn verify --base "origin/${{ github.base_ref }}"

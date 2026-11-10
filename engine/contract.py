@@ -17,6 +17,7 @@ from . import common as c
 TEMPLATE = c.BRAIN_ROOT / "contract" / "template"
 BEGIN, END = "<!-- brain:begin", "<!-- brain:end -->"
 STUB_LIMIT = 2000  # bytes of always-loaded text the stub may add to a project
+OLD_HANDBOOK_LIMIT = 4000  # bytes; above this an adopted project is asked to slim its handbook
 FAMILIES = ("software", "data", "knowledge", "language", "operations")
 
 
@@ -109,7 +110,9 @@ def ensure_stub(project: Path, title: str, made: list[str]) -> None:
         c.write_text(target, block)
         made.append("CLAUDE.md")
     elif BEGIN not in existing:
-        c.write_text(target, block + "\n" + existing)
+        precedence = ("\n> The text below was written before this project used the brain. It is project knowledge. "
+                      "Where it disagrees with the brain about how a session starts, how state is recorded or how work is released, the brain's way applies.\n")
+        c.write_text(target, block + precedence + "\n" + existing)
         made.append("CLAUDE.md (pointer block added above existing content)")
 
 
@@ -192,7 +195,15 @@ def adopt(project: Path, title: str | None = None, family: str | None = None) ->
     over = {"commands": s["commands"], "types": s["types"], "stage": "plan"}
     gate_cmd = s["commands"].get("check_full") or s["commands"].get("check_fast") or ""
     over["gates"] = [{"id": "checks", "kind": "command", "command": gate_cmd}]
+    old_handbook = len(c.read_text(project / "CLAUDE.md").encode())
     made = init(project, title or project.name, family or s["family"], over)
+    s["old_handbook_bytes"] = old_handbook
+    if old_handbook > OLD_HANDBOOK_LIMIT and "Slim the old handbook" not in c.read_text(project / "NEEDS_YOU.md"):
+        with open(project / "NEEDS_YOU.md", "a", encoding="utf-8") as f:
+            f.write(f"\n## Slim the old handbook (a decision, no clicks)\n\n- **What:** this project's `CLAUDE.md` is about {old_handbook // 4:,} tokens and is loaded on every request and by most helpers. "
+                    "Most of it can move to `.brain/ext/handbook.md`, where it is read only when needed.\n"
+                    "- **How:** reply \"slim the handbook\" and it will be moved, keeping only what must always be in view.\n"
+                    "- **Meanwhile:** nothing was moved or deleted; the brain's rules apply where the two disagree.\n")
     return s, made
 
 
@@ -263,6 +274,11 @@ def migrate(project: Path, target: int = c.CONTRACT_VERSION, migrations_dir: Pat
         script = mdir / f"{ver}_to_{ver + 1}.py"
         if not script.is_file():
             return 1, msgs + [f"no migration script {script.name}"]
+        # Keep the manifest as it was before this step, so a bad migration can
+        # be undone by copying one file back.
+        backup = project / ".brain" / "log" / "backup" / f"project.v{ver}.json"
+        if not backup.exists():
+            c.write_text(backup, c.read_text(project / ".brain" / "project.json"))
         changes = _load_migration(script).migrate(project) or []
         m = c.load_manifest(project)
         m["contract"] = ver + 1
@@ -319,6 +335,8 @@ def cmd_adopt(args) -> int:
         return 0
     s, made = adopt(project, args.title, args.family)
     print(f"adopted {project.name}: family {c.load_manifest(project).get('family')}; added {len(made)} contract file(s); existing files untouched")
+    if s.get("old_handbook_bytes", 0) > OLD_HANDBOOK_LIMIT:
+        print(f"  the existing CLAUDE.md is about {s['old_handbook_bytes'] // 4:,} tokens on every request: a 'Slim the old handbook' item was added to NEEDS_YOU.md")
     for k, v in s["commands"].items():
         print(f"  inferred {k}: {v}")
     print("  next: confirm the inferred commands with `brain gate --all`, then record what the project is for in .brain/PLAN.md")

@@ -1,0 +1,5 @@
+# Docs
+
+- [Overview](https://example.test/docs/overview.md): intro
+- [Hooks](https://example.test/docs/hooks.md): hooks
+- [Routines](https://example.test/docs/routines.md): scheduled agents

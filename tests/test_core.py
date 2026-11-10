@@ -98,12 +98,34 @@ class ContractTests(Base):
                 self.assertEqual((p / rel).read_bytes(), data, rel)
         new = {str(f.relative_to(p)) for f in p.rglob("*") if f.is_file() and ".git" not in f.parts} - set(before)
         self.assertTrue(all(n.startswith(".brain/") or n in ("NEEDS_YOU.md", "STATUS.md") for n in new), new)
+        self.assertIn("the brain's way applies", (p / "CLAUDE.md").read_text())
         m = c.load_manifest(p)
         self.assertEqual(m["commands"]["check_full"], "npm run test && npm run build")
         self.assertEqual(contract.validate(p), [])
         # Adopting again adds no second pointer block.
         contract.adopt(p)
         self.assertEqual((p / "CLAUDE.md").read_text().count(contract.BEGIN), 1)
+
+    def test_adopt_flags_a_large_old_handbook_once(self):
+        p = git_repo(self.ws / "heavy")
+        (p / "CLAUDE.md").write_text("# Handbook\n" + "rule text\n" * 2000)
+        contract.adopt(p)
+        contract.adopt(p)
+        needs = (p / "NEEDS_YOU.md").read_text()
+        self.assertEqual(needs.count("Slim the old handbook"), 1)
+        self.assertIn("rule text", (p / "CLAUDE.md").read_text())  # nothing moved or deleted
+
+    def test_migration_keeps_a_backup_of_the_manifest(self):
+        p = self.project()
+        m = c.load_manifest(p)
+        m["contract"] = 0
+        c.write_json(p / ".brain" / "project.json", m)
+        before = (p / ".brain" / "project.json").read_text()
+        mig = self.ws / "migs2"
+        mig.mkdir()
+        (mig / "0_to_1.py").write_text("def migrate(project):\n    return []\n")
+        contract.migrate(p, migrations_dir=mig)
+        self.assertEqual((p / ".brain" / "log" / "backup" / "project.v0.json").read_text(), before)
 
     def test_survey_writes_nothing(self):
         p = git_repo(self.ws / "legacy2")
@@ -238,9 +260,20 @@ class StateTests(Base):
         problems, text = state.handover(p, brain_root=self.brain)
         joined = " ".join(problems)
         self.assertIn("uncommitted", joined)
-        self.assertIn("never been pushed", joined)
         self.assertIn("Continue", text)
         self.assertTrue((p / ".brain" / "HANDOVER.md").is_file())
+
+    def test_handover_passes_once_work_is_committed_and_stays_passing(self):
+        p = self.project()
+        remote = self.ws / "h-remote.git"
+        sh(self.ws, "git", "init", "-q", "--bare", "-b", "main", str(remote))
+        sh(p, "git", "remote", "add", "origin", str(remote))
+        commit_all(p)
+        sh(p, "git", "push", "-q", "-u", "origin", "work")
+        for _ in range(2):  # the note it writes must not make the next run fail
+            problems, _text = state.handover(p, brain_root=self.brain)
+            self.assertEqual(problems, [])
+        self.assertIn("Handover", sh(remote, "git", "show", "work:.brain/HANDOVER.md").stdout)
 
 
 class ReqTests(Base):

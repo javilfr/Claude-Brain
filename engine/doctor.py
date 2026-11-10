@@ -13,10 +13,6 @@ from pathlib import Path
 
 from . import common as c
 
-MODULES = ["detect", "contract", "state", "req", "gate", "budget", "items", "recall", "route",
-           "schedule", "repomap", "ledger", "learn", "guard"]
-
-
 def checks() -> list[tuple[str, bool, str]]:
     out: list[tuple[str, bool, str]] = []
     out.append(("python", sys.version_info >= (3, 10), f"{sys.version_info.major}.{sys.version_info.minor}"))
@@ -26,7 +22,8 @@ def checks() -> list[tuple[str, bool, str]]:
     except sqlite3.Error as e:
         out.append(("full-text search", True, f"FTS5 unavailable ({e}); the pure-Python fallback will be used"))
     bad = []
-    for name in MODULES:
+    from . import MODULES
+    for name in (m for m in MODULES if m != "doctor"):
         try:
             mod = importlib.import_module(f"engine.{name}")
             if not hasattr(mod, "register"):

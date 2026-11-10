@@ -1,0 +1,25 @@
+{
+  "_help": "Sources the update radar (engine/radar.py) polls. Kernel file: change only with owner approval. Per source: id; url; kind (parser: relnotes_md, changelog_md, llms_txt, sitemap, status_json, hf_papers, feed, arxiv_atom, hn_algolia); trust (official | research | community); interval_hours (minimum gap between checks); keywords (lower-case substrings; empty list means every new item of an official source is relevant); max_lines (lines this source may print per run, default 3); optional seen_cap (remembered item ids, default 300), min_points (votes/points floor), path_filter (sitemap path parts), limit (items kept per parse). Hosts not in allowlist are never fetched, redirects included. New items are leads, never facts: verify against the official page before remembering anything.",
+  "allowlist": [
+    "platform.claude.com",
+    "code.claude.com",
+    "raw.githubusercontent.com",
+    "www.anthropic.com",
+    "status.claude.com",
+    "huggingface.co",
+    "export.arxiv.org",
+    "hn.algolia.com"
+  ],
+  "sources": [
+    {"id": "platform-relnotes", "url": "https://platform.claude.com/docs/en/release-notes/overview.md", "kind": "relnotes_md", "trust": "official", "interval_hours": 0.5, "keywords": [], "max_lines": 3},
+    {"id": "platform-llms", "url": "https://platform.claude.com/llms.txt", "kind": "llms_txt", "trust": "official", "interval_hours": 1, "keywords": [], "max_lines": 3, "seen_cap": 1500},
+    {"id": "cc-docs-llms", "url": "https://code.claude.com/docs/llms.txt", "kind": "llms_txt", "trust": "official", "interval_hours": 1, "keywords": [], "max_lines": 3, "seen_cap": 1500},
+    {"id": "cc-changelog", "url": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md", "kind": "changelog_md", "trust": "official", "interval_hours": 0.25, "keywords": ["model", "default", "pricing", "deprecat", "hook", "skill", "agent", "memory", "mcp", "cache", "context", "effort", "claude"], "max_lines": 3},
+    {"id": "anthropic-sitemap", "url": "https://www.anthropic.com/sitemap.xml", "kind": "sitemap", "trust": "official", "interval_hours": 1, "keywords": [], "max_lines": 3, "path_filter": ["/news/", "/research/", "/engineering/"], "limit": 25},
+    {"id": "status", "url": "https://status.claude.com/api/v2/incidents/unresolved.json", "kind": "status_json", "trust": "official", "interval_hours": 0.25, "keywords": [], "max_lines": 2},
+    {"id": "hf-daily-papers", "url": "https://huggingface.co/api/daily_papers?limit=30", "kind": "hf_papers", "trust": "research", "interval_hours": 6, "keywords": ["agent", "memory", "claude", "anthropic", "routing", "context", "tool use", "prompt", "self-improv", "harness", "coding"], "max_lines": 3},
+    {"id": "hf-blog", "url": "https://huggingface.co/blog/feed.xml", "kind": "feed", "trust": "research", "interval_hours": 6, "keywords": ["agent", "memory", "claude", "anthropic", "context", "tool use", "coding", "reasoning", "model"], "max_lines": 3},
+    {"id": "arxiv-agent-memory", "url": "https://export.arxiv.org/api/query?search_query=all:agent+AND+all:memory&sortBy=submittedDate&sortOrder=descending&max_results=10", "kind": "arxiv_atom", "trust": "research", "interval_hours": 12, "keywords": ["agent", "memory", "context", "llm", "language model", "retrieval", "self-improv"], "max_lines": 3},
+    {"id": "hn-claude", "url": "https://hn.algolia.com/api/v1/search_by_date?query=claude&tags=story&hitsPerPage=20", "kind": "hn_algolia", "trust": "community", "interval_hours": 2, "keywords": ["claude", "anthropic", "fable", "opus", "sonnet", "haiku", "mythos", "agent"], "max_lines": 3, "min_points": 20}
+  ]
+}

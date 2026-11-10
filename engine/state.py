@@ -301,7 +301,7 @@ def handover(project: Path, brain_root: Path | None = None) -> tuple[list[str], 
     branch = git(project, "rev-parse", "--abbrev-ref", "HEAD")
     lines = [
         f"# Handover: {m.get('project', {}).get('title', project.name)}", "",
-        f"Written {c.now_iso()} by session {c.session_id()[:8]}. A new chat needs both repositories attached and one message: **Continue**", "",
+        f"Written at the checkpoint of {st.get('updated') or c.now_iso()}. A new chat needs both repositories attached and one message: **Continue**", "",
         f"- Stage: {st.get('stage')} · size: {st.get('tier')}", f"- In progress: {st.get('item') or 'none'}",
         f"- Last finished: {st.get('last_done') or 'none'}", "- Next: " + ("; ".join(st["next_list"]) or "see .brain/PLAN.md"),
         f"- Blockers: {st.get('blockers') or 'none'}", f"- Branch with the work: {branch or 'unknown'}",
@@ -312,7 +312,12 @@ def handover(project: Path, brain_root: Path | None = None) -> tuple[list[str], 
     text = "\n".join(lines) + "\n"
     c.write_text(project / ".brain" / "HANDOVER.md", text)
     write_status(project)
-    problems = [f"project: {p}" for p in repo_cleanliness(project)]
+    write_checklist(project)
+    # The note itself is bookkeeping: commit and push it here, otherwise writing
+    # it would make the repository "not clean" and handover could never pass.
+    pushed = push_bookkeeping(project)
+    problems = [f"project: {pushed}"] if "FAILED" in pushed or pushed.startswith("not pushed: could not") else []
+    problems += [f"project: {p}" for p in repo_cleanliness(project)]
     problems += [f"brain: {p}" for p in repo_cleanliness(Path(brain_root or c.BRAIN_ROOT))]
     return problems, text
 

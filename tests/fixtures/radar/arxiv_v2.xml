@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<entry><id>http://arxiv.org/abs/2611.10002v1</id><published>2026-11-09T10:00:00Z</published><title>Self-improving agent memory with retrieval</title><summary>An agent memory study.</summary><link href="http://arxiv.org/abs/2611.10002v1" rel="alternate" type="text/html"/></entry>
+<entry><id>http://arxiv.org/abs/2611.10001v1</id><published>2026-11-06T10:00:00Z</published><title>Memory for LLM agents</title><summary>An agent memory study.</summary><link href="http://arxiv.org/abs/2611.10001v1" rel="alternate" type="text/html"/></entry>
+</feed>

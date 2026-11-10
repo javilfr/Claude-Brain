@@ -9,8 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.dont_write_bytecode = True
 
-MODULES = ["detect", "contract", "state", "req", "gate", "budget", "items", "recall", "route",
-           "schedule", "repomap", "ledger", "learn", "guard", "doctor"]
+from engine import MODULES  # noqa: E402
 
 
 def main(argv=None) -> int:
