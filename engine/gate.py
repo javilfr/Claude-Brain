@@ -38,8 +38,12 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
     """Run a shell command; save all output; return a short digest."""
     start = time.time()
     try:
-        proc = subprocess.run(command, shell=True, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, errors="replace")
-        code, out = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+        # One stream, in the order it was written: two captured streams glued
+        # together put stderr's lines after stdout's last line, so a success
+        # could end on an earlier failure message (review item M6).
+        proc = subprocess.run(command, shell=True, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, timeout=timeout, errors="replace")
+        code, out = proc.returncode, proc.stdout or ""
     except subprocess.TimeoutExpired as e:
         code = 124
         out = ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + f"\n[timed out after {timeout}s]"

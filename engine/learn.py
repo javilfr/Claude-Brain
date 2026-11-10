@@ -901,6 +901,13 @@ def _item_scorer(ws: Workspace):
     return lambda item: float(fn(state, item))
 
 
+def promote_multiplier(cfg) -> float:
+    """memory/ml_config.json ``learning.promote_multiplier``, else the built-in
+    1.0 (an item must at least break even on the lower bound to go active)."""
+    v = ((cfg or {}).get("learning") or {}).get("promote_multiplier") if isinstance(cfg, dict) else None
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else PROMOTE_MULTIPLIER
+
+
 def _transitions(ws: Workspace, at: str, min_sessions: int) -> list[dict]:
     """Status moves earned by evidence, applied to ``ws`` and returned as ops.
 
@@ -910,6 +917,7 @@ def _transitions(ws: Workspace, at: str, min_sessions: int) -> list[dict]:
     Conflicting items are never promoted; harm demotes, except what the owner
     stated (I-08)."""
     score = _item_scorer(ws)
+    promote = promote_multiplier(ws.ml_cfg)
     ops = []
     for _ in range(3):  # candidate -> probation -> active can happen in one pass
         moved = False
@@ -927,7 +935,7 @@ def _transitions(ws: Workspace, at: str, min_sessions: int) -> list[dict]:
             elif st == "candidate" and h >= 1:
                 new = "probation"
             elif st == "probation" and it["sessions"] >= min_sessions and (
-                    score is None or score(it) >= PROMOTE_MULTIPLIER):
+                    score is None or score(it) >= promote):
                 new = "active"
             if new:
                 op = {"op": "SET_STATUS", "id": it["id"], "status": new}

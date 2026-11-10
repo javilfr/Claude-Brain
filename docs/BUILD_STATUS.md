@@ -196,3 +196,19 @@ Not done: no template has been tried on a real task against its earlier wording 
 | `03-persona-and-briefs.md` | Three independent 2024-2026 studies find expert role lines do not raise accuracy and sometimes lower it; none tested Claude. No direct measurement of pointer-to-file against inline briefs exists; the memo's estimate is that a pointer pays only when a brief is reused. The rack's `role_line` is a short functional label, which fits this; the pointer saving stays unproven |
 
 Recorded through `brain learn note --trust external` (five facts with their official URLs: skill hooks, effort and cache, skill listing budget, Haiku long-prompt price, the corrected effort figure); they enter `memory/` at the next consolidation. The Haiku price row in `models.json` needs a model-table change, listed as open. The facts researcher used 86,765 tokens on a 20,000 wage (4.3x): the template's size band was too small for eighteen page checks.
+
+### CB-206 Open review items
+
+| Item | Result |
+|---|---|
+| M6 success output mixed streams | Fixed: one merged stream in written order; test `test_success_digest_keeps_the_order_output_was_written` (fails on the old code) |
+| M8 repo map listed generated files | Fixed: skips `.brain/log/` and git-ignored files; test `test_skips_git_ignored_and_brain_logs` (fails on the old code) |
+| M15 radar thread at exit | Measured with a fetch that waits out its timeout on all ten sources: the process exits 1.09 s after start at a 1 s budget and 4.09 s at boot's 4 s budget. The per-request timeout is capped by the budget, so exit is bounded; no change |
+| M18 tunables inline | `learning.promote_multiplier` is now read from `memory/ml_config.json` (built-in 1.0 when absent; the recall floor already read `recall.floor`); test added. The value stays 1.0: an item must at least break even on the lower bound |
+| M19 lead field names | Spec updated to the code: `matched`, and the id is `_stable_id(source, item id)` |
+| M20 radar state dirties the tree | Kept by decision D-14 (needed across fresh containers; committed with session records; handover commits it first) |
+| `staff` parallel default | Fixed: a ticket counts as parallel only when another open ticket is independent of it; test `test_staff_counts_only_independent_tickets_as_parallel` (fails on the old code) |
+| Forged inbox records | Accepted risk, decision D-15 |
+| A use for the scout tier | Decision D-16: the lead calls scout directly; no template |
+
+Full suite after these: OK; `brain lint` 0 errors.

@@ -935,6 +935,15 @@ def cmd_staff(args) -> int:
     except Exception:
         state = {}
     total, rows = 0, []
+    open_t = [t for t in data["tickets"] if isinstance(t, dict) and t.get("status") != "done"]
+
+    def beside_other_work(t: dict) -> bool:
+        """A ticket runs in parallel only if some other open ticket neither
+        waits for it nor is waited on by it; a lone or chained ticket does not."""
+        deps = set(t.get("deps") or [])
+        return any(o is not t and o.get("id") not in deps and t.get("id") not in set(o.get("deps") or [])
+                   for o in open_t)
+
     for t in data["tickets"]:
         if not isinstance(t, dict) or t.get("status") == "done":
             continue
@@ -944,7 +953,7 @@ def cmd_staff(args) -> int:
         agent = (tpl or {}).get("base_agent", "builder")
         model = ((models_cfg.get("roles") or {}).get(ROLE_OF[agent]) or {}).get("model", "sonnet")
         pay = wage(t.get("size") or (tpl or {}).get("size") or "M", model, (tpl or {}).get("id"), state, hc, models_cfg)
-        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), bool(t.get("parallel", True)), hc)
+        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), bool(t.get("parallel", beside_other_work(t))), hc)
         rows.append((str(t.get("id")), (tpl or {}).get("id") or "plain", agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
         total += pay["tokens"] if go else 0
     if not rows:

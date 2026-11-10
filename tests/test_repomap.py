@@ -66,6 +66,22 @@ class RepoMapTest(unittest.TestCase):
         paths = [f["path"] for f in self.build()["files"]]
         self.assertEqual(paths, ["main.py"])
 
+    def test_skips_git_ignored_and_brain_logs(self):
+        # M8: run logs and ignored build output are not the code.
+        import subprocess
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        tree(self.root, {
+            "app.py": "print(1)\n",
+            ".gitignore": "generated/\n",
+            "generated/bundle.js": "export const x = 1\n",
+            ".brain/log/run/20261110-100000-abcdef12.log": "$ make\n",
+            ".brain/STATE.md": "# state\n",
+        })
+        paths = [f["path"] for f in self.build()["files"]]
+        self.assertIn("app.py", paths)
+        self.assertIn(".brain/STATE.md", paths)
+        self.assertFalse([p for p in paths if p.startswith(("generated/", ".brain/log/"))], paths)
+
     def test_cache_hit_and_invalidation(self):
         tree(self.root, {"a.py": "def f():\n    pass\n"})
         first = self.build()

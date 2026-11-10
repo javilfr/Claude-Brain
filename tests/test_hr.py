@@ -544,6 +544,22 @@ class ReviewFindings(Base):
             hr.fold_hire(state, {"hr": {}}, {"template": "t", "size": "M", "band_tokens": 1000, "actual_tokens": 1000})
         self.assertEqual(len(hr.hr_state(state)["ratios"]["_all"]), hr.DEFAULT_CFG["ratio_cap"])
 
+    def test_staff_counts_only_independent_tickets_as_parallel(self):
+        # A small ticket is worth a helper only when it runs beside other work;
+        # a chain (T-2 waits for T-1) is not "beside", so the lead does both.
+        plan = Path(self._tmp.name) / "chain.json"
+        small = {"accept": "true", "material_tokens": 500}
+        plan.write_text(json.dumps({"tickets": [
+            dict(small, id="T-1", title="Build the settings screen"),
+            dict(small, id="T-2", title="Build the settings tests", deps=["T-1"])]}))
+        code, out = self.run_cli("hr", "staff", str(plan))
+        self.assertEqual(out.count("lead does it"), 2, out)
+        plan.write_text(json.dumps({"tickets": [
+            dict(small, id="T-1", title="Build the settings screen"),
+            dict(small, id="T-2", title="Build the profile screen")]}))
+        code, out = self.run_cli("hr", "staff", str(plan))
+        self.assertNotIn("lead does it", out)
+
     def test_staff_and_report_run_end_to_end(self):
         plan = Path(self._tmp.name) / "plan.json"
         plan.write_text(json.dumps({"tickets": [

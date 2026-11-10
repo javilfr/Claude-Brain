@@ -1070,3 +1070,13 @@ class SourcedFactTest(unittest.TestCase):
         from engine import learn
         errs = " ".join(learn.check_note(self.base(trust="observed", source="https://example.org/x")))
         self.assertIn("evidence is required", errs)
+
+
+class PromoteMultiplierConfigTest(unittest.TestCase):
+    """M18: the promotion threshold is a tunable read from ml_config, not only a constant."""
+
+    def test_reads_config_and_falls_back(self):
+        self.assertEqual(learn.promote_multiplier({}), learn.PROMOTE_MULTIPLIER)
+        self.assertEqual(learn.promote_multiplier({"learning": {"promote_multiplier": 0.6}}), 0.6)
+        for bad in (True, -1, "x", None):
+            self.assertEqual(learn.promote_multiplier({"learning": {"promote_multiplier": bad}}), learn.PROMOTE_MULTIPLIER)

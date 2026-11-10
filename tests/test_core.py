@@ -412,6 +412,14 @@ class GateTests(Base):
         ok = gate.run_filtered("seq 1 200", p, p)
         self.assertEqual((ok["exit"], len(ok["shown"])), (0, 3))
 
+    def test_success_digest_keeps_the_order_output_was_written(self):
+        # M6: stderr glued after stdout made a passing run end on an earlier
+        # failure message. One merged stream keeps the true order.
+        p = self.project()
+        r = gate.run_filtered("echo first; echo 'FAILED (failures=1)' >&2; echo 'all passed'", p, p)
+        self.assertEqual(r["exit"], 0)
+        self.assertEqual(r["shown"], ["first", "FAILED (failures=1)", "all passed"])
+
     def test_release_refuses_without_a_green_gate_on_this_commit(self):
         p = self.project()
         self.setup_remote(p)
