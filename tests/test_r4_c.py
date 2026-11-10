@@ -232,6 +232,24 @@ class ReleaseIsGreenOnlyOnWhatItSaw(Base):
         for quiet in ("10 passed, 0 failed", "Ran 3 tests in 0.1s\n\nOK", "errors=0 failures=0", "test_failed_login ... ok"):
             (p / "report.txt").write_text(quiet + "\n")
             self.assertFalse(gate.run_filtered("cat report.txt", p, p).get("suspect"), quiet)
+        # Summary shapes of the common runners are seen; a test title that merely says "failed" is not.
+        for line in ("FAILED tests/test_x.py::test_y - assert 1 == 2", "===== 1 failed, 2 passed in 0.1s =====", "  1 failing",
+                     "Tests:       1 failed, 2 passed, 3 total", "test result: FAILED. 1 passed; 1 failed; 0 ignored", "--- FAIL: TestX (0.00s)",
+                     "FAIL\tgithub.com/x/y\t0.01s", "not ok 3 - adds", "Ran 0 tests in 0.000s", "NO TESTS RAN", "10 passed, 1 failed"):
+            self.assertTrue(gate.SUSPECT_RE.search(line), line)
+        for line in ("  ✓ retries after 2 failed attempts (3 ms)", "ok 12 failed logins are logged", "0 errors, 2 warnings",
+                     "it handles 3 errors gracefully", "Tests:       3 passed, 3 total", "PASS src/app.test.js", "ok  \tgithub.com/x/y\t0.01s"):
+            self.assertFalse(gate.SUSPECT_RE.search(line), line)
+
+    def test_an_edited_gate_command_does_not_inherit_the_old_pass(self):
+        """core-02: a record answers only for the command it ran."""
+        p = self.project(gates=[cmd("checks", "test -f README.md")])
+        gate.run_gates(p)
+        self.assertTrue(gate.green_at_head(p)[0])
+        self.set_gates(p, [cmd("checks", "test -f README.md && test -f missing.txt")])  # edited, not yet committed
+        ok, why = gate.green_at_head(p)
+        self.assertFalse(ok)
+        self.assertIn("command changed", " ".join(why))
 
     def test_moving_a_work_file_under_brain_makes_a_green_gate_stale(self):
         """redteam-06 (the part in gate.py): a rename into .brain/ was listed
@@ -782,6 +800,9 @@ class RunCommand(Base):
         cfg = gate.cfg_of()
         self.assertLessEqual(cfg["run_timeout"], 600)
         self.assertLessEqual(cfg["gate_timeout"], 1800)
+        c.write_json(self.ws / "memory" / "ml_config.json", {"gate": {"run_timeout": 30, "keep_logs": "many", "unknown": 1}})
+        tuned = gate.cfg_of(self.ws)  # tunable without a code edit; a wrong value keeps the default
+        self.assertEqual((tuned["run_timeout"], tuned["keep_logs"], "unknown" in tuned), (30, cfg["keep_logs"], False))
         p = self.project(gates=[cmd("slow", "sleep 20", timeout=1)])
         t0 = time.time()
         worst, results = gate.run_gates(p)

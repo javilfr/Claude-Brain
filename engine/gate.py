@@ -41,9 +41,12 @@ _TEST_DEF = r"\s*(?:(?:async\s+)?def\s+test\w*\s*\(|(?:it|test)\s*\(\s*['\"`]|fu
 TEST_GONE_RE = re.compile(r"^-(?!-)" + _TEST_DEF)
 TEST_NEW_RE = re.compile(r"^\+(?!\+)" + _TEST_DEF)
 TEST_FILE_RE = re.compile(r"(?:^|/)(?:tests?|__tests__|spec)/|(?:^|/)test_[^/]+$|_test\.\w+$|\.(?:test|spec)\.\w+$")
-# Exit 0 with one of these in the last lines means the exit code was lost on the way.
+# Exit 0 with a failure summary in the last lines means the exit code was lost
+# on the way. Summary shapes only: a test whose title says "2 failed attempts"
+# must not hold every release.
 SUSPECT_RE = re.compile(
-    r"^\W*FAILED\b|\b[1-9]\d* (?:failed|failing|failures?|errors?)\b|\b(?:errors|failures)=[1-9]"
+    r"^(?:--- )?FAIL(?:ED)?\b|^\W*FAILED\b|^\W*[1-9]\d* (?:failed|failing|failures?|errors?)\b"
+    r"|(?:[:;,]|\bpassed)\s*[1-9]\d* (?:failed|failures?|errors?)\b|\b(?:errors|failures)=[1-9]"
     r"|^not ok\b|\bNO TESTS RAN\b|\bno tests ran\b|\bRan 0 tests\b")
 # How many tests a run reported, whatever the runner (the last match counts).
 COUNT_RES = (re.compile(r"\bRan (\d+) tests?\b"), re.compile(r"\b(\d+) (?:passed|passing)\b"),
@@ -289,16 +292,21 @@ def _cap_log(path: Path, cap: int) -> None:
 
 
 def _prune_logs(d: Path, keep: int) -> None:
-    def age(p: Path):
+    """Drop all but the newest ``keep`` logs. A log touched in the last hour
+    stays: it may belong to a command that is still running."""
+    def mtime(p: Path) -> int:
         try:
-            return (p.stat().st_mtime_ns, p.name)
+            return p.stat().st_mtime_ns
         except OSError:
-            return (0, p.name)
-    for p in sorted(d.glob("*.log"), key=age)[:-keep]:
-        try:
-            p.unlink()
-        except OSError:
-            pass
+            return 0
+    aged = sorted((mtime(p), p.name, p) for p in d.glob("*.log"))
+    old_enough = (time.time() - 3600) * 1e9
+    for when, _name, p in aged[:-keep]:
+        if when < old_enough:
+            try:
+                p.unlink()
+            except OSError:
+                pass
 
 
 def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, timeout: int | None = None) -> dict:
@@ -326,14 +334,17 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
         if why:
             f.write(f"\n[{why}]\n".encode())
     secs = time.time() - start
-    r = digest_log(log, code, tail, len(header))
-    with open(log, "rb") as f:
-        f.seek(-1, os.SEEK_END)
-        open_line = f.read(1) != b"\n"
-    with open(log, "ab") as f:
-        f.write((b"\n" if open_line else b"") + f"[exit {code} in {secs:.1f}s]\n".encode())
-    _cap_log(log, int(cfg["log_cap_mb"]) << 20)
-    _prune_logs(log.parent, int(cfg["keep_logs"]))
+    try:
+        r = digest_log(log, code, tail, len(header))
+        with open(log, "rb") as f:
+            f.seek(-1, os.SEEK_END)
+            open_line = f.read(1) != b"\n"
+        with open(log, "ab") as f:
+            f.write((b"\n" if open_line else b"") + f"[exit {code} in {secs:.1f}s]\n".encode())
+        _cap_log(log, int(cfg["log_cap_mb"]) << 20)
+        _prune_logs(log.parent, int(cfg["keep_logs"]))
+    except OSError as e:  # the log was removed or the disk is full: the exit code still stands
+        r = {"lines": 0, "shown": [f"[the saved output could not be read: {c.clip(str(e), 100)}]"], "tests": None, "suspect": ""}
     try:  # relative, so the line is short and means the same on another machine
         ref = str(log.relative_to(Path(project))) if project else str(log)
     except ValueError:
@@ -356,7 +367,7 @@ def print_digest(command: str, r: dict, where: str = "") -> None:
     if r["exit"] == 0 and r.get("suspect"):
         print(f"note: exit 0, but the output reports failures: {r['suspect']}")
     if r["exit"] == 141:
-        print("note: exit 141 is a pipe closed early (`| head` stops reading); let the last command read everything")
+        print("note: exit 141 means a later command in the pipe stopped reading early (`| head`, `grep -q`); let it read everything")
 
 
 # ---------------------------------------------------------------- gates
@@ -899,7 +910,7 @@ def cmd_gate(args) -> int:
     if len(holds + notes) > 4:
         extra.append(f"… and {len(holds + notes) - 4} more: brain release lists what holds a release")
     if any(r.get("dirty") for r in results if r["exit"] == 0):
-        extra.append("note: ran with uncommitted changes; commit and run again before a release")
+        extra.append("note: ran with uncommitted changes; a release needs them committed")
     if not any(isinstance(r["exit"], int) for r in results):
         extra.append("no gate ran, so nothing is proven: set gates[].command in .brain/project.json")
         worst = 1
@@ -1025,6 +1036,8 @@ def cmd_release(args) -> int:
         red = next((r["_digest"] for r in fresh or [] if r.get("_digest") and r["exit"] != 0), None)
         if red:
             print("\n".join([f"   full output: {red['log_ref']}"] + ["   " + l for l in _fit(red["shown"], 7)]))
+        elif fresh is None:
+            print("next: `brain release --push` runs the gates itself; `brain gate --last` shows a recorded failure")
         return 1
     holds, _notes = detect(project, results=fresh)
     if holds and not reason:
