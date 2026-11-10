@@ -150,3 +150,17 @@ Observed, not changed: the default wage band (M, 60,000) was about 13 times what
 - One final measurement on the new set, with examples from both old sets: top-1 46 → 54, top-3 63 → 65. The rule set in the ticket keeps a change only for at least +3 top-3 points, so **nothing was kept**. A test now holds the new set's floor (0.42 / 0.59).
 - What would help: matching on meaning rather than words, which the standard library cannot do well; or showing the lead the top three (already done) and letting outcomes (`brain hr report`) steer. Recorded as unproven, not fixed.
 - Also found: no template fits "write a labelled evaluation set" (the selector offered `owner-computer-guide`); `hr hire --template none` now gives a plain brief on purpose.
+
+### CB-201 Live platform checks (one-repository cloud session, 2026-11-10)
+
+| Question | Observed in this session | Verdict |
+|---|---|---|
+| Does the PreToolUse hook in `.claude/settings.json` fire? | With `learned_zone_locked` set to true for one probe, a Write to `memory/_hook_probe.txt` was refused by the hook with its own message; the file was not created. The lock was then restored (VERSION.json unchanged in git) | **fires** in a one-repository session |
+| Does the Stop hook fire? | Not observable inside one turn: this session ran as a single long turn. Its trace is a `ledger` record for the session in `learning/inbox/`; check at the next turn | open |
+| Do a skill's frontmatter hooks fire? | No brain skill declares hooks (`grep hooks: .claude/skills/*/SKILL.md` finds none) | nothing to check; not used |
+| Do helpers honour model? | Six helpers: transcripts show claude-sonnet-5-5 for the three hired on Sonnet, claude-opus-5-5 for the three hired on Opus | **honoured** |
+| Do helpers honour effort? | Helper context prefix records `effortValue` high for the reviewer (hired high) and medium for builders and writers (hired medium) | **honoured** |
+| Do helpers skip the handbook (`omitClaudeMd: true`)? | No helper prefix (2.2–11 KB) contains the brain's CLAUDE.md text | **honoured** |
+| Does changing effort mid-session keep the prompt cache? | This session cannot change its own effort | not testable here; needs the owner to switch effort in a live chat (CB-112 stays open) |
+
+These are observations, not facts from an official page, so none was recorded through `brain learn note --trust external`.

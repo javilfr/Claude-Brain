@@ -313,7 +313,7 @@
       "est": 40,
       "accept": "grep -q 'CB-201' docs/BUILD_STATUS.md",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-202",
