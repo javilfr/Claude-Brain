@@ -219,6 +219,20 @@ class ConsolidateTest(BrainCase):
         fold = next(o for o in delta["ops"] if o["op"] == "ML_FOLD")
         self.assertEqual([(r["kind"], r["item"]) for r in fold["records"]], [("promotion", iid)])
 
+    def test_promotion_threshold_is_read_from_ml_config(self):
+        # M18: the threshold was only an inline constant
+        c.write_json(self.root / "memory" / "ml_config.json", {"promotion": {"multiplier": 0.6}})
+        text = "Check the phone layout at 390 pixels before calling a screen done"
+        self.inbox(note(text, session="s1"), outcome("s9"))
+        self.consolidate()
+        (iid, _), = self.items().items()
+        self.ml.scores[iid] = 0.8  # below the code default 1.0, above the configured 0.6
+        self.inbox(note(text + " today", session="s2"))
+        self.consolidate()
+        self.inbox(note(text + " again", session="s3"))
+        self.consolidate()
+        self.assertEqual(self.items()[iid]["status"], "active")
+
     def test_one_session_is_not_enough(self):
         self.inbox(note("Check the phone layout at 390 pixels before calling a screen done", session="s1"))
         self.consolidate()

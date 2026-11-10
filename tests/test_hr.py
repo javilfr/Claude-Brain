@@ -590,6 +590,18 @@ class ReviewFindings(Base):
         self.assertEqual(code, 0)
         self.assertIn("rack:", out)
 
+    def test_staff_weighs_small_sequential_tickets_against_a_cold_start(self):
+        # Every ticket was assumed parallel, so every small one got a helper (CB-206)
+        plan = Path(self._tmp.name) / "plan.json"
+        plan.write_text(json.dumps({"agents": 2, "tickets": [
+            {"id": "A", "title": "Write the split function", "accept": "true", "est": 15, "files": ["a.py"]},
+            {"id": "B", "title": "Write the command line on top", "accept": "true", "est": 15, "files": ["b.py"], "deps": ["A"]},
+            {"id": "C", "title": "Write one module", "accept": "true", "est": 15, "files": ["c.py"]}]}))
+        _, out = self.run_cli("hr", "staff", str(plan))
+        lines = {l.split(":")[0]: l for l in out.splitlines() if ":" in l}
+        self.assertIn("wage", lines["A"])           # A overlaps C in the schedule
+        self.assertIn("lead does it", lines["B"])   # B runs after A, alone, and is small
+
 
 class RealRack(unittest.TestCase):
     def test_the_real_rack_is_sound_and_complete(self):

@@ -905,6 +905,10 @@ def _transitions(ws: Workspace, at: str, min_sessions: int) -> list[dict]:
     Conflicting items are never promoted; harm demotes, except what the owner
     stated (I-08)."""
     score = _item_scorer(ws)
+    # Tunable in memory/ml_config.json (promotion.multiplier) once added there
+    # through `brain learn`; the code default stays until then (M18).
+    promote = (ws.ml_cfg.get("promotion") or {}).get("multiplier", PROMOTE_MULTIPLIER) if isinstance(ws.ml_cfg, dict) else PROMOTE_MULTIPLIER
+    promote = promote if isinstance(promote, (int, float)) and not isinstance(promote, bool) else PROMOTE_MULTIPLIER
     ops = []
     for _ in range(3):  # candidate -> probation -> active can happen in one pass
         moved = False
@@ -922,7 +926,7 @@ def _transitions(ws: Workspace, at: str, min_sessions: int) -> list[dict]:
             elif st == "candidate" and h >= 1:
                 new = "probation"
             elif st == "probation" and it["sessions"] >= min_sessions and (
-                    score is None or score(it) >= PROMOTE_MULTIPLIER):
+                    score is None or score(it) >= promote):
                 new = "active"
             if new:
                 op = {"op": "SET_STATUS", "id": it["id"], "status": new}

@@ -37,6 +37,7 @@ CONTRACT_ID = re.compile(r"^h-\d{8}-[0-9a-f]{6}(-\d+)?$")
 BRIEF_WARN, BRIEF_MAX = 350, 500  # words: above the first a note, above the second an error
 WRITES = {"builder", "writer"}                 # base agents that change files
 READS_OUTSIDE = {"researcher"}                 # base agents that read untrusted content
+SMALL_TICKET_MINUTES = 20  # a ticket estimated at or under this is small enough to weigh against a cold start
 RUNS_COMMANDS = {"builder", "writer", "reviewer"}  # base agents with Bash (.claude/agents/*.md)
 FETCHES = re.compile(r"\b(fetch|fetched|curl|web page|webpage|live page|api|docs online|pricing page|registry|registries)\b", re.I)
 STABLE_FIELDS = ("role_line", "method", "drift", "scope_rule", "done_check", "return_contract")
@@ -921,7 +922,20 @@ def cmd_staff(args) -> int:
         state = mlearn.load()
     except Exception:
         state = {}
-    total, rows = 0, []
+    # A ticket runs beside other work only if the schedule overlaps it with
+    # another; an explicit "parallel" in the ticket wins (it was assumed
+    # parallel for every ticket before, which let every small one be hired).
+    overlapping: set[str] = set()
+    try:
+        from . import schedule as sched
+        open_t = [t for t in data["tickets"] if isinstance(t, dict) and t.get("status") != "done"]
+        tl = sched.schedule(dict(data, tickets=open_t), anneal=False)["timeline"]
+        for a in tl:
+            if any(b is not a and a["start"] < b["end"] and b["start"] < a["end"] for b in tl):
+                overlapping.add(str(a["id"]))
+    except Exception:
+        overlapping = {str(t.get("id")) for t in data["tickets"] if isinstance(t, dict)}
+    total, rows, why_not = 0, [], {}
     for t in data["tickets"]:
         if not isinstance(t, dict) or t.get("status") == "done":
             continue
@@ -931,14 +945,21 @@ def cmd_staff(args) -> int:
         agent = (tpl or {}).get("base_agent", "builder")
         model = ((models_cfg.get("roles") or {}).get(ROLE_OF[agent]) or {}).get("model", "sonnet")
         pay = wage(t.get("size") or (tpl or {}).get("size") or "M", model, (tpl or {}).get("id"), state, hc, models_cfg)
-        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), bool(t.get("parallel", True)), hc)
+        material = t.get("material_tokens")
+        if material is None and isinstance(t.get("est"), (int, float)) and t["est"] <= SMALL_TICKET_MINUTES:
+            # As `hire --size S`: a short ticket's material is what its files hold.
+            base = Path(args.plan).resolve().parent
+            base = base.parent if base.name == ".brain" else base
+            material = estimate_material(base, [str(f) for f in t.get("files") or []])
+        go, _why = hire_or_not(material, bool(t.get("accept")), bool(t.get("parallel", str(t.get("id")) in overlapping)), hc)
+        why_not[str(t.get("id"))] = c.clip(_why.split(":")[0], 60)
         rows.append((str(t.get("id")), (tpl or {}).get("id") or "plain", agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
         total += pay["tokens"] if go else 0
     if not rows:
         print("no open ticket to staff")
         return 0
     for tid, tpl, agent, model, tokens, cost, go in rows[:12]:
-        print(f"{tid}: {tpl} · {agent} on {model} · " + (f"wage {tokens:,} (${cost:.2f})" if go else "lead does it (no acceptance command)"))
+        print(f"{tid}: {tpl} · {agent} on {model} · " + (f"wage {tokens:,} (${cost:.2f})" if go else "lead does it (" + why_not[tid] + ")"))
     if len(rows) > 12:
         print(f"… {len(rows) - 12} more ticket(s)")
     cost_total = sum(r[5] for r in rows)

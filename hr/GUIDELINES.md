@@ -64,6 +64,8 @@ The stable body (role line, method, drift, scope rule, done check, return contra
 
 The brief is written to a file and the lead's delegation message is a pointer to it, so the lead does not spend output tokens retyping it. That costs the helper one read; the ledger measures whether the trade pays.
 
+The scout agent (cheapest tier, read-only, no shell) has no template on purpose: its work is one bulk extraction whose wording the lead writes. Hire it plain with `brain hr hire "<what to list, with file and line>" --agent scout --material-tokens <n> --check "<how the lead will spot-check>"` when the material is large enough to crowd the lead's context (the hire rule refuses small material). A dry run on 2026-11-10 priced such a hire at about $0.03 for the medium band.
+
 ## Changing the rack
 
 Templates are kernel content: a change is an engineering change, reviewed like code, and tested with `brain hr audit` and the held-out selection set (`evals/hr_golden.jsonl`; measured after tuning: right template first for 78% of held-out requests, in the top three for 86%). Because word matching misses some requests, `hire` lists the closest templates when none clearly fits, and the lead can name one with `--template`. What learns automatically is the statistics about them (which template passes first time for which class of task, and how many tokens it really uses), never their text. A template whose record turns bad is put on probation by the learner and listed in `brain hr report`; rewriting it is a person's or a reviewed session's decision. A new variant is trialled against the old one with a pre-registered paired comparison (`brain eval`).

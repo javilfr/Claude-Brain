@@ -164,3 +164,34 @@ Observed, not changed: the default wage band (M, 60,000) was about 13 times what
 | Does changing effort mid-session keep the prompt cache? | This session cannot change its own effort | not testable here; needs the owner to switch effort in a live chat (CB-112 stays open) |
 
 These are observations, not facts from an official page, so none was recorded through `brain learn note --trust external`.
+
+### CB-205 Template quality pass
+
+A fresh-context reviewer (Opus, high effort) read all 100 templates against `hr/GUIDELINES.md` and the domain-methods memo: `docs/review/2026-11-10-templates.md`, 2 blocking, 12 should-fix, 14 minor. It used 180,968 tokens of a 60,000 wage (3.0x): a whole-rack review is an L job, not M.
+
+Fixed:
+- Blocking: `migration-planner` and `dataset-source-finder` now run on the reviewer agent (role researcher), since their method needs commands.
+- Researcher and redteam briefs no longer tell an agent without a shell to run a check: the check is named as the lead's. A hire without a check keeps the template's own evidence clauses instead of a generic line.
+- The outside-content line also goes to templates whose method fetches pages or APIs.
+- Pitfalls capped at two (schema and guidelines); 16 third pitfalls were never rendered and were removed.
+- 81 method lines without a reason now carry one (a writer helper; 63 templates; only `method` and `version` changed). 13 of the reasons are the helper's own reasoning, listed in its notes.
+- The five thin-sourced data templates were researched (`docs/research/round4/01-data-templates.md`, 14 links): six method lines reworded to what the sources support, and the memo added to their sources.
+- `es-en-translator` no longer asserts an unproven default; `premortem-redteam` asks for about five causes, as its own source says; the two legal templates no longer share keywords.
+- Brief length after the changes: 42 of 200 renders above the 350-word note (31 before), largest 380 of the 500 limit.
+
+Open, with reasons: drift lines are written as "Default: …" although no source shows most of them are model defaults (the format is the guideline's; relabelling all 100 is a guideline change for the owner); no backend/API template (rejected on purpose in round 3); no template for writing an evaluation set; 19 job-title names; Area 2 and ten verification sub-items of the domain memo not carried by any template.
+
+### CB-206 Open review items
+
+| Item | Result |
+|---|---|
+| M6 success output mixed streams | one stream in write order; test |
+| M8 repo map listed generated files | honours `.gitignore`, skips `.brain/log`, lockfiles, `.min.js`, `.map`, `.log`; test |
+| M15 radar shutdown time | measured 8.1 s exit on a 4 s budget with slow servers; daemon threads now, 4.1 s; test runs a real subprocess |
+| M18 tunables inline | the promotion threshold is read from `memory/ml_config.json` (`promotion.multiplier`) with the code default until that key is added through `brain learn`; test. The recall floor already read `recall.floor`. The value stays 1.0, not the plan's 0.6, until data argue for a change |
+| M19 lead field names | the spec now names the fields the code writes (`id`, `matched`) |
+| M20 radar state dirtied the tree daily | check times go to the ignored `learning/radar/checked.json`; the tracked state changes only with content; test |
+| `staff` treated every ticket as parallel | parallel only where the schedule overlaps it with another ticket; a ticket of 20 minutes or less is weighed by the size of its files; test |
+| Scout tier | used plain, without a template, for bulk read-only extraction; written into `hr/GUIDELINES.md` |
+| Forged inbox records | not fixed: anyone who can push to the brain can write a record, and no key survives an ephemeral container to sign one. Integrity rests on who can push (a private repository) and on consolidation showing what it read. Left open |
+| M16, M17, M22 | not in this ticket's list; unchanged |
