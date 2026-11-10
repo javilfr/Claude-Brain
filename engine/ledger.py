@@ -459,6 +459,26 @@ def repair_unclosed(project: Path, previous_marker: dict, brain_root: Path | Non
 
 
 # ---------------------------------------------------------------- cli
+def helper_rows(sub_paths, models_cfg: dict) -> list[dict]:
+    """One row per helper: what was asked (agent, model, effort, from the
+    platform's sidecar files when present) and what served it (models seen in
+    its transcript), with its cost. Shows whether model and effort were honoured."""
+    rows = []
+    for p in sub_paths or []:
+        p = Path(p)
+        data = read_transcript(p)
+        if not data["messages"]:
+            continue
+        meta = c.read_json(p.with_name(p.stem + ".meta.json"), {}) or {}
+        prefix = c.read_text(p.with_name(p.stem + ".prefix.json"))
+        m = re.search(r'"effortValue"\s*:\s*"([a-z]+)"', prefix)
+        served = sorted({x["model"] for x in data["messages"]})
+        cost = sum(price(x["model"], x["usage"], models_cfg) for x in data["messages"])
+        rows.append({"agent": meta.get("agentType", ""), "asked_model": meta.get("model", ""), "effort": m.group(1) if m else "",
+                     "served": served, "cost": round(cost, 4), "description": c.clip(str(meta.get("description", "")), 40)})
+    return rows
+
+
 def cmd_ledger(args) -> int:
     sid = args.session or c.session_id()
     main, subs = c.transcript_paths(sid)
@@ -466,10 +486,15 @@ def cmd_ledger(args) -> int:
         print(f"no transcript found for session {sid}")
         return 1
     s = summarise(main, subs, c.read_json(c.BRAIN_ROOT / "memory" / "models.json", {}))
+    if getattr(args, "helpers", False):
+        s["helper_rows"] = helper_rows(subs, c.read_json(c.BRAIN_ROOT / "memory" / "models.json", {}))
     if args.json:
         print(json.dumps(s, indent=2, sort_keys=True))
     else:
         print("\n".join(format_summary(sid, s)))
+        for r in s.get("helper_rows", []):
+            print(f"  helper {r['agent'] or '?'} · asked {r['asked_model'] or '-'} effort {r['effort'] or '-'} · served "
+                  f"{', '.join(r['served'])} · ${r['cost']:.2f} · {r['description']}")
     return 0
 
 
@@ -531,6 +556,7 @@ def cmd_close(args) -> int:
 def register(sub) -> None:
     p = sub.add_parser("ledger", help="real token use and cost of a session")
     p.add_argument("--session", help="session id (default: this session)")
+    p.add_argument("--helpers", action="store_true", help="one line per helper: asked model and effort against the model that served it")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_ledger)
 

@@ -35,6 +35,20 @@ class TranscriptTest(unittest.TestCase):
         self.assertEqual(t["big_tool_results"], 1)
         self.assertEqual(t["effort"], "medium")
 
+    def test_helper_rows_show_asked_and_served(self):
+        # CB-201: whether a helper ran on the model and effort it was hired with
+        with tempfile.TemporaryDirectory() as d:
+            sub = Path(d) / "agent-x.jsonl"
+            shutil.copy(SUBS[0], sub)
+            (Path(d) / "agent-x.meta.json").write_text(json.dumps({"agentType": "builder", "model": "sonnet", "description": "T-1"}))
+            (Path(d) / "agent-x.prefix.json").write_text('{"effortValue":"medium"}')
+            rows = ledger.helper_rows([sub], MODELS)
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual((r["agent"], r["asked_model"], r["effort"]), ("builder", "sonnet", "medium"))
+        self.assertTrue(r["served"])
+        self.assertAlmostEqual(r["cost"], HELPER, places=4)
+
     def test_pricing_arithmetic(self):
         s = ledger.summarise(MAIN, SUBS, MODELS)
         self.assertAlmostEqual(s["models"]["claude-opus-5-5"]["cost"], OPUS, places=9)
