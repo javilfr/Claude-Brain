@@ -120,12 +120,16 @@ def evidence_of(r: dict) -> list[str]:
     return [str(e) for e in (ev if isinstance(ev, list) else [ev]) if str(e).strip()]
 
 
+def has_check(r: dict) -> bool:
+    return bool(str(r.get("check") or "").strip())
+
+
 def verified(r: dict) -> bool:
     """True when the line holds evidence the engine resolved itself. A line
-    with a stored check is proved by that check and nothing else: the check is
-    the line's own definition of proof."""
+    with a stored check is proved by that check and nothing else, at any
+    stage: the check is the line's own definition of proof."""
     ev = evidence_of(r)
-    if (r.get("check") or "").strip():
+    if has_check(r):
         return any(e.startswith(CHECK_OK) for e in ev)
     return any(e.partition(":")[0] in PROOF_KINDS for e in ev)
 
@@ -171,8 +175,9 @@ def work_recorded(project: Path) -> bool:
 
 
 def problems(rows: list[dict], strict: bool = False) -> list[str]:
-    """Why the lines do not yet allow 'done'. With ``strict``, a line closed
-    on a note is a problem too."""
+    """Why the lines do not yet allow 'done'. A done line with a stored check
+    that has not passed on record is always a problem; with ``strict``, so is
+    a line closed on a note."""
     out = []
     for r in rows:
         status = r.get("status", "open")
@@ -186,9 +191,10 @@ def problems(rows: list[dict], strict: bool = False) -> list[str]:
             out.append(f"{r['id']}: open — {c.clip(r.get('quote', ''), 70)}")
         elif not evidence_of(r):
             out.append(f"{r['id']}: marked done with no evidence")
-        elif strict and not verified(r):
-            fix = "its check has not passed on record" if (r.get("check") or "").strip() else "its evidence is a note; attach checkable evidence, or set a check"
-            out.append(f"{r['id']}: done but not verified ({fix}): `brain req verify {r['id']}`")
+        elif (strict or has_check(r)) and not verified(r):
+            fix = (f"its check has not passed on record; run `brain req verify {r['id']}`" if has_check(r)
+                   else f"its evidence is a note; attach evidence the engine can check, or set a check and run `brain req verify {r['id']}`")
+            out.append(f"{r['id']}: done but not verified: {fix}")
     return out
 
 
@@ -322,7 +328,7 @@ def _path_evidence(project: Path, text: str) -> tuple[str, str]:
     ev_dir = paths.get("evidence") if isinstance(paths, dict) else ""
     bases = [root] + ([root / ev_dir] if isinstance(ev_dir, str) and ev_dir.strip() else [])
     name, _, line = text.rpartition(":")
-    for cand, want in [(text, 0)] + ([(name, int(line))] if name and re.fullmatch(r"[0-9]{1,7}", line) else []):
+    for cand, want in [(text, None)] + ([(name, int(line))] if name and re.fullmatch(r"[0-9]{1,7}", line) else []):
         for base in bases:
             try:
                 hit = (base / cand).resolve()
@@ -331,12 +337,12 @@ def _path_evidence(project: Path, text: str) -> tuple[str, str]:
                 rel = hit.relative_to(root).as_posix()
                 if hit.is_dir():
                     return f"path:{rel}/", ""
-                if want:
+                if want is not None:
                     with open(hit, "rb") as f:
                         have = sum(1 for _ in f)
                     if not 1 <= want <= have:
                         return "", f"{rel} has no line {want} (it has {have})"
-                return f"path:{rel}" + (f":{want}" if want else "") + f" #{c.sha256_file(hit)[:12]}", ""
+                return f"path:{rel}" + (f":{want}" if want is not None else "") + f" #{c.sha256_file(hit)[:12]}", ""
             except (OSError, ValueError):  # a name too long or otherwise not a path: free text
                 continue
     return "", ""
@@ -615,11 +621,13 @@ def cmd_evidence(args) -> int:
         if not ev:
             print(f"{r['id']}: cannot mark done with no evidence; attach {FORMS}")
             return 1
-        if strict_now(project) and not verified(dict(r, evidence=ev)):
-            if (r.get("check") or "").strip():
+        if (has_check(r) or strict_now(project)) and not verified(dict(r, evidence=ev)):
+            if has_check(r):
                 why = f"this line has a stored check, and only that check closes it: run `brain req verify {r['id']}`"
             else:
-                why = f"a note is not evidence at project size. Give {FORMS}; or set a check and run `brain req verify {r['id']}`"
+                note = next((e for e in ev if e.partition(":")[0] not in PROOF_KINDS), "")
+                why = (f"“{c.clip(note.removeprefix(NOTE), 90)}” is a note, and a note is not evidence at project size. "
+                       f"Give {FORMS}; or set a check and run `brain req verify {r['id']}`")
             print(f"{r['id']}: not marked done, nothing stored: {why}")
             return 1
         r["status"], r["done"] = "done", c.today()
@@ -647,7 +655,7 @@ def cmd_verify(args) -> int:
         if r.get("status") == "dropped":
             print(f"{r['id']} is dropped; `brain req reopen {r['id']} --reason \"…\"` first")
             return 1
-        if not (r.get("check") or "").strip():
+        if not has_check(r):
             print(f"{r['id']} has no check; set one with `brain req set {r['id']} --check \"<command>\"`, or attach evidence ({FORMS})")
             return 1
         targets = [r]
@@ -657,7 +665,7 @@ def cmd_verify(args) -> int:
     ran: dict[str, dict] = {}
     passed, failed, unset, nocheck = [], [], [], []
     for r in targets:
-        command = (r.get("check") or "").strip()
+        command = str(r.get("check") or "").strip()
         if not command:
             nocheck.append(r["id"])
             continue
@@ -772,7 +780,9 @@ def cmd_check(args) -> int:
         if len(probs) > 8:
             print(f" … {len(probs) - 8} more (brain req list --open)")
     else:
-        print(f"requirements: ok, all {len(rows)} line(s) are done or dropped with a reason ({summary(rows)})")
+        soft = [r["id"] for r in rows if standing(r) == "done but not verified"]
+        print(f"requirements: ok, all {len(rows)} line(s) are done or dropped with a reason ({summary(rows)})"
+              + (f"; {', '.join(soft[:5])}{' …' if len(soft) > 5 else ''} done on a note only, which `brain done` and the build stage refuse" if soft else ""))
     for line in dropped_lines(rows):
         print(line)
     return 1 if probs else 0
@@ -784,7 +794,7 @@ def cmd_intake(args) -> int:
         return 1
     text = " ".join(args.request)
     new = record_request(project, text)
-    missing = len(uncovered(project, load(project)))
+    missing = len(uncovered(project, load(project))) if size_and_stage(project)[0] in ("2", "3") else 0
     print(f"intake: {new} new sentence(s) of the request stored" + (" (a credential in it was left out)" if c.secret_problem(text) else "")
           + (f"; {missing} still need a ledger line (`brain req check` names them)" if missing else ""))
     return 0

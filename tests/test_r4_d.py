@@ -129,6 +129,7 @@ class EvidenceTests(Base):
             code, out = self.cli("req", "evidence", "R-001", text, "--done")
             self.assertEqual(code, 1, out)
             self.assertIn("not marked done", out)
+            self.assertIn(f"“{text}” is a note", out)
             self.assertIn("brain req verify", out)  # the refusal names the next step
             self.assertEqual(self.ledger(), before)
         code, out = self.cli("req", "evidence", "R-001", "looks fine")  # without --done it is kept, as a note
@@ -214,7 +215,7 @@ class EvidenceTests(Base):
         (self.p / "docs" / "evidence").mkdir(parents=True)
         (self.p / "docs" / "evidence" / "shot.txt").write_text("screenshot\n")
         (self.ws / "outside.txt").write_text("x")
-        for item, needle in (("README.md:99", "no line 99"), (f"path:{self.ws / 'outside.txt'}", "no such path"),
+        for item, needle in (("README.md:99", "no line 99"), ("README.md:0", "no line 0"), (f"path:{self.ws / 'outside.txt'}", "no such path"),
                              ("path:../outside.txt", "no such path")):
             code, out = self.cli("req", "evidence", "R-001", item, "--done")
             self.assertEqual(code, 1, f"{item}: {out}")
@@ -252,8 +253,9 @@ class EvidenceTests(Base):
         gate.check_live = fake
         try:
             code, out = self.cli("req", "evidence", "R-001", "url:https://up.example.invalid/", "--done")
-            self.assertEqual((code, calls), (1, []), out)  # network off: stored as a note, which closes nothing
+            self.assertEqual((code, calls), (1, []), out)  # network off: it would be a note, which closes nothing
             self.assertIn("not marked done", out)
+            self.assertIn("network is switched off", out)  # and the refusal says why it is only a note
             del os.environ["BRAIN_NO_NETWORK"]
             code, out = self.cli("req", "evidence", "R-001", "url:https://down.example.invalid/", "--done")
             self.assertEqual(code, 1, out)
@@ -334,16 +336,38 @@ class VerifyTests(Base):
         self.assertEqual(self.cli("req", "check")[0], 1)
 
     def test_a_line_with_a_check_is_closed_only_by_its_check(self):
-        """redteam-08: a line whose check exits 1 cannot be marked done."""
+        """redteam-08, e2e-trial-06: a line whose check exits 1 cannot be
+        marked done. The analysts' own commands, on a project that has only
+        just been created (so not yet at the build stage)."""
         self.add(check="python3 -c 'import sys; sys.exit(1)'")
-        self.building()
         before = self.ledger()
-        code, out = self.cli("req", "evidence", "R-001", "README.md", "--done")
-        self.assertEqual(code, 1, out)
-        self.assertIn("brain req verify R-001", out)
-        self.assertEqual(self.ledger(), before)
+        for text in ("looks fine", "nothing-here", "README.md"):
+            code, out = self.cli("req", "evidence", "R-001", text, "--done")
+            self.assertEqual(code, 1, out)
+            self.assertIn("brain req verify R-001", out)
+            self.assertEqual(self.ledger(), before)
+        self.assertEqual(self.cli("req", "check")[0], 1)
         self.assertEqual(self.cli("req", "verify", "R-001")[0], 1)
         self.assertEqual(self.row()["status"], "open")
+        # A row closed by hand, or before this rule, is caught by the check at any stage.
+        rows = req.load(self.p)
+        rows[0].update(status="done", evidence=["note: looks fine"])
+        req.save(self.p, rows)
+        code, out = self.cli("req", "check")
+        self.assertEqual(code, 1, out)
+        self.assertIn("R-001: done but not verified", out)
+
+    def test_check_says_when_a_line_is_done_on_a_note_before_the_build_stage(self):
+        """Decision 8 keeps a note able to close a line before the build
+        stage; the check still says so, in its one line."""
+        self.add()
+        self.cli("req", "evidence", "R-001", "looks fine", "--done")
+        code, out = self.cli("req", "check")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(out.splitlines()), 1)
+        self.assertIn("R-001", out)
+        self.assertIn("on a note only", out)
+        self.assertIn("brain done", out)
 
     def test_identical_checks_run_once_per_call(self):
         """Output and time economy: three lines sharing one command cost one run."""
