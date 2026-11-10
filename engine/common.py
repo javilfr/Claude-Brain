@@ -4,7 +4,10 @@ Conventions every module follows:
 - expose ``register(sub)`` that adds argparse sub-commands and sets ``func``;
 - ``func(args) -> int`` (process exit code); print short output only;
 - find the brain from this file's location, never from environment variables;
-- all writes go through ``write_text``/``write_json``/``append_jsonl`` (atomic).
+- all writes go through ``write_text``/``write_json``/``append_jsonl`` (atomic);
+  they refuse to write into a project whose contract is newer than this brain;
+- a command that needs a project asks ``need_project``; one that can work
+  without asks ``resolve_project``; both decide through ``locate_project``.
 """
 from __future__ import annotations
 
@@ -14,7 +17,7 @@ import json
 import math
 import os
 import re
-import tempfile
+import stat
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -89,14 +92,67 @@ def read_text(path: Path | str, default: str = "") -> str:
         return default
 
 
+class StaleBrain(OSError):
+    """A write into a project whose contract is newer than this brain knows
+    was refused; the text is the one line to print (exit code 3). It is an
+    OSError so that code which already skips an unwritable log keeps going."""
+
+
+def stale_brain(project: Path | str) -> str:
+    """One line when the project uses a newer contract than this brain, else
+    "". An older brain cannot know what a newer contract's files mean, so it
+    writes nothing there."""
+    try:
+        ver = json.loads((Path(project) / ".brain" / "project.json").read_text(encoding="utf-8")).get("contract")
+    except (OSError, ValueError, AttributeError, RecursionError):
+        return ""
+    if isinstance(ver, int) and not isinstance(ver, bool) and ver > CONTRACT_VERSION:
+        return (f"stale brain: {Path(project).name} uses contract v{clip(str(ver), 12)}, this brain knows v{CONTRACT_VERSION}; "
+                "nothing was written. Update the brain, then run this again")
+    return ""
+
+
+def _refuse_stale(path: Path) -> None:
+    """Every engine write passes here: raise ``StaleBrain`` when the file sits
+    in a project (its .brain/ folder, or beside it) with a newer contract."""
+    parts = path.parts
+    if ".brain" in parts:
+        project = Path(*parts[: parts.index(".brain")])
+    elif (path.parent / ".brain" / "project.json").is_file():
+        project = path.parent
+    else:
+        return
+    line = stale_brain(project)
+    if line:
+        raise StaleBrain(line)
+
+
+def _temp_beside(p: Path) -> tuple[int, str]:
+    """A new temp file in ``p``'s folder, opened for writing. Created the way
+    any new file is (mode 0666 less the umask): ``tempfile.mkstemp`` forces
+    0600, which then became the mode of every file the engine wrote."""
+    while True:
+        tmp = str(p.parent / f".tmp-{os.getpid()}-{os.urandom(4).hex()}")
+        try:
+            return os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666), tmp
+        except FileExistsError:
+            continue
+
+
 def write_text(path: Path | str, text: str) -> None:
-    """Atomic write: temp file in the same directory, then rename."""
+    """Atomic write: temp file in the same directory, then rename. A file
+    that is rewritten keeps its mode; a new one gets what the umask allows."""
     p = Path(path)
+    _refuse_stale(p)
     p.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=".tmp-")
+    fd, tmp = _temp_beside(p)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
+        try:
+            os.chmod(tmp, stat.S_IMODE(p.stat().st_mode))
+        except OSError:
+            pass  # no earlier file (or a file system without modes): the new file's own mode stands
         os.replace(tmp, p)
     except BaseException:
         try:
@@ -109,8 +165,8 @@ def write_text(path: Path | str, text: str) -> None:
 def read_json(path: Path | str, default: Any = None) -> Any:
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
-        return default
+    except (FileNotFoundError, IsADirectoryError, NotADirectoryError, ValueError, RecursionError):
+        return default  # missing, not UTF-8, not JSON, or nested too deep to read
 
 
 def write_json(path: Path | str, data: Any) -> None:
@@ -173,6 +229,7 @@ def write_jsonl(path: Path | str, rows: Iterable[dict]) -> None:
 
 def append_jsonl(path: Path | str, row: dict) -> None:
     p = Path(path)
+    _refuse_stale(p)
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
@@ -241,14 +298,23 @@ def find_secrets(text: str) -> list[str]:
     return hits
 
 
+def secret_kind(text: str) -> str:
+    """The kind of credential the text seems to hold (a label, never the
+    value), or ""."""
+    for label, pat in SECRET_RULES:
+        if pat.search(text or ""):
+            return label
+    return ""
+
+
 def secret_problem(text: str) -> str:
     """One line to print when text holds something shaped like a credential,
     else "". It names the kind, never the value, and says what to do instead:
     chat and git history cannot be cleaned, so the engine refuses to store it."""
-    for label, pat in SECRET_RULES:
-        if pat.search(text or ""):
-            return (f"refused: this text holds what looks like a {label} (the value is not shown or stored). "
-                    "Ask for it through the secure credential form, or add a NEEDS_YOU item with the clicks to store it in the environment's settings")
+    label = secret_kind(text)
+    if label:
+        return (f"refused: this text holds what looks like a {label} (the value is not shown or stored). "
+                "Ask for it through the secure credential form, or add a NEEDS_YOU item with the clicks to store it in the environment's settings")
     return ""
 
 
@@ -288,28 +354,158 @@ def sibling_dirs(brain_root: Path | None = None) -> list[Path]:
     return out
 
 
-def resolve_project(explicit: str | None = None, brain_root: Path | None = None) -> Path | None:
-    """The project to act on: --project, then BRAIN_PROJECT, then the current
-    directory (or a parent) if managed, then the single managed sibling."""
-    for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
-        if cand:
-            return Path(cand).expanduser().resolve()
-    cur = Path.cwd().resolve()
+def pick_named(name: str, folders: list[Path]) -> list[Path]:
+    """The folders a spoken name can mean: the one whose name it is (case
+    aside) alone when there is one, else every folder whose name contains it.
+    One rule for `--project <name>` and for boot's `--name`, so 'shop' means
+    shop even when shop-admin is attached too."""
+    want = (name or "").strip().lower()
+    if not want:
+        return []
+    exact = [p for p in folders if p.name.lower() == want]
+    return exact or [p for p in folders if want in p.name.lower()]
+
+
+def _names(folders: list[Path], limit: int = 6) -> str:
+    more = f" and {len(folders) - limit} more" if len(folders) > limit else ""
+    return ", ".join(p.name for p in folders[:limit]) + more
+
+
+def locate_project(explicit: str | None = None, brain_root: Path | None = None) -> tuple[Path | None, str]:
+    """(project, "") or (None, one line saying why not and what to do).
+
+    The one place that decides which project a command means: --project, then
+    BRAIN_PROJECT (each a path, or the name of a folder beside the brain), then
+    the current directory (or a parent) if managed, then the only managed
+    folder beside the brain. With several managed folders and nothing to
+    choose by, the engine does not guess where to write: it names them."""
     root = Path(brain_root or BRAIN_ROOT).resolve()
+    sibs = sibling_dirs(root)
+    managed = [p for p in sibs if is_managed(p)]
+    for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
+        if not cand:
+            continue
+        path = Path(str(cand)).expanduser()
+        if not path.is_dir() and path.name == str(cand):  # a bare name, not a path
+            hits = pick_named(str(cand), managed) or pick_named(str(cand), sibs)
+            if len(hits) > 1:
+                return None, f"'{cand}' fits {len(hits)} attached projects ({_names(hits)}): pass --project with the full name"
+            if hits:
+                path = hits[0]
+        path = path.resolve()
+        if is_managed(path):
+            return path, ""
+        if not path.is_dir():
+            return None, f"no project folder '{cand}'" + (f" (attached: {_names(managed)})" if managed else "") + ": pass --project <path or folder name>"
+        return None, f"{path.name} is not a managed project (no .brain/project.json): run `brain init <path>` if it is empty, else `brain adopt <path> --survey`"
+    cur = Path.cwd().resolve()
     for p in (cur, *cur.parents):
         if p == root:
             break
         if is_managed(p):
-            return p
-    managed = [p for p in sibling_dirs(root) if is_managed(p)]
+            return p, ""
     if len(managed) == 1:
-        return managed[0].resolve()
+        return managed[0].resolve(), ""
+    if managed:
+        return None, f"{len(managed)} projects attached ({_names(managed)}): add --project <name> to this command (boot shows the one it used)"
+    repos = [p for p in sibs if (p / ".git").exists()]
+    if repos:
+        return None, (f"no managed project: {_names(repos)} {'has' if len(repos) == 1 else 'have'} no contract yet; "
+                      f"run `brain init <path>` on an empty repository, else `brain adopt <path> --survey`")
+    return None, "no project attached (brain-only session): this command needs one; attach a project repository beside the brain, or pass --project <path>"
+
+
+def resolve_project(explicit: str | None = None, brain_root: Path | None = None) -> Path | None:
+    """The project a command may use (see ``locate_project``), or None: for
+    commands that also work without one (run, close, recall, hire). A project
+    on a newer contract than this brain is None here, so those commands carry
+    on without it and write nothing there. A folder given with --project or
+    BRAIN_PROJECT that is not managed is returned as it is; callers test
+    ``is_managed``."""
+    found, _why = locate_project(explicit, brain_root)
+    if found is not None:
+        return None if stale_brain(found) else found
+    for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
+        if cand:
+            path = Path(str(cand)).expanduser()
+            return path.resolve() if path.is_dir() else None
     return None
 
 
-def load_manifest(project: Path) -> dict:
+# The types the contract declares for the keys the engine reads (the same
+# types as contract/v1.schema.json, kept here so that reading a manifest needs
+# no second file). A key of the wrong type used to surface as a traceback in
+# whichever command touched it first. Unknown keys are not looked at.
+MANIFEST_SHAPE: dict = {
+    "project": {"id": str, "title": str, "created": str},
+    "family": str, "types": [str], "stage": str, "tier": int,
+    "commands": {"setup": str, "check_fast": str, "check_full": str, "run": str},
+    "gates": [{"id": str, "kind": str, "command": str, "file": str}],
+    "release": {"rule": str, "branch": str, "live_url": str, "live_expect": str},
+    "paths": {"deliverables": [str], "evidence": str, "never_touch": [str]},
+    "languages": [str], "risk": str,
+    "privacy": {"share_lessons": str},
+    "brain": {"last_seen": str, "min_contract": int},
+}
+_SHAPE_WORDS = {dict: "an object", list: "a list", str: "text", int: "a whole number"}
+
+
+def _found(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true/false"
+    return {dict: "an object", list: "a list", str: "text", int: "a number", float: "a decimal number"}.get(type(value), type(value).__name__)
+
+
+def _shaped(value: Any, spec: Any, where: str, problems: list[str]) -> Any:
+    """``value`` with every part of the wrong type left out (a section becomes
+    empty, a list loses the entry, a key is dropped so its default applies);
+    each such part adds one line to ``problems``."""
+    want = dict if isinstance(spec, dict) else list if isinstance(spec, list) else spec
+    if not isinstance(value, want) or (want is int and isinstance(value, bool)):
+        problems.append(f'"{where}" must be {_SHAPE_WORDS[want]} (found {_found(value)})')
+        return None
+    if isinstance(spec, dict):
+        out = dict(value)
+        for key, sub in spec.items():
+            if key in out:
+                got = _shaped(out[key], sub, f"{where}.{key}" if where else key, problems)
+                if got is None:
+                    del out[key]
+                else:
+                    out[key] = got
+        return out
+    if isinstance(spec, list):
+        kept = []
+        for i, v in enumerate(value):
+            got = _shaped(v, spec[0], f"{where}[{i}]", problems)
+            if got is not None:
+                kept.append(got)
+        return kept
+    return value
+
+
+def manifest_shape(data: dict) -> tuple[dict, list[str]]:
+    """(usable copy, problems) of a parsed manifest. In the copy a wrong-typed
+    section is empty rather than absent, so ``m["gates"]`` and
+    ``m.get("release", {})`` both behave."""
+    problems: list[str] = []
+    out = _shaped(data, MANIFEST_SHAPE, "", problems) or {}
+    for key, spec in MANIFEST_SHAPE.items():
+        if key in data and key not in out and isinstance(spec, (dict, list)):
+            out[key] = type(spec)()
+    return out, problems
+
+
+def load_manifest(project: Path, raw: bool = False) -> dict:
+    """The project's manifest, with wrong-typed parts left out so no reader
+    crashes on them (``manifest_problem`` is what says them out loud).
+    ``raw=True`` gives the file as it is, for code that writes it back."""
     m = read_json(Path(project) / ".brain" / "project.json", {})
-    return m if isinstance(m, dict) else {}
+    if not isinstance(m, dict):
+        return {}
+    return m if raw else manifest_shape(m)[0]
 
 
 def manifest_problem(project: Path) -> str:
@@ -319,12 +515,22 @@ def manifest_problem(project: Path) -> str:
     path = Path(project) / ".brain" / "project.json"
     if not path.is_file():
         return ""
+    fix = "fix it or restore it from git before anything else"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        return f".brain/project.json is not valid JSON ({clip(str(e), 60)}); fix it or restore it from git before anything else"
-    if not isinstance(data, dict) or not isinstance(data.get("contract"), int):
-        return ".brain/project.json has no integer 'contract'; fix it or restore it from git before anything else"
+    except (ValueError, RecursionError) as e:  # not JSON, not UTF-8, or nested beyond reading
+        return f".brain/project.json is not valid JSON ({clip(str(e), 60)}); {fix}"
+    except OSError as e:
+        return f".brain/project.json cannot be read ({clip(str(e), 60)}); {fix}"
+    ver = data.get("contract") if isinstance(data, dict) else None
+    if not isinstance(ver, int) or isinstance(ver, bool):
+        return f".brain/project.json has no integer 'contract'; {fix}"
+    if ver > CONTRACT_VERSION:
+        return ""  # a newer contract may have other shapes: that is `stale_brain`'s line, not this one
+    problems = manifest_shape(data)[1]
+    if problems:
+        more = f" (and {len(problems) - 1} more: brain validate)" if len(problems) > 1 else ""
+        return f".brain/project.json: {problems[0]}{more}; {fix}"
     return ""
 
 
@@ -369,10 +575,16 @@ def add_project_arg(p) -> None:
 
 
 def need_project(args) -> Path | None:
-    proj = resolve_project(getattr(args, "project", None))
-    if proj is None or not is_managed(proj):
-        print("no managed project found (attach one, or run: brain init <path>)")
+    """The managed, usable project for a command that needs one, or None
+    after printing the one line that says why not and what to do next. A
+    project on a newer contract raises ``StaleBrain`` instead."""
+    proj, why = locate_project(getattr(args, "project", None))
+    if proj is None:
+        print(why)
         return None
+    stale = stale_brain(proj)
+    if stale:
+        raise StaleBrain(stale)  # bin/brain prints the line and exits 3; no caller goes on to write
     problem = manifest_problem(proj)
     if problem:
         print(problem)

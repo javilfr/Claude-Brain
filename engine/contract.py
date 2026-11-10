@@ -136,7 +136,7 @@ def init(project: Path, title: str, family: str, manifest_overrides: dict | None
     _create(b / "memory" / "lessons.jsonl", "", made, project)
     _create(b / "ext" / "README.md", "# Project extensions\n\nSkills, agents, tools and playbook overrides that belong only to this project. They add to the brain's defaults for this project; they cannot change the contract.\n", made, project)
     _create(b / "log" / ".gitkeep", "", made, project)
-    _create(b / ".gitignore", "cache/\nlog/run/\n", made, project)
+    _create(b / ".gitignore", "cache/\nlog/run/\n.tmp-*\n", made, project)  # .tmp-*: what an interrupted atomic write leaves
     _create(project / "NEEDS_YOU.md", c.read_text(TEMPLATE / "NEEDS_YOU.md"), made, project)
     _create(project / "STATUS.md", f"# Status: {title}\n\nNothing has been built yet. Say what you want in the chat to begin.\n", made, project)
     ensure_stub(project, title, made)
@@ -207,6 +207,22 @@ def adopt(project: Path, title: str | None = None, family: str | None = None) ->
 # ---------------------------------------------------------------- validate / migrate
 REQUIRED_FILES = (".brain/project.json", ".brain/STATE.md", ".brain/requirements.jsonl", ".brain/PLAN.md",
                   ".brain/DECISIONS.md", "NEEDS_YOU.md", "STATUS.md", "CLAUDE.md")
+VALIDATE_LINES = 12  # problems printed by `brain validate`; the rest are counted
+# Keys every manifest carries that no engine code reads yet, with the default
+# the engine writes. Setting one changes nothing, and `validate` says so
+# rather than let a manifest promise what the brain does not do.
+RESERVED_KEYS = {"privacy.share_lessons": "method-only", "paths.evidence": "docs/evidence/"}
+
+
+def reserved_note(project: Path) -> str:
+    """One line naming the reserved keys this manifest sets away from their
+    defaults, else ""."""
+    m = c.load_manifest(project)
+    used = [key for key, default in RESERVED_KEYS.items()
+            if m.get(key.split(".")[0], {}).get(key.split(".")[1], default) != default]
+    if not used:
+        return ""
+    return f"note: {', '.join(used)} {'is' if len(used) == 1 else 'are'} reserved: this brain does not read {'it' if len(used) == 1 else 'them'} yet, so the value set here changes nothing"
 
 
 def validate(project: Path, brain_root: Path | None = None) -> list[str]:
@@ -216,10 +232,10 @@ def validate(project: Path, brain_root: Path | None = None) -> list[str]:
     if not isinstance(m, dict):
         return [".brain/project.json is missing or not valid JSON"]
     ver = m.get("contract")
-    if not isinstance(ver, int):
+    if not isinstance(ver, int) or isinstance(ver, bool):
         return ["manifest: 'contract' must be an integer"]
     if ver > c.CONTRACT_VERSION:
-        return [f"stale brain: project uses contract v{ver}, this brain knows v{c.CONTRACT_VERSION}; update the brain, nothing was written"]
+        return [c.stale_brain(project)]
     if ver < c.CONTRACT_VERSION:
         errs.append(f"project is on contract v{ver}; run: brain migrate")
     schema = load_schema(ver, brain_root)
@@ -237,9 +253,21 @@ def validate(project: Path, brain_root: Path | None = None) -> list[str]:
             errs.append(f"CLAUDE.md pointer block is {len(block.encode())} bytes (limit {STUB_LIMIT})")
     elif (project / "CLAUDE.md").is_file():
         errs.append("CLAUDE.md has no brain pointer block")
-    for g in m.get("gates", []) if isinstance(m.get("gates"), list) else []:
-        if isinstance(g, dict) and g.get("kind") == "command" and "command" not in g:
+    seen: set[str] = set()
+    for i, g in enumerate(m.get("gates", []) if isinstance(m.get("gates"), list) else []):
+        if not isinstance(g, dict):
+            continue  # the schema check above has already said so
+        if g.get("kind") == "command" and "command" not in g:
             errs.append(f"gate {g.get('id')}: kind 'command' needs a command (may be empty until known)")
+        # Checked here, not in the frozen schema (I-15): the gate log is keyed
+        # by id, so two gates with one id hide each other's result.
+        gid = g.get("id")
+        if isinstance(gid, str) and not gid.strip():
+            errs.append(f"gates[{i}] has an empty id: give every gate its own id")
+        elif isinstance(gid, str) and gid in seen:
+            errs.append(f"gate id '{gid}' is used twice: give every gate its own id, or one result hides the other")
+        elif isinstance(gid, str):
+            seen.add(gid)
     from . import req
     try:
         req.load(project)
@@ -247,7 +275,38 @@ def validate(project: Path, brain_root: Path | None = None) -> list[str]:
         errs.append(str(e))
     if c.find_secrets(c.read_text(project / ".brain" / "project.json")):
         errs.append("manifest looks like it contains a secret; use the environment's secret settings instead")
+    errs += secret_findings(project)
     return errs
+
+
+SCAN_LIMIT = 512 * 1024  # bytes; a larger file under .brain/ is a log, not something a person wrote
+
+
+def secret_findings(project: Path) -> list[str]:
+    """One line per file a checkpoint would commit (everything under .brain/
+    that git does not ignore there, and the two owner files) that holds
+    something shaped like a credential. Names the file and the kind, never
+    the value."""
+    project = Path(project)
+    brain_dir = project / ".brain"
+    files = [project / "NEEDS_YOU.md", project / "STATUS.md"]
+    for f in sorted(brain_dir.rglob("*")) if brain_dir.is_dir() else []:
+        rel = f.relative_to(brain_dir).parts
+        if rel[:1] == ("cache",) or rel[:2] == ("log", "run") or f.name == "project.json" or f.name.startswith(".tmp-"):
+            continue  # ignored by .brain/.gitignore, or (the manifest) reported above
+        files.append(f)
+    out = []
+    for f in files:
+        try:
+            if not f.is_file() or f.stat().st_size > SCAN_LIMIT:
+                continue
+            kind = c.secret_kind(f.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if kind:
+            out.append(f"{f.relative_to(project).as_posix()} holds what looks like a secret ({kind}): take it out and have that key replaced, "
+                       "because git history keeps what was committed")
+    return out
 
 
 def _load_migration(path: Path):
@@ -263,9 +322,9 @@ def migrate(project: Path, target: int = c.CONTRACT_VERSION, migrations_dir: Pat
     without writing anything."""
     project = Path(project)
     mdir = Path(migrations_dir or c.BRAIN_ROOT / "contract" / "migrations")
-    m = c.load_manifest(project)
+    m = c.load_manifest(project, raw=True)  # raw: what is written back must be the file's own content
     ver = m.get("contract")
-    if not isinstance(ver, int):
+    if not isinstance(ver, int) or isinstance(ver, bool):
         return 1, ["manifest has no integer 'contract'"]
     if ver > target:
         return 3, [f"stale brain: project is v{ver}, brain is v{target}; nothing written"]
@@ -282,7 +341,7 @@ def migrate(project: Path, target: int = c.CONTRACT_VERSION, migrations_dir: Pat
         if not backup.exists():
             c.write_text(backup, c.read_text(project / ".brain" / "project.json"))
         changes = _load_migration(script).migrate(project) or []
-        m = c.load_manifest(project)
+        m = c.load_manifest(project, raw=True)
         m["contract"] = ver + 1
         c.write_json(project / ".brain" / "project.json", m)
         with open(project / ".brain" / "DECISIONS.md", "a", encoding="utf-8") as f:
@@ -292,17 +351,63 @@ def migrate(project: Path, target: int = c.CONTRACT_VERSION, migrations_dir: Pat
     return 0, msgs
 
 
+def set_check(project: Path, command: str) -> str:
+    """Put one check command where the engine looks for it: `commands.check_fast`,
+    `commands.check_full` and the `checks` gate. Only empty places are filled;
+    a command that is already there is never replaced. Returns what happened
+    in a few words ("" when the command was already in place)."""
+    path = Path(project) / ".brain" / "project.json"
+    if c.manifest_problem(project):
+        return "check command not set"  # a damaged manifest is left for a person; validation says what is wrong
+    m = c.load_manifest(project, raw=True)
+    commands, gates = m.setdefault("commands", {}), m.setdefault("gates", [])
+    gate = next((g for g in gates if isinstance(g, dict) and g.get("id") == "checks"), None)
+    current = str((gate or {}).get("command") or "").strip()
+    if current and current != command:
+        return f"check command kept as it was ({c.clip(current, 60)}): edit .brain/project.json to change it"
+    changed = False
+    if gate is None:
+        gates.append({"id": "checks", "kind": "command", "command": command})
+        changed = True
+    elif not current:
+        gate.update(kind=gate.get("kind") or "command", command=command)
+        changed = True
+    for key in ("check_fast", "check_full"):
+        if not str(commands.get(key) or "").strip():
+            commands[key] = command
+            changed = True
+    if not changed:
+        return ""
+    c.write_json(path, m)
+    return "check command set (commands and the checks gate)"
+
+
+def _in_brain(project: Path) -> bool:
+    root = c.BRAIN_ROOT.resolve()
+    return project == root or root in project.parents
+
+
+IN_BRAIN = "refusing to install a project contract in the brain itself: attach the project's own repository beside the brain and name that folder"
+
+
 # ---------------------------------------------------------------- cli
 def cmd_init(args) -> int:
     project = Path(args.path).resolve()
     if not project.is_dir():
         print(f"not a folder: {project}")
         return 1
-    if project == c.BRAIN_ROOT.resolve():
-        print("refusing to install a project contract inside the brain itself")
+    if _in_brain(project):
+        print(IN_BRAIN)
         return 1
+    if c.stale_brain(project):
+        print(c.stale_brain(project))
+        return 3
     if not c.is_empty_repo(project) and not c.is_managed(project) and not args.force:
         print("this folder already has content: use `brain adopt` (it surveys first and never moves existing files)")
+        return 1
+    refused = c.secret_problem(f"{args.check or ''}\n{args.title or ''}")  # both are written into committed files
+    if refused:
+        print(refused)
         return 1
     over = {}
     if args.release:
@@ -310,8 +415,18 @@ def cmd_init(args) -> int:
     if args.language:
         over["languages"] = args.language
     made = init(project, args.title or project.name, args.family, over)
+    did = [f"created {len(made)} file(s)"] if made else []
+    kept = ""
+    if (args.check or "").strip():
+        result = set_check(project, args.check.strip())
+        if result.startswith("check command set"):
+            did.append(result)
+        else:
+            kept = result  # "" when the command was already in place
     errs = validate(project)
-    print(f"contract v{c.CONTRACT_VERSION} in {project.name}: " + (f"created {len(made)} file(s)" if made else "already complete, nothing changed"))
+    # One line: what was done, then whether what is now on disk validates.
+    print(f"contract v{c.CONTRACT_VERSION} in {project.name}: " + ("; ".join(did) if did else "already complete, nothing changed")
+          + (f"; {kept}" if kept else "") + ("; valid" if not errs else f"; {len(errs)} problem(s):"))
     for e in errs:
         print(" -", e)
     return 1 if errs else 0
@@ -328,8 +443,18 @@ def cmd_adopt(args) -> int:
         for k, v in s["commands"].items():
             print(f"  {k}: {v}")
         return 0
+    if _in_brain(project):
+        print(IN_BRAIN)
+        return 1
+    if c.stale_brain(project):
+        print(c.stale_brain(project))
+        return 3
+    if c.secret_problem(args.title or ""):
+        print(c.secret_problem(args.title))
+        return 1
     s, made = adopt(project, args.title, args.family)
-    print(f"adopted {project.name}: family {c.load_manifest(project).get('family')}; added {len(made)} contract file(s); existing files untouched")
+    pointer = " (CLAUDE.md got a pointer block above its content)" if any(x.startswith("CLAUDE.md (") for x in made) else ""
+    print(f"adopted {project.name}: family {c.load_manifest(project).get('family')}; added {len(made)} contract file(s); existing files kept{pointer}")
     if s.get("old_handbook_bytes", 0) > OLD_HANDBOOK_LIMIT:
         print(f"  the existing CLAUDE.md is about {s['old_handbook_bytes'] // 4:,} tokens on every request: a 'Slim the old handbook' item was added to NEEDS_YOU.md")
     for k, v in s["commands"].items():
@@ -342,24 +467,32 @@ def cmd_adopt(args) -> int:
 
 
 def cmd_validate(args) -> int:
-    project = c.resolve_project(args.project)
+    project, why = c.locate_project(args.project)
     if project is None:
-        print("no project found")
+        print(why)
         return 1
     errs = validate(project)
+    if errs and errs[0].startswith("stale brain"):
+        print(errs[0])
+        return 3
     if errs:
         print(f"{project.name}: {len(errs)} problem(s)")
-        for e in errs:
+        for e in errs[:VALIDATE_LINES]:
             print(" -", e)
-        return 3 if errs[0].startswith("stale brain") else 1
+        if len(errs) > VALIDATE_LINES:
+            print(f" - … and {len(errs) - VALIDATE_LINES} more: fix these, then run `brain validate` again")
+        return 1
     print(f"{project.name}: contract v{c.load_manifest(project).get('contract')} valid")
+    note = reserved_note(project)
+    if note:
+        print(note)
     return 0
 
 
 def cmd_migrate(args) -> int:
-    project = c.resolve_project(args.project)
+    project, why = c.locate_project(args.project)
     if project is None:
-        print("no project found")
+        print(why)
         return 1
     code, msgs = migrate(project)
     for m in msgs:
@@ -375,6 +508,7 @@ def register(sub) -> None:
     p.add_argument("--release", choices=("none", "main-on-green", "pr"))
     p.add_argument("--language", action="append")
     p.add_argument("--force", action="store_true", help="allow a non-empty folder")
+    p.add_argument("--check", help="the command that checks the work: fills commands.check_fast, check_full and the checks gate")
     p.set_defaults(func=cmd_init)
     p = sub.add_parser("adopt", help="add the contract to an existing codebase without touching its files")
     p.add_argument("path")

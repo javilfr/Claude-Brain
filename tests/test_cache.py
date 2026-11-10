@@ -43,7 +43,10 @@ class CacheTest(unittest.TestCase):
     def test_prune_by_age(self):
         with mock.patch.dict(os.environ, {"BRAIN_NOW": "2026-01-01T00:00:00Z"}):
             cache.put(cache.key("old"), 1, self.dir)
-        with mock.patch.dict(os.environ, {"BRAIN_NOW": "2026-03-01T00:00:00Z"}):
+        # A put now prunes old entries by itself (core-14, tests/test_r4_b.py);
+        # that is switched off here because this test is about prune() alone.
+        with mock.patch.dict(os.environ, {"BRAIN_NOW": "2026-03-01T00:00:00Z"}), \
+                mock.patch.object(cache, "_prune_if_due", lambda root: None):
             cache.put(cache.key("new"), 2, self.dir)
             self.assertEqual(cache.prune(30, self.dir), 1)
             self.assertIsNone(cache.get(cache.key("old"), self.dir))

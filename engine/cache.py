@@ -19,6 +19,8 @@ from typing import Any
 from . import common as c
 
 TEMP_CACHE_NAME = "claude-brain-cache"
+KEEP_DAYS = 30  # an entry not rewritten for this long is dropped
+PRUNE_STAMP = ".pruned"  # when the folder was last pruned
 
 
 def key(*parts: Any) -> str:
@@ -68,7 +70,22 @@ def put(k: str, value: Any, cache_dir: Path | str | None = None) -> Path:
     """Store a JSON-serialisable value atomically; returns the entry path."""
     path = _entry_path(k, cache_dir)
     c.write_json(path, {"key": k, "created": c.now_iso(), "value": value})
+    _prune_if_due(_resolve_dir(cache_dir))
     return path
+
+
+def _prune_if_due(root: Path) -> None:
+    """Drop old entries at most once a day, from the put that follows a
+    miss: the cache cannot grow without bound, and a put stays one small
+    write on every other call. Never fails the put it rides on."""
+    stamp = root / PRUNE_STAMP
+    try:
+        if c.read_text(stamp).strip()[:10] == c.today():
+            return
+        c.write_text(stamp, c.now_iso() + "\n")
+        prune(KEEP_DAYS, root)
+    except OSError:
+        return
 
 
 def prune(days: int, cache_dir: Path | str | None = None) -> int:

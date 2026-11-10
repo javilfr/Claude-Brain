@@ -12,7 +12,8 @@ sys.dont_write_bytecode = True
 from engine import MODULES  # noqa: E402
 
 
-def main(argv=None) -> int:
+def build():
+    """(parser, its sub-commands, the modules that failed to load)."""
     parser = argparse.ArgumentParser(prog="brain", description="Claude Brain engine")
     sub = parser.add_subparsers(dest="command")
     broken = []
@@ -23,9 +24,18 @@ def main(argv=None) -> int:
             importlib.import_module(f"engine.{name}").register(sub)
         except Exception as e:
             broken.append(f"{name} ({type(e).__name__}: {str(e)[:60]})")
+    return parser, sub, broken
+
+
+def main(argv=None, tree=None) -> int:
+    """Run one command. ``tree`` is a result of ``build()`` to reuse, for a
+    caller that runs many commands in one process (the test suite)."""
+    parser, sub, broken = tree or build()
     wanted = (argv if argv is not None else sys.argv[1:])[:1]
-    if broken and wanted and any(b.split(" ")[0] in wanted[0] or wanted[0] in ("plan", "close", "learn", "map") for b in broken) and wanted[0] not in sub.choices:
-        print(f"the '{wanted[0]}' command is unavailable: " + "; ".join(broken))
+    if broken and wanted and not wanted[0].startswith("-") and wanted[0] not in sub.choices:
+        # A command that is missing while a module failed to load is that
+        # module's (or needs it): name the cause, not "invalid choice".
+        print(f"'{wanted[0]}' is unavailable: failed to load " + "; ".join(broken) + ". Run `brain doctor`, fix that file, then run this again")
         return 1
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
@@ -37,6 +47,11 @@ def main(argv=None) -> int:
         return int(args.func(args) or 0)
     except BrokenPipeError:
         return 0
+    except OSError as e:
+        if type(e).__name__ != "StaleBrain":
+            raise
+        print(e)  # the project uses a newer contract than this brain: nothing was written there
+        return 3
 
 
 if __name__ == "__main__":
