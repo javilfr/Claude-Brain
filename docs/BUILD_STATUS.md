@@ -155,3 +155,17 @@ Found and left for the ticket that owns them:
 - Wages: both small items used under a fifth of their wage (0.08 and 0.19). The learner adjusts bands from settled hires; two are not enough to move them.
 - `init` writes no root `.gitignore`, so `__pycache__/` was committed in the trial. Left open: it changes what the frozen contract installs.
 - `brain close` was not run for the trial on its own, because this session closes once at its end and a second close of the same session would be skipped as already consolidated.
+
+## Live platform checks in a one-repository session (2026-11-10, CB-201)
+
+Observations from this session, not confirmed by an official page, so none was recorded as a fact through `brain learn note`.
+
+| Question | Observation | How it was seen |
+|---|---|---|
+| Does the `PreToolUse` hook in `.claude/settings.json` fire on an edit? | Yes | The hook was made to append to a marker file, one `Write` was made, the marker read `fired`; the hook was then restored byte for byte (`git status` clean) |
+| Does `guard_paths` block an edit to `memory/`? | Not while the zone is unlocked, as designed | A `Write` to `memory/_hook_probe.txt` went through (file removed at once); the hook exits 0 unless `VERSION.json` sets `learned_zone_locked` (decision D-08) |
+| Does the `Stop` hook (`session_end`) fire? | Not observable inside one turn | It runs when a turn ends; check at the start of the next turn that this session's ledger row reached `learning/inbox/` before `close` |
+| Do a skill's own frontmatter hooks fire? | Nothing to test | No skill in `.claude/skills/` declares `hooks:` |
+| Do helpers honour model and effort? | Yes for the values passed on the call | Each helper transcript's messages carry the requested model (reviewer `claude-opus-5-5`; both builders `claude-sonnet-5-5`); each `.meta.json` records the requested effort. The model was also passed on each call, so this does not prove the agent file's own `model:` line alone |
+| Do helpers skip `CLAUDE.md` (`omitClaudeMd: true`)? | Consistent with yes | None of the three helper transcripts contains the `CLAUDE.md` text ("Evidence before claims", "Contents of …"), which the main transcript carries |
+| Does changing effort mid-session keep the prompt cache? | Not tested | Effort is changed by the person (`/effort`), not by the lead; it needs a session where the owner does so, then `brain ledger` before and after |
