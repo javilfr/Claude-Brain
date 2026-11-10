@@ -4,7 +4,10 @@ Conventions every module follows:
 - expose ``register(sub)`` that adds argparse sub-commands and sets ``func``;
 - ``func(args) -> int`` (process exit code); print short output only;
 - find the brain from this file's location, never from environment variables;
-- all writes go through ``write_text``/``write_json``/``append_jsonl`` (atomic).
+- all writes go through ``write_text``/``write_json``/``append_jsonl`` (atomic);
+  they refuse to write into a project whose contract is newer than this brain;
+- a command that needs a project asks ``need_project``; one that can work
+  without asks ``resolve_project``; both decide through ``locate_project``.
 """
 from __future__ import annotations
 
@@ -15,7 +18,6 @@ import math
 import os
 import re
 import stat
-import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -125,25 +127,32 @@ def _refuse_stale(path: Path) -> None:
         raise StaleBrain(line)
 
 
+def _temp_beside(p: Path) -> tuple[int, str]:
+    """A new temp file in ``p``'s folder, opened for writing. Created the way
+    any new file is (mode 0666 less the umask): ``tempfile.mkstemp`` forces
+    0600, which then became the mode of every file the engine wrote."""
+    while True:
+        tmp = str(p.parent / f".tmp-{os.getpid()}-{os.urandom(4).hex()}")
+        try:
+            return os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666), tmp
+        except FileExistsError:
+            continue
+
+
 def write_text(path: Path | str, text: str) -> None:
-    """Atomic write: temp file in the same directory, then rename."""
+    """Atomic write: temp file in the same directory, then rename. A file
+    that is rewritten keeps its mode; a new one gets what the umask allows."""
     p = Path(path)
     _refuse_stale(p)
     p.parent.mkdir(parents=True, exist_ok=True)
-    try:  # a rewritten file keeps its mode; a new one gets what the umask allows
-        mode = stat.S_IMODE(p.stat().st_mode)
-    except OSError:
-        umask = os.umask(0)
-        os.umask(umask)
-        mode = 0o666 & ~umask
-    fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=".tmp-")  # created 0600 whatever the umask
+    fd, tmp = _temp_beside(p)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
         try:
-            os.chmod(tmp, mode)
+            os.chmod(tmp, stat.S_IMODE(p.stat().st_mode))
         except OSError:
-            pass  # a file system without modes: the content still lands
+            pass  # no earlier file (or a file system without modes): the new file's own mode stands
         os.replace(tmp, p)
     except BaseException:
         try:
@@ -357,8 +366,9 @@ def pick_named(name: str, folders: list[Path]) -> list[Path]:
     return exact or [p for p in folders if want in p.name.lower()]
 
 
-def _names(folders: list[Path]) -> str:
-    return ", ".join(p.name for p in folders)
+def _names(folders: list[Path], limit: int = 6) -> str:
+    more = f" and {len(folders) - limit} more" if len(folders) > limit else ""
+    return ", ".join(p.name for p in folders[:limit]) + more
 
 
 def locate_project(explicit: str | None = None, brain_root: Path | None = None) -> tuple[Path | None, str]:

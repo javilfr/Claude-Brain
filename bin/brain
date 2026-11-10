@@ -12,7 +12,8 @@ sys.dont_write_bytecode = True
 from engine import MODULES  # noqa: E402
 
 
-def main(argv=None) -> int:
+def build():
+    """(parser, its sub-commands, the modules that failed to load)."""
     parser = argparse.ArgumentParser(prog="brain", description="Claude Brain engine")
     sub = parser.add_subparsers(dest="command")
     broken = []
@@ -23,6 +24,13 @@ def main(argv=None) -> int:
             importlib.import_module(f"engine.{name}").register(sub)
         except Exception as e:
             broken.append(f"{name} ({type(e).__name__}: {str(e)[:60]})")
+    return parser, sub, broken
+
+
+def main(argv=None, tree=None) -> int:
+    """Run one command. ``tree`` is a result of ``build()`` to reuse, for a
+    caller that runs many commands in one process (the test suite)."""
+    parser, sub, broken = tree or build()
     wanted = (argv if argv is not None else sys.argv[1:])[:1]
     if broken and wanted and not wanted[0].startswith("-") and wanted[0] not in sub.choices:
         # A command that is missing while a module failed to load is that

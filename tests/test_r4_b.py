@@ -26,16 +26,18 @@ sys.path.insert(0, str(ROOT))
 from engine import budget, cache, common as c, contract, detect, state  # noqa: E402
 
 _CLI = None
+_TREE = None
 
 
 def cli():
     """bin/brain loaded once as a module, so commands run in this process."""
-    global _CLI
+    global _CLI, _TREE
     if _CLI is None:
         loader = importlib.machinery.SourceFileLoader("brain_cli_r4b", str(ROOT / "bin" / "brain"))
         spec = importlib.util.spec_from_loader("brain_cli_r4b", loader)
         _CLI = importlib.util.module_from_spec(spec)
         loader.exec_module(_CLI)
+        _TREE = _CLI.build()  # the command tree is built once, not once per command
     return _CLI
 
 
@@ -103,7 +105,7 @@ class Base(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
             try:
-                code = cli().main([str(a) for a in argv])
+                code = cli().main([str(a) for a in argv], tree=_TREE)
             except SystemExit as e:  # argparse's own exit on a bad command line
                 code = e.code if isinstance(e.code, int) else 1
         return code, out.getvalue() + err.getvalue()
@@ -571,6 +573,11 @@ class ResolverTests(Base):
         self.assertEqual(code, 1, out)
         self.assertIn("newapp", out)
         self.assertIn("not a managed project", out)
+        for i in range(12):  # a parent folder full of repositories must not become a paragraph
+            git_repo(self.ws / f"repo-{i:02d}")
+        code, out = self.run_cli("status")
+        self.assertLess(len(out), 300, out)
+        self.assertIn("more", out)
 
 
 class StaleBrainTests(Base):
