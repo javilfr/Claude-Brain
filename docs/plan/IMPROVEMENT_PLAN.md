@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 230 from 13 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, redteam, research-platform, templates-b). Decisions: 194 do, 3 do in part, 0 reproduce first, 33 later.
+Findings in: 266 from 14 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, redteam, research-platform, templates-a, templates-b). Decisions: 228 do, 3 do in part, 1 reproduce first, 34 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -324,7 +324,11 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 | e2e-trial-07 | should-fix | M | do | Settling a hire nobody worked records a pass or fail for the template, and a failed settle is final but prints as if it had been run again |  |
 | instructions-09 | should-fix | S | do | A brief that is written but never delegated is settled by `close` as a failed hire against its template |  |
 | ml-planning-07 | should-fix | S | do | Running the test suite beside a managed project writes fake hire contracts into that project and fails from the second run on |  |
+| templates-a-02 | should-fix | S | do | Selection set has 6 Spanish requests in 200, so the floor test cannot see that Spanish requests select much worse (all 50 templates' keywords) |  |
+| templates-a-03 | should-fix | S | do | docs-snapshotter, option-comparer, deep-researcher, competitor-teardown, claude-product-answerer, dataset-source-finder, source-harvester: the brief tells an agent with no shell that a command 'passes'; and a … |  |
+| templates-a-30 | should-fix | S | do | tests/test_hr.py (found while testing the rack patch): one test writes eight contracts into the project beside the brain and then fails on every later run |  |
 | templates-b-02 | should-fix | M | do | Spanish requests reach the right template 40% of the time against 74% in English, and the golden set never tests it |  |
+| templates-b-05 | should-fix | S | do | All 18 templates on agents with no shell tell the helper that a command 'passes' (11 in these groups) |  |
 | templates-b-06 | should-fix | S | do | Write-capable templates that fetch pages or read outside material never get the outside-content line |  |
 | templates-b-07 | should-fix | S | do | With no check command the brief throws away the template's own done check |  |
 | e2e-trial-12 | minor | S | do | The tickets file has two undocumented shapes: `hr staff` ignores `check` and reports "no acceptance command" |  |
@@ -334,6 +338,10 @@ Owns: `engine/hr.py`, `hr/GUIDELINES.md`, `hr/template.schema.json`, `evals/hr_g
 | templates-b-21 | minor | S | do | 38 of 200 method lines carry no reason, and the audit does not look |  |
 | e2e-trial-19 | idea | S | do | Idea: show what a template adds to the done condition before the lead delegates |  |
 | ml-planning-15 | idea | L | later | Idea: make the HR contract the unit of learning for model choice, calibration and drift | a redesign of what the learners learn from; the first step (sealed hires feed the model choice) is done under ml-planning-02 |
+| templates-a-32 | idea | S | do | Idea: an audit rule for methods the base agent's tools cannot carry out |  |
+| templates-a-33 | idea | S | do | Idea: record whether the lead kept or overrode the selected template, so selection is measured by use |  |
+| templates-a-34 | idea | M | do | Idea: match keyword phrases as phrases, and stem Spanish gender and verb forms |  |
+| templates-a-36 | idea | S | do | Idea: let the brief's return block win over the agent file's fixed return order |  |
 
 ### Package J: The 100 templates (CB-221)
 
@@ -342,23 +350,51 @@ Owns: `hr/rack`. New tests go in `tests/test_r4_j.py`.
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
 | templates-b-01 | blocking | S | do | release-to-main-engineer: the template has a helper push to main by hand, outside `brain release` |  |
+| templates-a-01 | should-fix | S | do | Rack-wide (44 templates, 28 of them in these five groups): keyword tuning copied words out of the tuning requests, and those words now take other requests |  |
+| templates-a-04 | should-fix | S | do | deep-researcher: the memo has three possible homes, the link check needs a shell, and 'Investiga a fondo …' selects nothing |  |
+| templates-a-05 | should-fix | S | do | dataset-source-finder: asks a researcher to profile a sample (date range, missing values), which its tools cannot do |  |
+| templates-a-06 | should-fix | S | do | api-live-prober: reads provider pages with a shell only, gets no outside-content line, and is sized S |  |
+| templates-a-07 | should-fix | S | do | minecraft-structure-builder: the first two method lines are research, on an agent with no web tools (pair with feasibility-reframer: keep both, hand over the note) |  |
+| templates-a-08 | should-fix | S | do | api-integration-builder: told to read the provider's current docs with no web tool; near-duplicate of data-pipeline-builder (keep both, sharpen) |  |
+| templates-a-09 | should-fix | S | do | repo-cartographer: Spanish keywords leak 'qué', 'este', 'está' and take unrelated Spanish requests; S is too small for a run of build and tests |  |
+| templates-a-10 | should-fix | S | do | back-translation-checker: 'check' counted ten times takes release-check requests; the MQM penalty has no weights and 'pass' has no meaning |  |
+| templates-a-11 | should-fix | S | do | es-original-writer and es-en-translator (pair: keep both, sharpen): 'write … in Spanish' goes to the translator; the writer's done_check names no tool or word list |  |
+| templates-a-12 | should-fix | S | do | design-brief-author: 'que se vea mejor' takes Spanish comparison requests; one method line has no reason; 'real references' with no way to browse |  |
+| templates-a-14 | should-fix | S | do | web-app-scaffolder, content-site-builder, bilingual-site-publisher (trio: keep all, sharpen): 'website' sends a new-site request to the docs-site template; 'new project' sits in three templates |  |
 | templates-b-03 | should-fix | M | do | Keywords made of function words and everyday verbs put a wrong template first on 19 of 40 plain requests (27 templates) |  |
 | templates-b-04 | should-fix | S | do | coverage-analyst, e2e-test-author, acceptance-test-designer: mutation edits to app code with no restore, and a done check that cannot see a mutant left in |  |
-| templates-b-05 | should-fix | S | do | All 18 templates on agents with no shell tell the helper that a command 'passes' (11 in these groups) |  |
 | templates-b-08 | should-fix | S | do | migration-planner: the method needs the running system, the base agent has no shell |  |
 | templates-b-09 | should-fix | S | do | session-handover-writer: an Opus writer is hired to do by hand what `brain handover` already does |  |
 | templates-b-10 | should-fix | S | do | canonical-facts-keeper, needs-you-composer, owner-computer-guide: script work and 150-word notes run on the Opus writer |  |
 | templates-b-11 | should-fix | S | do | premortem-redteam: 'three causes' against the agent file's 'about five', and generic keywords that hire Fable for ordinary requests |  |
 | templates-b-12 | should-fix | S | do | security-reviewer: the done check is met after three paths while the method asks for every input and all ten categories |  |
 | templates-b-13 | should-fix | S | do | agent-spec-writer: the done check requires evaluations the helper has no means to run |  |
+| templates-a-13 | minor | S | do | name-and-copy-options: 'copy' counted six times takes requests about copying things |  |
+| templates-a-15 | minor | S | do | data-pipeline-builder and routine-builder (pair: keep both, sharpen): 'every night' takes a scheduling request |  |
+| templates-a-16 | minor | S | do | ml-experiment-runner: 'tell apart' and 'which method wins' take requests that only say 'tell' or 'which' |  |
+| templates-a-17 | minor | S | do | diagram-maker and chart-maker (pair: keep both, sharpen): each holds the other's words, and 'draw' is missing |  |
+| templates-a-18 | minor | S | do | history-digger: its method runs `brain recall`, which writes a log line per query into the project while the scope says read-only (pair with rollback-restorer: keep) |  |
+| templates-a-19 | minor | S | do | cli-script-builder: one method line is four unrelated orders with no reason; 'command', 'tool', 'folder', 'automate' take other requests |  |
+| templates-a-20 | minor | S | do | ui-string-localiser: 'German' appears in three keywords and no keyword says 'app en inglés'; the scope does not say who translates |  |
+| templates-a-21 | minor | S | do | source-harvester: the keyword 'PDFs' does not match 'PDF', so the Spanish request finds nothing |  |
+| templates-a-22 | minor | S | do | copy-editor: tuned keywords 'email', 'rewrite' pull writing requests; no Spanish form he would dictate |  |
+| templates-a-23 | minor | S | do | pwa-offline-engineer: the method tells a helper to 'deploy B' |  |
+| templates-a-24 | minor | S | do | learning-app-builder and voice-matcher: both rely on 'a fresh reader' that a helper cannot hire |  |
+| templates-a-25 | minor | S | do | phone-first-ui-builder: a method line with no reason, a keyword nobody says ('390 px'), and two values with no listed source |  |
+| templates-a-26 | minor | S | do | audio-lesson-producer: 'the provider's current pricing' with no way to read it |  |
+| templates-a-27 | minor | S | do | motion-builder: a reason that points at the research memo instead of the world |  |
+| templates-a-28 | minor | S | do | schema-migration-engineer, api-live-prober, deep-researcher, competitor-teardown, history-digger, dataset-source-finder, source-harvester: a third pitfall that no brief ever shows |  |
+| templates-a-29 | minor | S | check | design-critic (with repo-cartographer and api-live-prober above): size S is below every helper the brain has measured | low confidence: reproduce first, fix only if it reproduces |
 | templates-b-14 | minor | S | do | batch-article-rewriter, requirement-verifier, code-reviewer: the return asks for a full table inside a 200-word cap |  |
 | templates-b-15 | minor | S | do | Duplicate pair legal-research-analyst / legal-citation-verifier: keep both, separate the keywords |  |
 | templates-b-16 | minor | S | do | Three templates compare options and recommend one: architecture-decider, option-comparer, strategy-memo-writer |  |
 | templates-b-17 | minor | S | do | Keyword-overlap pairs: keep every template, sharpen the words (six pairs) |  |
 | templates-b-19 | minor | S | do | rollback-restorer is marked one-way-door although its own method makes the work undoable |  |
-| templates-b-22 | idea | M | later | Idea: the scout has no template, so bulk reading is hired at Opus prices | an idea outside this programme's bar; kept for the next one |
-| templates-b-23 | idea | S | later | Idea: templates that wrap a brain command should name the command | an idea outside this programme's bar; kept for the next one |
-| templates-b-24 | idea | M | later | Idea: trial the cheaper tier for mechanical read-only reviews (rubric-mapper, accessibility-auditor, secret-scanner) | an idea outside this programme's bar; kept for the next one |
+| templates-a-31 | idea | M | later | Idea: history-digger on the scout agent, as a paired trial | moving a template to the cheapest agent needs a paired trial first (I-16) |
+| templates-a-35 | idea | M | later | Idea: transcript-cleaner and copy-editor at the Sonnet price, as a paired trial | a cheaper model for two writing templates needs a paired trial first (I-16) |
+| templates-b-22 | idea | M | later | Idea: the scout has no template, so bulk reading is hired at Opus prices | the scout stays available to the lead directly; giving it templates needs a paired trial first (I-16) |
+| templates-b-23 | idea | S | do | Idea: templates that wrap a brain command should name the command |  |
+| templates-b-24 | idea | M | later | Idea: trial the cheaper tier for mechanical read-only reviews (rubric-mapper, accessibility-auditor, secret-scanner) | needs a paired trial first (I-16) |
 
 ### Package K: Instruction surface (CB-222)
 

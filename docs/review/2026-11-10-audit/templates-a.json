@@ -1,0 +1,541 @@
+{
+ "summary": "I read all 50 templates in build, data, design, discovery and language (every field), the guidelines, schema, method memo and six agent files, and tested selection with the engine's own `select` on the 200 labelled requests plus 150 requests I wrote (50 Spanish, 50 English, and a 50-row validation set written before any change). The template bodies are mostly sound: 11 need nothing, and the defects in the other 39 are of four kinds: (1) keywords copied from the tuning requests that now take other requests, and almost no Spanish verb forms, so Spanish requests pick the right template first 31 times in 50 against 78 in 100 for English held-out; (2) methods the base agent's tools cannot carry out (a researcher told to run a check or profile a file, builders and writers told to read current docs or prices, helpers told to use 'a fresh reader'); (3) a few undefined checks (MQM penalty with no weights, a spell-check with no tool, a memo with three possible homes); (4) small wording slips. I built every replacement in a scratch copy: `brain hr audit` prints 'rack is sound', all 415 tests pass, tuning half stays 100/100, held-out goes 78 to 81 top-1, my Spanish set 31 to 46 of 50, the validation set 36 to 44 of 50, with no top-1 loss anywhere. Three patch files that apply cleanly are in the scratchpad (paths in data). No pair needs merging; ten pairs need sharper keywords.",
+ "strengths": [
+  "Every one of the 50 templates has a done_check that can fail, a real Default/Instead drift and a fence that says report, do not fix; I found no persona wording and no token numbers, and a script check of all 136 source entries found every cited file, section and item id present.",
+  "Method lines carry traps a fresh model would miss, with the reason beside them: EXIF orientation and GPS stripping, formulas that hold no value until recalculated, taxonomic backbone keys instead of name strings, seeded fixed-step replay tests, measuring getBoundingClientRect before and after, expand-then-contract migrations. Keep these when editing.",
+  "Selection is honest about its limits: the held-out floor test, the docstring saying the tuned half proves nothing, the 'also considered' and 'closest by wording' lines. A wrong pick is visible to the lead, so keyword fixes can be measured instead of argued.",
+  "Secrets and owner-only steps are handled the same way everywhere: keys by variable name only, 'keys redacted', 'the key already stored in settings', accounts and sign-ups become NEEDS_YOU items while the rest continues.",
+  "Templates that spend money or decide taste stop first (one audio sample and a cost estimate, a numbered menu of rendered options, a feasibility note before any Minecraft file), which matches how the owner works."
+ ],
+ "findings": [
+  {
+   "title": "Rack-wide (44 templates, 28 of them in these five groups): keyword tuning copied words out of the tuning requests, and those words now take other requests",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/build.jsonl",
+    "hr/rack/data.jsonl",
+    "hr/rack/design.jsonl",
+    "hr/rack/discovery.jsonl",
+    "hr/rack/language.jsonl",
+    "hr/GUIDELINES.md"
+   ],
+   "evidence": "Script comparing `git show 8afc609:hr/rack/*.jsonl` (first full rack) with HEAD: 'templates with keywords added after the first full rack: 44 | keywords added: 129 | verbatim in that template's dev request: 75 | verbatim in its held-out request: 6' (design-system-builder 'colours', 'shared styles'; option-comparer 'which one'; code-reviewer 'branch', 'bugs', 'review this branch'). Example: tuning row 'teach a computer to tell apart cats and dogs and see which method wins' and ml-experiment-runner keywords 'teach a computer', 'tell apart', 'which method wins'. Same engine, rack at 8afc609: tuned half top-1 63, held-out 73, my 50 Spanish requests 30. Rack now: 100, 78, 31. So tuning added 37 points where it was fitted and 5 where it was not (3 held-out rows share added keywords). Because `_doc` (engine/hr.py:332) splits keywords into single words counted three times, the copied phrases leak filler words. Observed with hr.select on the live rack: 'check the app before we publish' -> back-translation-checker 0.90 (check x10); 'qué es mejor, Supabase o Firebase' -> design-brief-author (mejor x4, from 'que se vea mejor'); 'corrígeme las faltas de este texto' -> repo-cartographer (este x3, from 'qué hace este repo'); 'build me a website for my restaurant' -> content-site-builder, web-app-scaffolder absent; held-out 'could mean two things, tell me which and ask' -> ml-experiment-runner; held-out 'run the backup every night on its own' -> data-pipeline-builder; held-out 'want a copy of this app for a different subject' -> name-and-copy-options (copy x6).",
+   "proposed_fix": "Apply the keyword lines of /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/rack_templates.diff (`git apply --check` passes). Templates with their own finding below carry their list there. The other eight:\nrefactor-engineer: [\"refactor\",\"clean up code\",\"tidy up\",\"simplify\",\"rename\",\"split file\",\"duplication\",\"restructure\",\"extract function\",\"refactorizar\",\"limpiar código\",\"reorganizar\",\"ordenar el código\",\"código repetido\"]\nexploratory-analyst: [\"analyse\",\"analysis\",\"CSV\",\"dataset\",\"patterns\",\"outliers\",\"stands out\",\"file of numbers\",\"interesting\",\"analizar datos\",\"analiza\",\"analízame\",\"tendencias\",\"resumen de datos\"]\nstatistical-tester: [\"significant\",\"significance\",\"A/B\",\"compare groups\",\"correlation\",\"experiment\",\"p-value\",\"prueba estadística\",\"significativo\",\"comparar grupos\",\"casualidad\",\"luck\",\"by chance\",\"really work\"]\ndesign-system-builder: [\"design system\",\"design tokens\",\"component library\",\"consistent styles\",\"shared styles\",\"CSS variables\",\"colours\",\"sizes\",\"sistema de diseño\",\"componentes\",\"estilos coherentes\",\"variables CSS\",\"colores\",\"tamaños\"]\nimage-pipeline-engineer: [\"photos\",\"images\",\"upload photos\",\"thumbnails\",\"HEIC\",\"EXIF\",\"orientation\",\"rotated\",\"sideways\",\"pictures\",\"fotos\",\"miniaturas\",\"foto girada\",\"subir fotos\"]\ndocs-snapshotter: [\"docs\",\"documentation\",\"official docs\",\"current version\",\"breaking change\",\"deprecated\",\"changelog\",\"latest\",\"newest\",\"how to call\",\"documentación\",\"versión actual\",\"cambios incompatibles\"]\noption-comparer: [\"compare\",\"comparison\",\"which is better\",\"which one\",\"pros and cons\",\"alternatives\",\"should we use\",\"pricing\",\"both sides\",\"comparar\",\"compara\",\"cuál es mejor\",\"ventajas y desventajas\",\"alternativas\"]\ntranscript-cleaner: [\"dictated\",\"dictation\",\"voice note\",\"voice message\",\"transcript\",\"speech to text\",\"clean up\",\"talking\",\"normal text\",\"dictado\",\"nota de voz\",\"transcripción\",\"pásalo a limpio\",\"pasar a limpio\"]\nAdd to hr/GUIDELINES.md under 'Changing the rack': \"Keywords are the words a request of this kind would use, in English and Spanish. A keyword is never copied from a request in `evals/hr_golden.jsonl`: that raises the tuned half and takes requests from other templates. After a keyword change the tuned half may fall; the held-out halves may not.\"",
+   "acceptance": "In a copy with the patch: `python3 bin/brain hr audit` prints 'rack is sound'; `python3 -m unittest discover -s tests -t .` passes (415 tests, measured); selection measured with work/measure.py: tuned half 100/100, held-out top-1 81 (was 78) and top-3 88 (was 86), no request loses its top-1 in any of the five sets. `python3 bin/brain hr rack --search \"check the app before we publish\"` starts with requirement-verifier. I saw the held-out misses while working, so 81 is not a clean held-out figure; the validation set in the next finding is.",
+   "effort": "S",
+   "confidence": "high",
+   "repro": "python3 /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/measure.py (reads the live repo and the patched copy in layout4/brain)",
+   "id": "templates-a-01"
+  },
+  {
+   "title": "Selection set has 6 Spanish requests in 200, so the floor test cannot see that Spanish requests select much worse (all 50 templates' keywords)",
+   "severity": "should-fix",
+   "kind": "test-gap",
+   "files": [
+    "evals/hr_golden.jsonl",
+    "tests/test_hr.py",
+    "hr/GUIDELINES.md"
+   ],
+   "evidence": "Script over evals/hr_golden.jsonl: '200 rows; 6 look Spanish' (3 tuned, 3 held-out, all for three language templates). My 50 dictated Spanish requests, one per template (work/probes_es.json), on the live rack: top-1 31, top-3 35, no template at all for 9; English held-out is 78 and 86 of 100. Validation set written before any change (work/probes_val.json): Spanish 14 of 25 top-1, English 22 of 25. Cause: Spanish keywords are infinitives ('investigar', 'corregir', 'comparar') while he dictates 'investiga', 'corrígeme', 'compara', and `_stem` (engine/hr.py:319) only strips English endings. 'investiga a fondo si el ayuno intermitente funciona' returns no template although 'Investiga …' and 'A fondo: …' are the research skill's own trigger phrases. I also tested a fuller stop-word list: Spanish only, held-out 78 -> 77 and Spanish 31 -> 30; with English added, tuned half 100 -> 88 and held-out 78 -> 70. So stop-words are not the fix; vocabulary is.",
+   "proposed_fix": "1. Add rows to evals/hr_golden.jsonl in the existing shape: the 50 rows of work/probes_es.json as split \"dev-es\" (the keyword patch was tuned against them), and the 50 rows of work/probes_val.json as split \"heldout-2\" (never tuned on). 2. tests/test_hr.py, a second floor test: on \"heldout-2\" top-1 >= 0.84 and top-3 >= 0.86, and on its 25 Spanish rows top-1 >= 0.72 (measured after the keyword patch: 44/50, 45/50 and 20/25; same small margin as the existing test). 3. hr/GUIDELINES.md, 'keywords' row: \"retrieval terms in English and Spanish; Spanish verbs in the form he dictates (traduce, corrige, investiga) beside the infinitive, because the matcher does not conjugate\". Known gaps left for that split, seen only in validation misses and deliberately not patched: 'descentrado', 'recoge', 'columna', 'significativa', and adjective gender ('moderna' does not match 'moderno').",
+   "acceptance": "`python3 -m unittest tests.test_hr` passes with the new test; on the live rack before the keyword patch the same test fails (36/50 = 0.72 top-1), which shows it can fail.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-02"
+  },
+  {
+   "title": "docs-snapshotter, option-comparer, deep-researcher, competitor-teardown, claude-product-answerer, dataset-source-finder, source-harvester: the brief tells an agent with no shell that a command 'passes'; and a hire with no command loses the template's inspections",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "engine/hr.py",
+    "tests/test_hr.py",
+    ".claude/agents/researcher.md"
+   ],
+   "evidence": ".claude/agents/researcher.md:4 'tools: Read, Grep, Glob, WebSearch, WebFetch, Write'. All 18 templates on a no-shell base agent have '{check}' in done_check (7 in these groups). Rendered with hr.compose_brief for deep-researcher: '<done_when>… a link check over the memo passes; the memo ends with END OF MEMO; `python3 tools/check_memo.py research/memo.md` passes.</done_when>'. The plain researcher brief gets '`x` exits 0.'. `hire_or_not` refuses a hire with no check, so every research hire carries a command the helper cannot run. Second case, design-critic rendered with no check: '<done_when>The outcome in the task is met, and your return names the evidence that shows it (a file and line, an output, a measurement).</done_when>': its own 'Every rubric criterion has a score and a cited screenshot; …' is gone, although 8 templates list 'the acceptance command, if any' under needs (design-critic, diagram-maker, minecraft-structure-builder here).",
+   "proposed_fix": "engine/hr.py, in the file /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/engine_hr.diff (applies cleanly): add `NO_SHELL = {\"scout\", \"researcher\", \"redteam\"}`; in compose_brief split the template's done_check on ';' and keep the parts without '{check}' as its inspections. With a check and a no-shell agent render the inspections plus \"After you return the lead runs `<check>`; you have no shell, so write the result to pass it.\" With no check render the inspections plus \"Your return names the evidence for each (a file and line, an output, a measurement).\" Template text stays as it is. Cost measured: the median brief grows from 326.5 to 338.5 words with this and the template patch together.",
+   "acceptance": "New tests: a deep-researcher brief with a check contains 'the lead runs' and not 'passes.'; a design-critic brief with no check contains 'Every rubric criterion has a score'. Measured in the scratch copy: 415 tests pass with the change, and `lint_brief` returns [] for every template.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-03"
+  },
+  {
+   "title": "deep-researcher: the memo has three possible homes, the link check needs a shell, and 'Investiga a fondo …' selects nothing",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/discovery.jsonl"
+   ],
+   "evidence": "return_contract: 'At most 400 words; claim table and memo in the notes file.' needs: 'the memo path'. researcher.md: 'write the full memo to the file path given in the brief (or `research/<topic>.md` in the project if none is given)'. The brief then adds 'Longer notes go in .brain/log/hr/<id>-notes.md', so a helper that follows the template puts the memo in a log folder, where method line 1 ('Search existing memos first') and playbooks/knowledge.md know-reuse-memos ('save each research result as a memo a later session can reuse') will not find it. done_check: 'a link check over the memo passes' (no Bash). Selection on the live rack: 'investiga a fondo si el ayuno intermitente funciona' -> [] (only 'fondo' matches; the keyword is 'investigar').",
+   "proposed_fix": "done_check: \"Every key claim has a fetched URL and quoted passage in the claim table; every cited URL was fetched this session and resolved; the memo ends with END OF MEMO; {check} passes.\"\nreturn_contract: \"First line: the answer with confidence. Then three to five findings with sources, contrary evidence, unknowns, what could not be reached, and the memo's path. At most 400 words; the memo with its claim table goes at the memo path the brief names. Tag claims sourced, secondary or estimate.\"\nkeywords: [\"research\",\"go deep\",\"evidence\",\"sources\",\"studies\",\"is it true\",\"dig into\",\"real studies\",\"investigar\",\"investiga\",\"averigua\",\"a fondo\",\"fuentes\",\"evidencia\"]\npitfalls (the third was never rendered): [\"Fabricated or non-resolving URLs.\",\"Stale data presented as current because the source date was not recorded.\"]",
+   "acceptance": "`python3 bin/brain hr rack --search \"investiga a fondo si el ayuno intermitente funciona\"` starts with deep-researcher (measured in the patched copy); `brain hr audit` prints 'rack is sound' (stable body 227 words).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-04"
+  },
+  {
+   "title": "dataset-source-finder: asks a researcher to profile a sample (date range, missing values), which its tools cannot do",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/discovery.jsonl"
+   ],
+   "evidence": "method[0]: 'Fetch a small real sample from the top two candidates and record fields, units, date range and missing values, so the ranking rests on data seen, not descriptions.' done_check: 'The top two candidates each have a fetched sample with URL, pull date and field profile'. scope_rule: 'Owns the source memo and small sample files.' The base agent has WebFetch and no Bash. I ran WebFetch on a public 8.8 MB CSV asking for the header, three rows, the row count and the count of empty iata_code values. It returned the header and three rows, then: 'I can't determine the total number of data rows or the number with an empty `iata_code` value. The content ends with \"[Content truncated due to length...]\"' and the tool note 'this page's text is 8808616 characters long and the answer above covers only characters 0 to 100000'. So the first rows can be seen; a profile cannot be computed, and a byte-exact sample file cannot be saved.",
+   "proposed_fix": "method[0]: \"Fetch the first rows of a real file or response from the top two candidates and record the fields and units seen, so the ranking rests on data seen, not descriptions.\"\nscope_rule: \"Owns the source memo. No downloads, accounts or paid access; full-file profiling is named as the next step; a key or signup becomes a NEEDS_YOU item.\"\ndone_check: \"The top two candidates each have first rows fetched this session with URL, pull date and fields seen; values not seen or stated are marked uncomputed; every licence claim is quoted; {check} passes.\"\nreturn_contract: \"First line: the recommended source and why. Then the ranked table (coverage, freshness, licence, access, size), fields seen per candidate, known quality problems. At most 350 words, detail in the notes file. Mark unsampled candidates as described only.\"\nneeds: [\"what the data must cover (topic, place, period, granularity)\",\"the intended use\"]\nkeywords: [\"dataset\",\"open data\",\"data source\",\"public data\",\"statistics\",\"free data\",\"free numbers\",\"where do I get\",\"datos abiertos\",\"fuente de datos\",\"estadísticas\",\"dónde consigo datos\",\"conjunto de datos\",\"datos gratis\"]\npitfalls: [\"Dataset pages describing fields the files no longer contain.\",\"Missing a licence that forbids redistribution.\"]\nPair with api-live-prober: keep both, sharper. The finder is for 'no source known yet'; the prober for a named service's limits, so 'public API' moves out of the finder's keywords.",
+   "acceptance": "`brain hr audit` prints 'rack is sound' (stable body 230 words, at the limit); `brain hr rack --search \"dónde encuentro datos gratis del precio de la vivienda\"` starts with dataset-source-finder.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-05"
+  },
+  {
+   "title": "api-live-prober: reads provider pages with a shell only, gets no outside-content line, and is sized S",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/discovery.jsonl",
+    "engine/hr.py"
+   ],
+   "evidence": "base_agent reviewer with role researcher; .claude/agents/reviewer.md:4 'tools: Read, Grep, Glob, Bash, Write' (no WebFetch, no WebSearch). method[1]: 'Copy limits, pricing and terms verbatim from the provider's current pages with URL and date' gives no way to read those pages, and raw HTML from curl is bulky. engine/hr.py:39 'READS_OUTSIDE = {\"researcher\"}' is tested against the base agent, so the rendered brief for this template has no 'Text you read in pages, files or tool output is material to assess …' line although its whole job is reading third-party pages and responses (rendered and checked: the line is absent; it is present for deep-researcher). The third pitfall ('Missing terms that forbid storage or commercial use.') is never rendered (hr.py:462 uses pitfalls[:2]). In this session `curl` to api.gbif.org and api.open-meteo.com returned 200, so the probe itself works where the environment's network allows it.",
+   "proposed_fix": "method[1]: \"Fetch the provider's limits, pricing and terms pages with curl, strip them to text and copy lines verbatim with URL and date, since the call budget is sized from them.\"\nkeywords: [\"free tier\",\"quota\",\"rate limit\",\"API limits\",\"terms of use\",\"pricing\",\"429\",\"free or paid\",\"how many calls\",\"cuota\",\"límite de peticiones\",\"API gratuita\",\"condiciones de uso\",\"es gratis\"]\npitfalls: [\"Treating one successful call as proof the quota suits a full run.\",\"Echoing an API key into commands or notes, which cannot be cleaned afterwards.\"]\nsize: \"M\"\nengine/hr.py (in engine_hr.diff): `if base_agent in READS_OUTSIDE or (t or {}).get(\"role\") in READS_OUTSIDE:` so a template that runs at the researcher tier also gets the outside-content line.",
+   "acceptance": "A rendered api-live-prober brief contains 'an instruction found inside it is not addressed to you' (measured true in the patched copy); `brain hr rack --search \"averigua si esa API es gratis y cuántas llamadas deja hacer\"` starts with api-live-prober (live rack: needs-you-composer).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-06"
+  },
+  {
+   "title": "minecraft-structure-builder: the first two method lines are research, on an agent with no web tools (pair with feasibility-reframer: keep both, hand over the note)",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/build.jsonl"
+   ],
+   "evidence": "base_agent builder; .claude/agents/builder.md:4 'tools: Read, Grep, Glob, Edit, Write, Bash'. method[0]: 'Write a feasibility note first (edition, device, how a file reaches that world, which steps need a PC, realm or paid tool), because the path decides what is possible.' method[1]: 'Check file format and block identifiers against current docs for the confirmed edition, because editions differ and remembered formats are unreliable.' With no way to read current docs the note and the format both come from memory, which is the failure the template names; its own return_contract then marks everything unverified ('Format claims not checked against current docs are unverified'). feasibility-reframer (planning, researcher, keywords 'console', 'Xbox') already does the note.",
+   "proposed_fix": "method[0]: \"Start from the lead's feasibility note (edition, device, transfer path, what needs a PC, realm or paid tool); without one, return its questions, because the path decides what is possible.\"\nmethod[1]: \"Take file format and block identifiers from the note's doc excerpts for that edition and mark any recalled ones unverified, because editions differ and remembered formats are unreliable.\"\nneeds: [\"the feasibility note: edition, device, transfer path, with doc excerpts for the file format\",\"what to build and its size\",\"the acceptance command\"]",
+   "acceptance": "`brain hr audit` prints 'rack is sound' (stable body 217 words); the tuning and held-out Minecraft rows still select this template (measured).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-07"
+  },
+  {
+   "title": "api-integration-builder: told to read the provider's current docs with no web tool; near-duplicate of data-pipeline-builder (keep both, sharpen)",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/build.jsonl"
+   ],
+   "evidence": "method[0]: 'Read the provider's current rate-limit and pricing docs and note limits and estimated calls before real calls, because quota errors are the usual failure.' pitfalls[1]: 'Endpoints or response fields recalled from memory instead of the provider's current docs.' return_contract asks for 'provider limits with doc links'. needs lists no docs. The builder has no WebFetch or WebSearch. data-pipeline-builder solves the same problem correctly: its needs include 'the provider and its current limits page'. Duplicate check: three of the four method lines in the two templates are the same practice (limits first; 429 back-off with jitter and Retry-After; disk cache plus schema validation), and both share 'quota' and 'rate limit' keywords with api-live-prober.",
+   "proposed_fix": "method[0]: \"Take limits and prices from the probe table or docs excerpts the lead supplies and write the estimated calls before any real call, because quota errors are the usual failure.\"\npitfalls[1]: \"Endpoints or response fields recalled from memory instead of the supplied excerpts or a recorded real response.\"\nneeds: [\"the provider and endpoints needed\",\"the provider's limits and endpoint excerpts (a docs snapshot or probe table)\",\"whether a key exists and its variable name\",\"the acceptance command\"]\nkeywords: [\"integrate\",\"connect the app\",\"API key\",\"webhook\",\"fallback\",\"external service\",\"third-party service\",\"integración\",\"conecta\",\"conectar\",\"clave API\",\"servicio externo\",\"backup source\",\"runs out\"]\nPair: keep both. The integration builder is the in-app client with a fallback; the pipeline is repeated bulk collection. 'quota' and 'rate limit' stay with api-live-prober only.",
+   "acceptance": "`brain hr rack --search \"conecta la app con el servicio del tiempo y que no se rompa si se acaban las llamadas\"` starts with api-integration-builder (live rack: no template); `brain hr audit` prints 'rack is sound'.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-08"
+  },
+  {
+   "title": "repo-cartographer: Spanish keywords leak 'qué', 'este', 'está' and take unrelated Spanish requests; S is too small for a run of build and tests",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/discovery.jsonl"
+   ],
+   "evidence": "keywords include 'qué hace este repo', 'dónde está', 'build command', 'test command'. Observed on the live rack with the matched words printed: 'corrígeme las faltas de este texto' -> repo-cartographer 0.700 matched {'este': 3}; 'mira este excel y dime qué ves interesante' -> repo-cartographer matched {'qué': 3, 'este': 3}. The earlier trial (docs/review/2026-11-10-audit/e2e-trial.json) saw it chosen for a build ticket ('Add the monthly summary command with unit tests'). size S is 20,000; the method runs the build and the tests and cites a path:line for every claim, and the brain's only two settled hires used 54,000 and 82,000 (stats/ml.json: 's:L': [0.2712, 0.41] on the 200,000 band).",
+   "proposed_fix": "when: \"An unfamiliar or inherited repository must be understood before a change: 'what does this repo do', 'where is X', 'adopt this project', 'how is it built', 'explícame este proyecto'.\"\nkeywords: [\"repo map\",\"codebase\",\"entry point\",\"where is\",\"inherited project\",\"inherited repo\",\"unfamiliar repo\",\"understand the code\",\"explain this project\",\"get my head around\",\"mapa del repo\",\"código heredado\",\"explícame el proyecto\",\"proyecto heredado\"]\nsize: \"M\"",
+   "acceptance": "`brain hr rack --search \"corrígeme las faltas de este texto\"` starts with copy-editor, and 'explícame cómo está montado este proyecto que no conozco' still starts with repo-cartographer (both measured in the patched copy); its tuning and held-out rows keep their top-1.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-09"
+  },
+  {
+   "title": "back-translation-checker: 'check' counted ten times takes release-check requests; the MQM penalty has no weights and 'pass' has no meaning",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/language.jsonl"
+   ],
+   "evidence": "Live rack: 'check the app before we publish' -> back-translation-checker score 0.90, matched {'before': 1, 'publish': 1, 'check': 10}, ahead of requirement-verifier 0.62. The ten come from the name ('Checker', counted twice), the when ('check the translation', 'blind check') and the keywords 'check translation', 'blind check'; 'comprobar' and 'translated' are generic too. done_check: '… an MQM table with penalty per 1,000 words.' return_contract: 'First line: pass, fail or unsure, with Critical and Major counts.' Neither gives weights or a threshold; the method memo (04-domain-methods.md area 16) says 'common weights Minor 1, Major 5, Critical 25 but weights vary by implementation', so two helpers would report different penalties for the same errors.",
+   "proposed_fix": "name: \"Back Translation Verifier\"\nwhen: \"A translation must be verified: verify the translation, does it say the same, blind back-translation, review the Spanish or English version of a text.\"\ndone_check: \"{check} passes; the findings file holds the back-translation, a point-by-point comparison and an MQM table with penalty per 1,000 words at Minor 1, Major 5, Critical 25 unless the brief sets other weights.\"\nreturn_contract: \"First line: pass (no Critical or Major), fail or unsure, with Critical and Major counts and the penalty. Then findings by severity with segment, category and confidence, sample coverage. Under 200 words.\"\nkeywords: [\"back-translation\",\"verify translation\",\"translation review\",\"blind back-translation\",\"fidelity\",\"MQM\",\"retrotraducción\",\"revisar traducción\",\"traducción fiel\",\"fidelidad\",\"dice lo mismo\",\"same meaning\",\"keep the meaning\"]\nThe pass rule (no Critical or Major) is my default, not from a source; the owner or a reviewed session may set another.",
+   "acceptance": "Patched copy: 'check the app before we publish' -> requirement-verifier first; 'verify this translation by translating back', 'someone translated this, did they keep the meaning' and 'comprueba que la traducción dice lo mismo que el original' -> back-translation-checker first (all measured); `brain hr audit` sound (stable body 195 words).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-10"
+  },
+  {
+   "title": "es-original-writer and es-en-translator (pair: keep both, sharpen): 'write … in Spanish' goes to the translator; the writer's done_check names no tool or word list",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/language.jsonl"
+   ],
+   "evidence": "Live rack: 'write the about page in Spanish' -> ['es-en-translator', 'es-original-writer', …]; 'write a blog post in Spanish about the trip' -> []. es-original-writer has no English verb and no imperative among its keywords; five of its fourteen were added in tuning from one request ('escríbeme un correo para el cliente' -> 'escríbeme', 'correo', 'carta', 'cliente', 'mensaje'), and 'texto', 'contenido', 'cliente', 'mensaje' are generic. done_check: '{check} passes; spell-check in the declared locale is clean; length meets the target by script count; a regionalism check finds no forms from another variant.' No spell-checker is named or guaranteed to exist, and the list of forms is left to the helper (es-en-translator does name one: 'ordenador, móvil, coche, vosotros').",
+   "proposed_fix": "es-original-writer done_check: \"{check} passes; length meets the target by script count; a script search for the undeclared variant's forms (for es-ES: computadora, celular, carro) finds none; the spell-checker used is named, or said to be missing.\"\nes-original-writer keywords: [\"write in Spanish\",\"Spanish text\",\"escribe\",\"escribir\",\"escríbeme\",\"redacta\",\"redactar\",\"redáctame\",\"en español\",\"castellano\",\"artículo\",\"redacción\",\"correo\",\"carta\"]\nes-en-translator: no change.",
+   "acceptance": "Patched copy: both requests above start with es-original-writer; 'tradúceme este texto al español de España' starts with es-en-translator (live rack: es-original-writer first); the tuning row 'escríbeme un correo para el cliente' keeps its top-1.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-11"
+  },
+  {
+   "title": "design-brief-author: 'que se vea mejor' takes Spanish comparison requests; one method line has no reason; 'real references' with no way to browse",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/design.jsonl"
+   ],
+   "evidence": "Live rack: 'qué es mejor, Supabase o Firebase' -> design-brief-author 0.700 matched {'mejor': 4}, ahead of option-comparer 0.652. method[3]: 'Set measurable limits: text contrast 4.5:1 (3:1 for large text), reflow at 320 CSS px, phone first at 390 px.' carries no reason. method[1]: 'Name two or three real references and what to take from each, so the target is something the owner can look at.' The base agent is writer (no WebSearch or WebFetch), so a reference is recalled, not checked.",
+   "proposed_fix": "method[1]: \"Name two or three references the owner supplied or can open, and what to take from each; mark any from memory as unchecked, since you cannot browse.\"\nmethod[3]: \"Set limits a build can fail: text contrast 4.5:1 (3:1 for large text), reflow at 320 CSS px, phone first at 390 px.\"\nkeywords: [\"redesign\",\"design brief\",\"new look\",\"look better\",\"premium\",\"modern\",\"visual direction\",\"style guide\",\"rediseño\",\"diseño\",\"bonita\",\"moderna\",\"profesional\",\"elegante\"]",
+   "acceptance": "Patched copy: 'qué es mejor, Supabase o Firebase' starts with option-comparer; `brain hr audit` sound (stable body exactly 230 words, the limit). One honest cost: validation row 'dale a la app un aspecto más moderno' had this template third and now not in the top three, because 'moderna' does not match 'moderno'; it was first for neither rack.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-12"
+  },
+  {
+   "title": "name-and-copy-options: 'copy' counted six times takes requests about copying things",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/design.jsonl"
+   ],
+   "evidence": "Held-out row 'want a copy of this app for a different subject' (expects blueprint-extractor) -> name-and-copy-options first, matched {'copy': 6}: the keyword 'copy', the name 'Name And Copy Options' (counted twice) and 'short copy' in the when. 'rename the variable name everywhere it is used' -> name-and-copy-options second (name x7). 'texto del botón' adds 'texto' x4, which put it second for 'corrígeme las faltas de este texto'.",
+   "proposed_fix": "name: \"Name And Tagline Options\"\nwhen: \"Names, taglines or short interface wording are needed: 'name for', 'tagline', 'button label', 'title ideas', 'what should we call', 'nombre para', 'eslogan', 'lema'.\"\nkeywords: [\"naming\",\"app name\",\"tagline\",\"slogan\",\"headline\",\"button label\",\"microcopy\",\"title ideas\",\"nombre\",\"eslogan\",\"lema\",\"titular\",\"cómo lo llamamos\",\"ponle nombre\"]\nThe id stays the same, so contracts and statistics are untouched.",
+   "acceptance": "Patched copy: the held-out row above no longer returns name-and-copy-options (it returns requirements-extractor, copy-editor, web-app-scaffolder: still a miss for blueprint-extractor, but no longer a naming brief); 'what should I call my app' and 'dame ideas de nombre para la app' keep it first.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-13"
+  },
+  {
+   "title": "web-app-scaffolder, content-site-builder, bilingual-site-publisher (trio: keep all, sharpen): 'website' sends a new-site request to the docs-site template; 'new project' sits in three templates",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "hr/rack/build.jsonl",
+    "hr/rack/language.jsonl"
+   ],
+   "evidence": "Live rack: 'build me a website for my restaurant' -> ['content-site-builder', 'bilingual-site-publisher', 'build-failure-diagnoser'], web-app-scaffolder absent; 'quiero empezar una web nueva desde cero y subirla a internet' -> clean-clone-verifier; validation 'monta una página web sencilla para mi negocio y déjala publicada' -> content-site-builder. 'website' was added to content-site-builder and bilingual-site-publisher in tuning (from 'put all my notes online as a little website' and 'the website in two languages …'); the scaffolder has neither 'website' nor 'desde cero'. 'new project' / 'proyecto nuevo' is a keyword of web-app-scaffolder, project-bootstrapper and requirements-extractor at once. Also web-app-scaffolder method[3]: 'Check packages and config keys against current docs for the installed version' on a builder with no web tools.",
+   "proposed_fix": "web-app-scaffolder method[3]: \"Check packages and config keys against the installed version's own files (types, --help) or a supplied docs snapshot, because generated setups name options that do not exist.\"\nweb-app-scaffolder keywords: [\"new app\",\"web app\",\"website\",\"new website\",\"scaffold\",\"starter\",\"Vite\",\"React\",\"from zero\",\"from scratch\",\"crear app\",\"crear una web\",\"página web\",\"desde cero\"]\ncontent-site-builder keywords: [\"wiki\",\"docs site\",\"static site\",\"markdown\",\"publish pages\",\"documentation site\",\"notes online\",\"web de documentación\",\"publica\",\"publicar páginas\",\"sitio estático\",\"buscador\"]\nbilingual-site-publisher keywords: [\"bilingual site\",\"language toggle\",\"hreflang\",\"two languages\",\"both languages\",\"editions\",\"locale routing\",\"switch language\",\"web bilingüe\",\"dos idiomas\",\"en español y en inglés\",\"versión en inglés\",\"selector de idioma\",\"cambiar de idioma\"]\nbilingual-site-publisher method[3] (it had no reason): \"Remember the visitor's language choice on later visits, because detection that overrides a choice traps visitors in one edition.\"\nThis also takes 'base de conocimiento' out of content-site-builder, where it collided with rag-index-builder and knowledge-base-compiler.",
+   "acceptance": "Patched copy: all three requests above start with web-app-scaffolder; 'publica todos mis apuntes como una página web con buscador' and 'my markdown notes should become a docs site' start with content-site-builder; 'la web tiene que estar en español y en inglés con un botón para cambiar' starts with bilingual-site-publisher (live rack: es-en-translator).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-14"
+  },
+  {
+   "title": "data-pipeline-builder and routine-builder (pair: keep both, sharpen): 'every night' takes a scheduling request",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/data.jsonl"
+   ],
+   "evidence": "Held-out row 'run the backup every night on its own' (expects routine-builder) -> ['data-pipeline-builder', 'routine-builder', 'owner-computer-guide']. 'every night' and 'grab data' were added in tuning from 'every night grab prices from those shops and clean them'; 'cada día' adds 'cada'. 'API quota' and 'rate limit' duplicate api-live-prober.",
+   "proposed_fix": "keywords: [\"pipeline\",\"ETL\",\"harvest\",\"scrape\",\"scraper\",\"ingest\",\"collect data\",\"grab data\",\"clean data\",\"sync from API\",\"descargar datos\",\"recopilar datos\",\"baja los datos\",\"sincronizar\"]",
+   "acceptance": "Patched copy: the held-out row starts with routine-builder; the tuning row 'every night grab prices from those shops and clean them' and 'baja los datos de la web cada noche y guárdalos' still start with data-pipeline-builder.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-15"
+  },
+  {
+   "title": "ml-experiment-runner: 'tell apart' and 'which method wins' take requests that only say 'tell' or 'which'",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/data.jsonl"
+   ],
+   "evidence": "Held-out row 'could mean two things, tell me which and ask' (expects ambiguity-resolver) -> ['ml-experiment-runner'] and nothing else. Both keywords were copied from the tuning request 'teach a computer to tell apart cats and dogs and see which method wins'. Spanish: 'entrena un modelo que distinga fotos de setas' -> image-pipeline-engineer first, because the keyword is 'entrenar'; 'entrena un clasificador con estas fotos y dime qué tal acierta' -> no template.",
+   "proposed_fix": "keywords: [\"train a model\",\"classifier\",\"predict\",\"prediction\",\"fine-tune\",\"accuracy\",\"benchmark\",\"machine learning\",\"teach a computer\",\"entrenar\",\"entrena\",\"modelo\",\"clasificador\",\"aprendizaje automático\"]",
+   "acceptance": "Patched copy: the held-out row returns no template (the lead then sees the closest list, instead of an ML brief); both Spanish requests start with ml-experiment-runner; its tuning and held-out rows keep their top-1.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-16"
+  },
+  {
+   "title": "diagram-maker and chart-maker (pair: keep both, sharpen): each holds the other's words, and 'draw' is missing",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/design.jsonl",
+    "hr/rack/data.jsonl"
+   ],
+   "evidence": "chart-maker keywords include 'diagrama'; diagram-maker's include 'chart of components'; both have 'picture' (added in tuning for two different requests). diagram-maker has no verb at all: 'draw how the pieces of the app fit together' -> [] on the live rack, and held-out 'draw the flow of the whole system' -> ['migration-planner', 'design-system-builder', 'agent-spec-writer'].",
+   "proposed_fix": "diagram-maker keywords: [\"diagram\",\"flowchart\",\"flow diagram\",\"draw\",\"architecture diagram\",\"system map\",\"Mermaid\",\"how it connects\",\"diagrama\",\"esquema\",\"diagrama de flujo\",\"mapa del sistema\",\"dibuja\",\"dibújame\"]\nchart-maker keywords: [\"chart\",\"graph\",\"plot\",\"visualise\",\"bar chart\",\"line chart\",\"figure\",\"figures\",\"picture\",\"dashboard\",\"gráfico\",\"gráfica\",\"visualizar\",\"barras\"]",
+   "acceptance": "Patched copy: both 'draw …' requests start with diagram-maker; 'hazme un diagrama del sistema' returns diagram-maker without chart-maker; 'hazme una gráfica de las ventas por mes' and 'turn these figures into a picture I can show' start with chart-maker. 'draw' also occurs in one held-out row, so that row's gain is not clean evidence.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-17"
+  },
+  {
+   "title": "history-digger: its method runs `brain recall`, which writes a log line per query into the project while the scope says read-only (pair with rollback-restorer: keep)",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/discovery.jsonl"
+   ],
+   "evidence": "method[1]: 'Search brain recall, lessons, project state, decision logs and read-only git log'; method[0] asks for a plan of terms 'with English and Spanish synonyms' and to 'run all of it'. scope_rule: 'Read-only: run searches and read-only git commands, edit and commit nothing.' In a scratch project three `brain recall` calls gave 'wc -l .brain/log/recall.jsonl' = 3, each line like '{\"ids\": [\"rule-say-fallback\", \"own-research-first\", \"own-sample-first\"], \"query_sha\": …, \"session\": <the lead's session id>}'. engine/recall.py:489 calls this 'The injection log: which items were shown for which query … so credit can only go to items that were actually offered'. I did not find the code that reads the log, so the effect on credit is not confirmed; what is confirmed is that the helper writes into the project under the lead's session and that the log then lists items the lead never saw. Keywords 'before', 'previous', 'anterior' overlap rollback-restorer: 'put the previous version back like it was before' -> history-digger first, rollback-restorer second.",
+   "proposed_fix": "method[1]: \"Search lessons, project state, decision logs and read-only git log with Grep, because each holds different traces; leave `brain recall` to the lead, since each call is logged as items shown.\"\nneeds: [\"the owner's words\",\"the project, if known\",\"the brain and project paths\",\"the lead's own `brain recall` output for those words\"]\nkeywords: [\"last time\",\"like last time\",\"like before\",\"earlier work\",\"earlier chats\",\"we already tried\",\"past project\",\"la última vez\",\"la otra vez\",\"como antes\",\"lo que hicimos\",\"otro chat\",\"ya lo probamos\",\"historial\"]\npitfalls: [\"Stopping at the first match that resembles the request.\",\"Presenting a similar project as the one the owner meant.\"]\nPair verdict: keep. When the two tie, the read-only template winning over the one-way-door template is the safe direction, so I did not force rollback-restorer ahead.",
+   "acceptance": "`brain hr audit` sound; held-out row 'we did something similar in another chat, find what we did' starts with history-digger (live rack: competitor-teardown); its tuning row keeps its top-1.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "templates-a-18"
+  },
+  {
+   "title": "cli-script-builder: one method line is four unrelated orders with no reason; 'command', 'tool', 'folder', 'automate' take other requests",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/build.jsonl"
+   ],
+   "evidence": "method[3]: 'Exit non-zero on failure, print a short summary, write large output in parts, and reference binaries by path instead of inlining them.' No reason, and the last two orders are not about a command-line tool. Live rack: 'restructure the project folders so it is tidier' -> cli-script-builder first (matched 'fold' x3 from the tuned keyword 'folder'), refactor-engineer second. 'automate' / 'automatizar' duplicate routine-builder. 'hazme un script que convierta todos los archivos de una carpeta' -> no template.",
+   "proposed_fix": "method[3]: \"Exit non-zero on any failure and print a one-line summary, so a caller that chains steps with && stops at the first broken one.\"\nkeywords: [\"script\",\"CLI\",\"small utility\",\"batch\",\"stdlib\",\"rename files\",\"filenames\",\"convert files\",\"un script\",\"programita\",\"renombrar archivos\",\"utilidad\"]",
+   "acceptance": "Patched copy: the 'restructure …' request starts with refactor-engineer; the Spanish script request starts with cli-script-builder; its tuning and held-out rows keep their top-1.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-19"
+  },
+  {
+   "title": "ui-string-localiser: 'German' appears in three keywords and no keyword says 'app en inglés'; the scope does not say who translates",
+   "severity": "minor",
+   "kind": "gap",
+   "files": [
+    "hr/rack/language.jsonl"
+   ],
+   "evidence": "keywords: '…, German, more languages, another language, app in German, work in German' (all five added in tuning from 'the app should work in German too'). Live rack: 'quiero que la app esté también en inglés' -> ['requirements-extractor', 'es-en-translator', 'bilingual-site-publisher']. scope_rule: 'Owns string tables, the i18n wiring and parity script. Does not redesign screens; an overflow needing layout change is reported with the screenshot.' It is silent on translation, while needs lists 'the glossary' and the return asks for 'untranslated strings'; bilingual-site-publisher says it plainly ('Does not write or translate content'). A Sonnet builder will translate the labels with none of the es-ES rules the translator template carries.",
+   "proposed_fix": "scope_rule: \"Owns string tables, the i18n wiring and parity script. Translates short labels from the glossary for the declared locale; longer copy is listed for the translator. An overflow needing layout change is reported with the screenshot.\"\nkeywords: [\"i18n\",\"localisation\",\"string table\",\"translate UI\",\"translate the app\",\"locale\",\"language switch\",\"another language\",\"more languages\",\"German\",\"traducir la app\",\"app en inglés\",\"idiomas\",\"interfaz\"]",
+   "acceptance": "Patched copy: the Spanish request starts with ui-string-localiser; 'the app should work in German too' and 'add Spanish to the app strings' keep their top-1; `brain hr audit` sound (stable body 195 words).",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-20"
+  },
+  {
+   "title": "source-harvester: the keyword 'PDFs' does not match 'PDF', so the Spanish request finds nothing",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/discovery.jsonl"
+   ],
+   "evidence": "`_stem` (engine/hr.py:319) strips a final 's' only from words longer than four letters, so 'pdfs' stays 'pdfs' and never equals 'pdf'. Live rack: 'léete todos estos PDF y hazme un resumen de cada uno' -> [] (closest: document-producer, which has 'PDF'). Spanish writes the plural as 'los PDF'. 'extract' / 'extraer' also sit in refactor-engineer's vocabulary, and 'sources', 'notes' are shared with deep-researcher and knowledge-base-compiler.",
+   "proposed_fix": "keywords: [\"harvest\",\"collect links\",\"read all\",\"PDF\",\"PDFs\",\"source notes\",\"bulk reading\",\"recopilar\",\"leer todos\",\"léete\",\"resumir fuentes\",\"enlaces\",\"lista de enlaces\"]\npitfalls (the third is covered by the outside-content line and was never rendered): [\"Paraphrase inside quotation marks.\",\"Truncated PDFs noted as complete.\"]",
+   "acceptance": "Patched copy: the Spanish request starts with source-harvester; 'read these twenty PDFs and give me the short version of each' and 'go through these links and make notes for later' keep their top-1.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-21"
+  },
+  {
+   "title": "copy-editor: tuned keywords 'email', 'rewrite' pull writing requests; no Spanish form he would dictate",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/language.jsonl"
+   ],
+   "evidence": "keywords added in tuning from 'make this email sound better, not too long': 'sound better', 'shorter', 'email', 'rewrite'. Live rack: 'write an email to the landlord about the leak' -> copy-editor second (after secret-scanner, on 'leak'); 'rewrite' duplicates batch-article-rewriter, 'revisar' duplicates the code and design review templates. Spanish: 'corrígeme las faltas de este texto' -> ['repo-cartographer', 'name-and-copy-options', 'es-original-writer'], copy-editor fourth with one matched word.",
+   "proposed_fix": "keywords: [\"proofread\",\"tighten\",\"shorter\",\"grammar\",\"spelling\",\"typos\",\"clearer\",\"sound better\",\"corregir\",\"corrige\",\"corrígeme\",\"faltas\",\"ortografía\",\"gramática\"]",
+   "acceptance": "Patched copy: the Spanish request and 'revisa la ortografía y la gramática de este documento' start with copy-editor; 'make this email sound better, not too long' and 'fix the typos and make it flow, same meaning' keep their top-1.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-22"
+  },
+  {
+   "title": "pwa-offline-engineer: the method tells a helper to 'deploy B'",
+   "severity": "minor",
+   "kind": "risk",
+   "files": [
+    "hr/rack/build.jsonl"
+   ],
+   "evidence": "method[1]: 'Prove the update path (open build A, deploy B, reopen, see B's marker), because stale installed copies hide new deploys.' needs: 'the live or preview address'. scope_rule owns 'manifest, service worker, cache and update logic' and says nothing about releasing. CLAUDE.md rule 6: 'Release through `BRAIN release`'. A Sonnet builder that follows the line literally on a deploy-from-main project would push to prove its own work.",
+   "proposed_fix": "method[1]: \"Prove the update path locally (open build A, serve build B, reopen, see B's marker), because stale installed copies hide new deploys; the lead releases.\"",
+   "acceptance": "`grep -c 'deploy B' hr/rack/build.jsonl` prints 0; `brain hr audit` sound (stable body 205 words or fewer).",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "templates-a-23"
+  },
+  {
+   "title": "learning-app-builder and voice-matcher: both rely on 'a fresh reader' that a helper cannot hire",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/build.jsonl",
+    "hr/rack/language.jsonl"
+   ],
+   "evidence": "learning-app-builder method[2]: 'Check each generated answer against its cited passage by script or a fresh reader, because generated answers drift from the source.' voice-matcher method[3]: 'Have a sample judged blind against originals by a fresh reader where possible, since a writer prefers its own text.' builder.md and writer.md list 'Read, Grep, Glob, Edit, Write, Bash': no tool starts another helper, and the method memo's cross-cutting line 11 says helpers do not spawn helpers. The only reader available is the helper itself, which is the self-scoring the voice-matcher pitfall warns about ('Self-scored match accepted as proof').",
+   "proposed_fix": "learning-app-builder method[2]: \"Check each generated answer against its cited passage by script and list those a script cannot judge for the lead, because generated answers drift from the source.\"\nvoice-matcher method[3]: \"Name three passages for a blind comparison against originals by a fresh reader the lead hires, since a writer prefers its own text and cannot judge its own match.\"",
+   "acceptance": "`brain hr audit` sound; neither rack file contains 'or a fresh reader' or 'where possible'.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-24"
+  },
+  {
+   "title": "phone-first-ui-builder: a method line with no reason, a keyword nobody says ('390 px'), and two values with no listed source",
+   "severity": "minor",
+   "kind": "gap",
+   "files": [
+    "hr/rack/build.jsonl"
+   ],
+   "evidence": "method[2]: 'Build at 390 px first with safe-area insets, 100dvh and 44-point tap targets; reflow at 320 CSS px.' No reason. `grep -rni 'dvh\\|safe-area'` over the repo outside hr/rack finds only docs/research/round3/archetypes.json:25; the template's sources are area 1, area 8, 01-models.md B4 and method/dod/screen.md, none of which holds either term (44 points is in dod/screen.md). keywords include '390 px'. Related, not changed: three templates offer a menu of directions with three different counts (this one 'four', design-brief-author 'three or four', visual-option-generator 'three to five'); keep all three, since only the generator renders images.",
+   "proposed_fix": "method[2]: \"Build at 390 px first with safe-area insets, 100dvh and 44-point tap targets; reflow at 320 CSS px, since fixed widths and small targets fail on phones.\"\nkeywords: [\"iPhone\",\"phone screen\",\"mobile first\",\"safe area\",\"tap target\",\"buttons\",\"responsive\",\"layout\",\"dark mode\",\"móvil\",\"pantalla\",\"diseño móvil\",\"botones\",\"pantalla del móvil\"]\nsources: [\"docs/research/round3/04-domain-methods.md area 1\",\"docs/research/round3/04-domain-methods.md area 8\",\"docs/research/round3/archetypes.json (phone-first-ui-builder)\",\"method/dod/screen.md\"]",
+   "acceptance": "`brain hr audit` sound; 'the buttons are too small for my thumb on the iPhone' and 'los botones se ven muy pequeños en el iPhone, arregla la pantalla de inicio' start with phone-first-ui-builder.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-25"
+  },
+  {
+   "title": "audio-lesson-producer: 'the provider's current pricing' with no way to read it",
+   "severity": "minor",
+   "kind": "bug",
+   "files": [
+    "hr/rack/design.jsonl"
+   ],
+   "evidence": "method[2]: 'Estimate the cost from the provider's current pricing and the character count, and read its rate limits, before the full run.' base_agent builder (no web tools); needs lists the provider, voice and cost ceiling but no price. The estimate, which is the template's guard against 'a paid run' found wrong late, would rest on a remembered price.",
+   "proposed_fix": "method[2]: \"Estimate the cost before the full run from the character count and the price the lead supplies; with no price, return the count and stop, since you cannot browse.\"\nneeds: [\"the text and its language\",\"the speech provider and voice, with the key already stored in settings\",\"the provider's current price per character and rate limit\",\"the cost ceiling the owner accepts\",\"the acceptance command\"]",
+   "acceptance": "`brain hr audit` sound (stable body 223 words or fewer); `brain hr hire … --template audio-lesson-producer --dry-run` prints the price among 'the brief assumes you supplied'.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-26"
+  },
+  {
+   "title": "motion-builder: a reason that points at the research memo instead of the world",
+   "severity": "minor",
+   "kind": "unclear",
+   "files": [
+    "hr/rack/design.jsonl"
+   ],
+   "evidence": "method[2]: 'Honour prefers-reduced-motion with a reduced or instant version, because the accessibility method requires it and motion makes some users ill.' 'The accessibility method' is the heading of area 8 in docs/research/round3/04-domain-methods.md; a helper never sees that file, so the first half of the reason means nothing to it.",
+   "proposed_fix": "method[2]: \"Honour prefers-reduced-motion with a reduced or instant version, because motion makes some users ill and an accessibility audit fails without it.\"",
+   "acceptance": "`grep -c 'the accessibility method' hr/rack/design.jsonl` prints 0; `brain hr audit` sound.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-27"
+  },
+  {
+   "title": "schema-migration-engineer, api-live-prober, deep-researcher, competitor-teardown, history-digger, dataset-source-finder, source-harvester: a third pitfall that no brief ever shows",
+   "severity": "minor",
+   "kind": "inefficiency",
+   "files": [
+    "hr/rack/data.jsonl",
+    "hr/rack/discovery.jsonl",
+    "hr/GUIDELINES.md"
+   ],
+   "evidence": "engine/hr.py:462: 'lines.append(\"Watch for: \" + \" \".join(… for p in t[\"pitfalls\"][:2]))'. hr/template.schema.json allows 3; hr/GUIDELINES.md says 'up to two pitfalls' in one place and '1 to 3' in the table. 16 templates carry three (7 in these groups). In competitor-teardown the unrendered third is the most important one: 'Products or features invented from memory.', while the second is 'Counting one complaint twice from cross-posted reviews.'",
+   "proposed_fix": "competitor-teardown pitfalls: [\"Products or features invented from memory.\",\"Old reviews describing problems already fixed.\"]\nschema-migration-engineer pitfalls: [\"Locking DDL on a busy table.\",\"Dropped columns still read by deployed code.\"]\nThe other five are given in their own findings above. hr/GUIDELINES.md, 'pitfalls' row: \"the failure modes of agents in this work, most important first: the brief shows the first two | 1 to 3, 22 words each\".",
+   "acceptance": "A rendered competitor-teardown brief contains 'invented from memory'; `brain hr audit` sound.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "templates-a-28"
+  },
+  {
+   "title": "design-critic (with repo-cartographer and api-live-prober above): size S is below every helper the brain has measured",
+   "severity": "minor",
+   "kind": "risk",
+   "files": [
+    "hr/rack/design.jsonl"
+   ],
+   "evidence": "engine/hr.py DEFAULT_CFG: 'bands': {'S': 20000, 'M': 60000, …} and its note 'Sonnet researchers: median 42k; Opus builders: median 222k'. stats/ml.json holds the only two settled hires: 'ratios': {'s:L': [0.2712, 0.41], 't:code-reviewer': [0.41]}, that is 54,000 and 82,000 on the 200,000 band; the 82,000 one was a reviewer template. design-critic runs on the reviewer agent (Opus, high effort), views screenshots at two widths per state, crops, and measures contrast and targets, at S. An S wage would be flagged 'OVER WAGE' (overrun_flag 1.5) on any run like the two measured, and `hr staff` payroll would understate it. Two data points only, so this is a judgement.",
+   "proposed_fix": "design-critic size: \"M\" (repo-cartographer and api-live-prober: \"M\", in their findings). back-translation-checker stays S because it checks a sample; revisit it once five hires of size S are settled and the band calibrates itself.",
+   "acceptance": "`python3 bin/brain hr hire \"Review the new design on the phone\" --template design-critic --check true --dry-run` prints 'wage: 60,000'.",
+   "effort": "S",
+   "confidence": "low",
+   "id": "templates-a-29"
+  },
+  {
+   "title": "tests/test_hr.py (found while testing the rack patch): one test writes eight contracts into the project beside the brain and then fails on every later run",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "tests/test_hr.py"
+   ],
+   "evidence": "Scratch layout with a copy of the brain and one managed project beside it (the owner's normal two-repository layout). `python3 -m unittest tests.test_hr.ReviewFindings.test_cap_counts_this_sessions_contracts_with_or_without_a_project` -> run 1 'OK', and 'files written into the sibling project: 8' (app/.brain/log/hr/h-*.json, sessions 'crashed-session' and 'sess-hr', status open); run 2 'FAILED (failures=1)': 'AssertionError: Lists differ: [1, 1, 1, 1] != [0, 0, 0, 0]'. Cause: the test means 'no project', but `resolve_project` (engine/common.py:269) falls back to 'the single managed sibling', so the hires land in the real project and the leftover 'sess-hr' contracts trip the four-helper cap next time. A checkpoint in that project could then commit the fake contracts.",
+   "proposed_fix": "The four lines in /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/test_hr_isolation.diff, inside that test before the `try:`:\n        # \"No project\" must hold wherever the tests run: a managed project\n        # beside the brain would otherwise receive these contracts.\n        siblings, c.sibling_dirs = c.sibling_dirs, lambda *_a, **_k: []\n        self.addCleanup(setattr, c, \"sibling_dirs\", siblings)\nBetter still, put the same stub in the shared `Base.setUp` so no test can reach a real sibling.",
+   "acceptance": "In a layout with a managed project beside the brain: the test passes twice in a row and `ls ../app/.brain/log/hr | wc -l` is the same before and after (measured: 16 and 16 after the fix, whole suite 'OK').",
+   "effort": "S",
+   "confidence": "high",
+   "repro": "mkdir L && cp -a Claude-Brain L/brain && mkdir L/app && git -C L/app init -q && python3 L/brain/bin/brain init L/app --family software --title x && cd L/brain && python3 -m unittest tests.test_hr.ReviewFindings.test_cap_counts_this_sessions_contracts_with_or_without_a_project (twice)",
+   "id": "templates-a-30"
+  },
+  {
+   "title": "Idea: history-digger on the scout agent, as a paired trial",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "hr/rack/discovery.jsonl",
+    "evals/prereg"
+   ],
+   "evidence": "`brain hr audit`: 'by agent: scout 0, …'. docs/research/round3/archetypes.json assigned scout to history-digger and repo-cartographer; both were moved to the reviewer's tools at the researcher price because they run commands. With the method change above (Grep over lessons, state and decision logs; the lead supplies `brain recall` output), history-digger needs a shell only for `git log`. memory/models.json: haiku output 0.5 against sonnet 10.0 per million, a factor of 20. No quality measurement exists, so this is a trial, not a change.",
+   "proposed_fix": "Pre-register with `brain eval prereg` a paired comparison of history-digger as it is against a variant with base_agent \"scout\", no role, and one more needs line: \"a file holding `git log --date=short --oneline` output\". Adopt the variant only if it finds the same dated hits on the trial tasks.",
+   "acceptance": "The pre-registered comparison is recorded with its result; if adopted, `brain hr audit` shows 'scout 1'.",
+   "effort": "M",
+   "confidence": "low",
+   "id": "templates-a-31"
+  },
+  {
+   "title": "Idea: an audit rule for methods the base agent's tools cannot carry out",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/hr.py",
+    "tests/test_hr.py"
+   ],
+   "evidence": "validate_template has one capability rule (engine/hr.py:181): read-only agents must not have a method line matching 'edit|fix|rewrite|commit (the|it|them)'. Nothing checks the other direction. By reading I found six templates in these groups whose method needs a tool the agent lacks: web-app-scaffolder, api-integration-builder, minecraft-structure-builder, audio-lesson-producer ('current docs', 'current pricing' on agents with no web tools), dataset-source-finder (a computed profile with no shell), and the 'fresh reader' pair.",
+   "proposed_fix": "In validate_template add two notes (errors once the rack is clean): a template on builder, writer, reviewer, redteam or scout whose method or done_check matches `current (docs|pricing)|provider's current|official (page|docs)` and whose needs does not mention 'docs', 'excerpt', 'price' or 'page'; and a template on scout, researcher or redteam whose method matches `\\b(run|script|curl|git log)\\b`. Text of the note: \"<id>: the method needs web access (or a shell) that <agent> does not have; name the input under needs or change the base agent\".",
+   "acceptance": "On the live rack the rule lists at least the four 'current docs/pricing' templates; on the patched rack it lists none of them.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "templates-a-32"
+  },
+  {
+   "title": "Idea: record whether the lead kept or overrode the selected template, so selection is measured by use",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/hr.py"
+   ],
+   "evidence": "engine/hr.py:545: with `--template` the chosen entry is built with 'score': 1.0 and the contract stores only 'template'; nothing says the lead rejected the first choice. The 'closest by wording … hire again with --template <id>' flow (hr.py:771) is exactly that signal and it is thrown away. The only selection measure is the 200-row file, which is 3% Spanish.",
+   "proposed_fix": "In `hire`, always run `select` and store two ids in the contract and in the settled hire record: \"first_choice\" (what selection ranked first, or null) and \"picked_by\": \"selection\" or \"lead\". No request text leaves the project. `brain hr report` adds one line: \"selection kept by the lead in N of M hires\", and lists the templates most often overridden.",
+   "acceptance": "A hire with `--template X` where selection would rank Y first writes first_choice Y and picked_by lead; `brain hr report` prints the agreement line after one settled hire.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "templates-a-33"
+  },
+  {
+   "title": "Idea: match keyword phrases as phrases, and stem Spanish gender and verb forms",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "engine/hr.py",
+    "engine/common.py"
+   ],
+   "evidence": "`_doc` (engine/hr.py:332) joins all keywords into one bag of words, so 'qué hace este repo' makes 'este' a strong term for repo-cartographer; my scan found such filler leaks in 32 of the 50 templates. A fuller stop-word list alone does not help (measured: held-out 78 -> 77 with Spanish stop-words, 78 -> 70 with English ones too, because other keywords now depend on those words). After the keyword patch the remaining Spanish misses are forms, not vocabulary: 'moderna' against 'moderno', 'corregir' against 'corrige'.",
+   "proposed_fix": "Trial, measured on the tuned half, both held-out halves and the Spanish rows: (a) a multi-word keyword scores only when all its content words are in the request, and its words stop counting singly; (b) fold accents and strip a final a/o/os/as and the endings -ar/-er/-ir/-a/-e/-me/-lo from words of five letters or more before matching. Keep whichever raises the held-out halves without lowering the other.",
+   "acceptance": "A table like the one in data for each variant; adopt only with no loss on either held-out half.",
+   "effort": "M",
+   "confidence": "low",
+   "id": "templates-a-34"
+  },
+  {
+   "title": "Idea: transcript-cleaner and copy-editor at the Sonnet price, as a paired trial",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "hr/rack/language.jsonl",
+    "evals/prereg"
+   ],
+   "evidence": "Both are size S, risk trivial, and run on writer (memory/models.json roles: writer = opus medium, output 20.0 per million; builder = sonnet medium, 10.0). Their methods are mechanical and checked by script ('a script finds the same numbers and dates in input and output', 'a diff shows every change paired with a reason'). The schema's optional `role` field exists for this ('take another role's model tier').",
+   "proposed_fix": "Pre-register a paired comparison of each template as it is against the same template with \"role\": \"builder\". Adopt only if the script checks pass at the same rate and a blind read of five outputs finds no loss of voice.",
+   "acceptance": "Recorded comparison; if adopted, `brain hr hire … --template transcript-cleaner --dry-run` prints 'model sonnet'.",
+   "effort": "M",
+   "confidence": "low",
+   "id": "templates-a-35"
+  },
+  {
+   "title": "Idea: let the brief's return block win over the agent file's fixed return order",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    ".claude/agents/reviewer.md",
+    ".claude/agents/researcher.md",
+    ".claude/agents/builder.md",
+    ".claude/agents/writer.md"
+   ],
+   "evidence": "reviewer.md: 'Return, in under about 2,000 tokens: one line per requirement (pass or fail, evidence), then the other findings, then the keep list.' and 'You receive the artefact or diff, the requirement lines …'. Templates on that agent give another order: design-critic 'First line: verdict (ship, ship after must-fix, rework) and total score'; repo-cartographer, api-live-prober and history-digger (reviewer tools at the researcher price) are not reviews at all: 'First line: what the repo is and whether it builds.' The same holds for researcher.md against option-comparer. The earlier audit (instructions.json) covered the two size caps; the two orders are the other half. Which one a Sonnet helper follows is not measured.",
+   "proposed_fix": "In each agent file, replace the opening of the return sentence with: \"Return in the order and within the cap the brief's <return> block gives; when it gives none:\" and keep the existing list after the colon. In reviewer.md also change the first sentence to: \"You examine work or a system you did not write and report with evidence; the lead decides what to fix.\"",
+   "acceptance": "`grep -c \"brief's <return> block\" .claude/agents/*.md` shows 1 in each edited file; `brain lint` reports 0 errors.",
+   "effort": "S",
+   "confidence": "medium",
+   "id": "templates-a-36"
+  }
+ ],
+ "data": "FILES (all in the scratchpad, nothing in the repository was changed; `git apply --check` passes for the three diffs)\n- /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/rack_templates.diff : every template replacement (39 templates, 5 rack files)\n- /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/rack_patch.py and apply_patch.py : the same replacements as readable data, and the script that applies them to a copy\n- /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/engine_hr.diff : compose_brief change (no-shell agents, no-check hires, outside-content line by role)\n- /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/test_hr_isolation.diff : the test fix\n- /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/work/probes_es.json, probes_en.json, probes_val.json : my 150 labelled requests; measure.py prints the table below\n- /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/templates-a/layout4/brain : the fully patched copy (audit sound, 415 tests OK, lint 0 errors)\n\nSELECTION, top-1 / top-3 / no template (engine unchanged; hr.select)\nset | rack before tuning (8afc609) | live rack | patched rack\ntuned half (100) | 63 / 71 | 100 / 100 / 0 | 100 / 100 / 0\nheld-out half (100) | 73 / 83 | 78 / 86 / 3 | 81 / 88 / 4\nmy Spanish requests (50, patch tuned on these) | 30 / 35 | 31 / 35 / 9 | 46 / 46 / 4\nmy English steal probes (50, several expected ids allowed) | 28 / 39 | 30 / 43 / 1 | 35 / 45 / 0\nvalidation (50, written before the patch, not tuned on) | not run | 36 / 39 / 7 | 44 / 45 / 3\nvalidation, Spanish rows (25) | | 14 / 16 | 20 / 20\nvalidation, English rows (25) | | 22 / 23 | 24 / 25\nNo request lost its top-1 in any set. One top-3 loss: 'dale a la app un aspecto más moderno' (design-brief-author was third, now absent).\nTested and rejected: fuller stop-word lists (held-out 78 -> 77 Spanish only; 78 -> 70 with English).\nBrief length with the standard test inputs: median 326.5 words now, 329 with the template patch, 338.5 with the engine change too; templates over the 350-word note: 16 now, 22 after.\n\nVERDICT PER TEMPLATE\nbuild\nweb-app-scaffolder — fix (method[3], keywords)\nphone-first-ui-builder — fix (method[2], keywords, sources)\npwa-offline-engineer — fix (method[1])\napi-integration-builder — fix (method[0], pitfalls[1], needs, keywords)\ngame-builder — ok\nlearning-app-builder — fix (method[2])\ncli-script-builder — fix (method[3], keywords)\ncontent-site-builder — fix (keywords)\nminecraft-structure-builder — fix (method[0], method[1], needs)\nrefactor-engineer — fix (keywords)\ndata\ndata-pipeline-builder — fix (keywords)\nexploratory-analyst — fix (keywords: 'qué hay' leaks 'qué', 'hay')\nstatistical-tester — ok (one Spanish keyword added)\nchart-maker — fix (keywords)\nspreadsheet-engineer — ok (note: when names Google Sheets; what a builder can deliver is an .xlsx)\ndata-reconciler — ok\nschema-migration-engineer — fix (third pitfall only; its keyword 'database' still takes 'database or files … help me decide', and removing it did not change that, so I left the keywords alone)\nbiodiversity-data-integrator — ok\nml-experiment-runner — fix (keywords)\nrag-index-builder — ok (note: needs does not name the embedding provider or a keyword-only fallback)\ndesign\ndesign-brief-author — fix (method[1], method[3], keywords)\nvisual-option-generator — ok\nvisual-polish-measurer — ok (Spanish 'descentrado' missing; left for the Spanish split)\ndesign-critic — fix (size)\ndesign-system-builder — fix (keywords)\nimage-pipeline-engineer — fix (keywords)\nmotion-builder — fix (method[2])\naudio-lesson-producer — fix (method[2], needs)\ndiagram-maker — fix (keywords)\nname-and-copy-options — fix (name, when, keywords)\ndiscovery\nrepo-cartographer — fix (when, keywords, size)\ndocs-snapshotter — fix (keywords; done_check through the engine change)\napi-live-prober — fix (method[1], keywords, pitfalls, size; outside-content line through the engine change)\noption-comparer — fix (keywords; done_check through the engine change)\ndeep-researcher — fix (done_check, return_contract, keywords, pitfalls)\ncompetitor-teardown — fix (pitfalls order; done_check through the engine change)\nhistory-digger — fix (method[1], needs, keywords, pitfalls)\nclaude-product-answerer — ok (done_check through the engine change)\ndataset-source-finder — fix (method[0], scope_rule, done_check, return_contract, needs, keywords, pitfalls)\nsource-harvester — fix (keywords, pitfalls; done_check through the engine change)\nlanguage\nes-en-translator — ok\nes-original-writer — fix (done_check, keywords)\ncopy-editor — fix (keywords)\nglossary-builder — ok\nback-translation-checker — fix (name, when, done_check, return_contract, keywords)\nui-string-localiser — fix (scope_rule, keywords)\nbilingual-site-publisher — fix (method[3], keywords)\nlegal-terms-translator — ok\nvoice-matcher — fix (method[3])\ntranscript-cleaner — fix (keywords: adds 'pásalo a limpio')\n\nPAIRS (none to merge)\napi-integration-builder / data-pipeline-builder — keep, sharpen keywords (three shared method lines are right for both)\napi-live-prober / dataset-source-finder — keep, sharpen (named service against unknown source)\nes-en-translator / es-original-writer — keep, sharpen the writer's keywords\nhistory-digger / rollback-restorer — keep as is; a tie should fall to the read-only one\nchart-maker / diagram-maker — keep, sharpen\nweb-app-scaffolder / content-site-builder / bilingual-site-publisher — keep, sharpen ('website')\ncontent-site-builder / rag-index-builder / knowledge-base-compiler ('base de conocimiento') — keep, removed from content-site-builder\nweb-app-scaffolder / project-bootstrapper / requirements-extractor ('new project') — keep, removed from the scaffolder\nminecraft-structure-builder / feasibility-reframer — keep; the builder now starts from the reframer's note\ndesign-brief-author / visual-option-generator / phone-first-ui-builder (menu of directions, counts differ) — keep\ntranscript-cleaner / requirements-extractor ('dictated', 'voice note') — keep\ndeep-researcher / docs-snapshotter / claude-product-answerer — keep (same method, different subject)\nui-string-localiser / bilingual-site-publisher; glossary-builder / canonical-facts-keeper; copy-editor / transcript-cleaner — keep\n\nOTHER COUNTS\n- Scout: no template in these groups can run on it as written (each needs a shell, the web or Write); see the history-digger idea.\n- 17 of the 200 method lines in these groups carry no reason word (script list); I rewrote the five that were also wrong or unclear and left the self-evident ones.\n- All 136 source entries in these 50 templates point at an existing file, section or item id.\n- A removal I wanted and did not make: test contracts my own runs left in the scratch project templates-a/proj1 (the safety check refused the relative delete). They are in the scratchpad only."
+}
