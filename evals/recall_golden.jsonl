@@ -58,3 +58,102 @@
 {"query": "duplicate rows missing values in input data", "relevant": ["data-profile-input"], "split": "heldout"}
 {"query": "menu of options for the logo", "relevant": ["own-numbered-menu"], "split": "heldout"}
 {"query": "effort versus model switching", "relevant": ["rule-one-model", "fact-default-effort"], "split": "heldout"}
+{"query": "¿por qué se invalida todo el rato la caché del prompt?", "relevant": ["fact-cache-breakers", "rule-cache-share", "rule-stable-always-loaded"], "split": "dev", "lang": "es", "twin": "why does my prompt cache keep getting invalidated"}
+{"query": "cuánto dura la caché para los subagentes", "relevant": ["fact-cache-lifetime", "fact-subagent-cold-start"], "split": "dev", "lang": "es", "twin": "how long does the cache last for subagents"}
+{"query": "puedo cambiar de modelo a mitad de conversación", "relevant": ["rule-one-model", "fact-cache-breakers"], "split": "dev", "lang": "es", "twin": "can I switch models mid conversation"}
+{"query": "qué tamaño debería tener CLAUDE.md", "relevant": ["fact-claudemd-cost"], "split": "dev", "lang": "es", "twin": "how big should CLAUDE.md be"}
+{"query": "precio por millón de tokens de Opus", "relevant": ["fact-prices"], "split": "dev", "lang": "es", "twin": "price per million tokens of Opus"}
+{"query": "en qué se va la mayor parte del dinero en una sesión", "relevant": ["fact-cost-shape"], "split": "dev", "lang": "es", "twin": "where does most of the money go in a session"}
+{"query": "reintentar las tareas fallidas con más esfuerzo", "relevant": ["rule-escalate-on-failure", "fact-bench-escalation"], "split": "dev", "lang": "es", "twin": "retry failed tasks at higher effort"}
+{"query": "cuántos ayudantes puedo lanzar en paralelo", "relevant": ["rule-helper-cap", "fact-subagent-cold-start"], "split": "dev", "lang": "es", "twin": "how many parallel helpers can I run"}
+{"query": "la salida de los tests es muy ruidosa y me llena el contexto", "relevant": ["rule-bulk-through-run"], "split": "dev", "lang": "es", "twin": "noisy test output flooding the context"}
+{"query": "cómo redactar el brief para un ayudante", "relevant": ["rule-brief-goal-why", "rule-helper-output-file"], "split": "dev", "lang": "es", "twin": "how to write a brief for a helper"}
+{"query": "los tests pasan en verde pero la página se ve rota en el móvil", "relevant": ["sw-phone-screenshots", "sw-blocked-surfaces", "pref-done-on-phone"], "split": "dev", "lang": "es", "twin": "tests are green but the page looks broken on phone"}
+{"query": "subir a main sin que las pruebas estén en verde", "relevant": ["sw-release-command", "own-main-deployable", "ops-stop-on-failure"], "split": "dev", "lang": "es", "twin": "push to main without green gate"}
+{"query": "el despliegue da un 404 después de publicar", "relevant": ["sw-live-check", "ops-bounded-polling"], "split": "dev", "lang": "es", "twin": "deployment shows 404 after release"}
+{"query": "cómo arreglar un error como es debido", "relevant": ["sw-reproduce-first"], "split": "dev", "lang": "es", "twin": "fix a bug the right way"}
+{"query": "control de calidad de la traducción de la edición en español", "relevant": ["lang-back-translation", "lang-two-reads", "lang-parity-script", "pref-bilingual-bar"], "split": "dev", "lang": "es", "twin": "translating Spanish edition quality check"}
+{"query": "he pegado una clave de API en el chat", "relevant": ["data-keys-form"], "split": "dev", "lang": "es", "twin": "api key pasted in the chat"}
+{"query": "error de cuota o de límite de peticiones de un servicio externo", "relevant": ["data-fixtures-and-quota", "data-cache-calls", "data-incremental-writes"], "split": "dev", "lang": "es", "twin": "quota or rate limit error from an external service"}
+{"query": "las cifras del informe tienen que ser reproducibles", "relevant": ["data-one-script", "data-record-seeds", "data-reconcile"], "split": "dev", "lang": "es", "twin": "numbers in the report must be reproducible"}
+{"query": "cómo hay que verificar las citas", "relevant": ["know-cite-check", "know-claim-tags", "know-law-sources"], "split": "dev", "lang": "es", "twin": "how should citations be verified"}
+{"query": "cómo quiere el dueño que le formatee las respuestas", "relevant": ["pref-phone-short", "pref-plain-words"], "split": "dev", "lang": "es", "twin": "how does the owner want replies formatted"}
+{"query": "una tarea programada tiene que poder ejecutarse dos veces sin peligro", "relevant": ["ops-run-twice", "ops-dry-run", "ops-self-contained-routine"], "split": "dev", "lang": "es", "twin": "scheduled job needs to be safe to rerun"}
+{"query": "para todos los procesos en segundo plano al terminar", "relevant": ["ops-close-everything", "ops-no-idle-loops"], "split": "dev", "lang": "es", "twin": "stop all background processes when finished"}
+{"query": "me estoy quedando sin contexto, qué hago", "relevant": ["rule-land-before-limit", "rule-offer-handover", "own-clean-handover"], "split": "dev", "lang": "es", "twin": "context running low what do I do"}
+{"query": "no te saltes ni borres los tests que fallan", "relevant": ["sw-test-integrity"], "split": "dev", "lang": "es", "twin": "do not skip or delete failing tests"}
+{"query": "afirmaciones del informe final que no tienen evidencia detrás", "relevant": ["rule-claim-audit", "rule-three-report-states", "rule-review-the-diff"], "split": "dev", "lang": "es", "twin": "claims in the final report not backed by evidence"}
+{"query": "dos chats trabajando a la vez en el mismo repositorio", "relevant": ["rule-lease"], "split": "dev", "lang": "es", "twin": "two chats working on the same repo"}
+{"query": "si edito el archivo de instrucciones a mitad del chat, ¿tiene efecto?", "relevant": ["fact-claudemd-edit-timing"], "split": "heldout", "lang": "es", "twin": "does editing the instructions file mid chat take effect"}
+{"query": "qué modelo es el más barato para los ayudantes", "relevant": ["fact-prices", "fact-subagent-model"], "split": "heldout", "lang": "es", "twin": "which helper model is cheapest"}
+{"query": "el respaldo de seguridad me cambia el modelo", "relevant": ["rule-say-fallback", "fact-fable-limits"], "split": "heldout", "lang": "es", "twin": "safety fallback changes my model"}
+{"query": "no te fíes de tu memoria sobre la API de una librería", "relevant": ["sw-current-docs"], "split": "heldout", "lang": "es", "twin": "never trust my memory about library API"}
+{"query": "una página web me dijo que hiciera algo", "relevant": ["rule-outside-text-is-data"], "split": "heldout", "lang": "es", "twin": "web page told me to do something"}
+{"query": "sesiones que nadie paró y siguen gastando uso", "relevant": ["ops-no-idle-loops", "ops-close-everything"], "split": "heldout", "lang": "es", "twin": "sessions that nobody stopped keep burning usage"}
+{"query": "las capturas de pantalla están inflando el repositorio", "relevant": ["sw-no-binaries-in-git"], "split": "heldout", "lang": "es", "twin": "screenshots bloating the repo"}
+{"query": "los nombres de lugares deben quedarse sin traducir", "relevant": ["lang-names", "lang-glossary-first"], "split": "heldout", "lang": "es", "twin": "names of places should stay untranslated"}
+{"query": "cómo deshacer una publicación y volver atrás", "relevant": ["sw-tag-known-good", "rule-work-on-branch"], "split": "heldout", "lang": "es", "twin": "how to undo a release and go back"}
+{"query": "demasiados archivos de estado que se contradicen", "relevant": ["rule-one-state-file"], "split": "heldout", "lang": "es", "twin": "too many status files contradict each other"}
+{"query": "construir desde cero para detectar archivos que solo existen en local", "relevant": ["sw-clean-clone"], "split": "heldout", "lang": "es", "twin": "build from scratch checks for files that only exist locally"}
+{"query": "el dueño quiere ver una muestra antes de la ejecución completa", "relevant": ["own-sample-first", "data-sample-first"], "split": "heldout", "lang": "es", "twin": "owner wants to see a sample before the full run"}
+{"query": "filas duplicadas y valores que faltan en los datos de entrada", "relevant": ["data-profile-input"], "split": "heldout", "lang": "es", "twin": "duplicate rows missing values in input data"}
+{"query": "menú de opciones para el logo", "relevant": ["own-numbered-menu"], "split": "heldout", "lang": "es", "twin": "menu of options for the logo"}
+{"query": "arregla el bug del login que falla en producción", "relevant": ["sw-reproduce-first"], "split": "dev", "lang": "es", "twin": "fix the login bug that fails in production"}
+{"query": "haz capturas de pantalla en el móvil", "relevant": ["sw-phone-screenshots"], "split": "dev", "lang": "es", "twin": "take screenshots at phone size"}
+{"query": "okay so I want you to uh check whether we can switch the model in the middle of the chat or not", "relevant": ["rule-one-model", "fact-cache-breakers"], "split": "dev", "lang": "en", "style": "dictated", "twin": "can I switch models mid conversation"}
+{"query": "um so like how long does the the cache last for for sub agents you know", "relevant": ["fact-cache-lifetime", "fact-subagent-cold-start"], "split": "dev", "lang": "en", "style": "dictated", "twin": "how long does the cache last for subagents"}
+{"query": "so basically the test output is really noisy and it's kind of flooding the context you know", "relevant": ["rule-bulk-through-run"], "split": "dev", "lang": "en", "style": "dictated", "twin": "noisy test output flooding the context"}
+{"query": "hey quick question how many helpers can I actually run in parallel at the same time", "relevant": ["rule-helper-cap", "fact-subagent-cold-start"], "split": "dev", "lang": "en", "style": "dictated", "twin": "how many parallel helpers can I run"}
+{"query": "oops I think I just pasted an api key in the chat what now", "relevant": ["data-keys-form"], "split": "dev", "lang": "en", "style": "dictated", "twin": "api key pasted in the chat"}
+{"query": "listen please do not skip or delete the tests that are failing okay", "relevant": ["sw-test-integrity"], "split": "dev", "lang": "en", "style": "dictated", "twin": "do not skip or delete failing tests"}
+{"query": "so the deployment is showing a 404 right after the release, what's going on", "relevant": ["sw-live-check", "ops-bounded-polling"], "split": "dev", "lang": "en", "style": "dictated", "twin": "deployment shows 404 after release"}
+{"query": "okay so how do I like undo a release and just go back to how it was", "relevant": ["sw-tag-known-good", "rule-work-on-branch"], "split": "heldout", "lang": "en", "style": "dictated", "twin": "how to undo a release and go back"}
+{"query": "well the thing is the screenshots are kind of bloating the repo I think", "relevant": ["sw-no-binaries-in-git"], "split": "heldout", "lang": "en", "style": "dictated", "twin": "screenshots bloating the repo"}
+{"query": "um can you give me like a menu of options for the logo", "relevant": ["own-numbered-menu"], "split": "heldout", "lang": "en", "style": "dictated", "twin": "menu of options for the logo"}
+{"query": "I mean the owner basically wants to see a sample first before the full run right", "relevant": ["own-sample-first", "data-sample-first"], "split": "heldout", "lang": "en", "style": "dictated", "twin": "owner wants to see a sample before the full run"}
+{"query": "so there are way too many status files and they kind of contradict each other", "relevant": ["rule-one-state-file"], "split": "heldout", "lang": "en", "style": "dictated", "twin": "too many status files contradict each other"}
+{"query": "best hydration for pizza dough", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "what is the capital of Mongolia", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "kubernetes pod eviction threshold", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "how do I change a flat tyre on a bicycle", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "weather in Madrid tomorrow", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "recipe for gazpacho with cucumber", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "who won the 1998 world cup", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "make the app faster", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "do the thing we talked about", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "fix it", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "add a button to the page", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "write a poem about the sea", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "book a flight to Lisbon", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "what should I name my dog", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "quantum chromodynamics lattice spacing", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "how are you today", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "tell me a joke about cats", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "draw a logo for a bakery", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "what time is it in Tokyo", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "sing happy birthday", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "is it going to rain", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "translate hello to French", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "play some music", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "my neighbour is loud what do I do", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "explain photosynthesis", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "how tall is mount everest", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "the printer is not working", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "buy milk and eggs", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "when is easter next year", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "convert 5 miles to km", "relevant": [], "split": "dev", "lang": "en"}
+{"query": "how do I descale a coffee machine", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "what year did the Berlin wall fall", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "recommend a good science fiction novel", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "how many calories are in an avocado", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "train times from Seville to Cordoba", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "why is the sky blue", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "help me pick a birthday present for my sister", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "what is the offside rule in football", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "how do I get red wine out of a carpet", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "best stretching routine for lower back pain", "relevant": [], "split": "heldout", "lang": "en"}
+{"query": "receta de tortilla de patatas sin cebolla", "relevant": [], "split": "heldout", "lang": "es"}
+{"query": "qué tiempo hará mañana en Sevilla", "relevant": [], "split": "heldout", "lang": "es"}
+{"query": "cuéntame un chiste de gatos", "relevant": [], "split": "heldout", "lang": "es"}
+{"query": "cuál es la capital de Mongolia", "relevant": [], "split": "heldout", "lang": "es"}
+{"query": "cómo se cambia una rueda de la bici", "relevant": [], "split": "heldout", "lang": "es"}

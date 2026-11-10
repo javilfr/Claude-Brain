@@ -5,6 +5,13 @@ Files (JSONL, one item per line):
            owner/preferences.jsonl, playbooks/<family>.jsonl
   project: .brain/memory/*.jsonl   (scope "project")
 
+A project file is written by whoever can write the project: a helper, a merged
+pull request, an adopted repository. It can hold lessons about that project
+and nothing else: a rule, pitfall or fact, scope project, trust at most
+observed. A row that claims the owner's authority (owner-stated, standing,
+preference, an own- or pref- id) or reuses a brain item's id is not loaded,
+and `brain items check` names it.
+
 Optional fields (round2/01 sections 3.6, 3.7, 3.15):
   valid_from, valid_to  ISO dates; facts are bi-temporal, a superseded item
                         gets ``valid_to`` and stays on disk as history;
@@ -41,6 +48,10 @@ DEFAULTS = {
 }
 
 BRAIN_FILES = ("memory/items.jsonl", "memory/facts.jsonl", "owner/standing.jsonl", "owner/preferences.jsonl")
+
+PROJECT_TYPES = ("rule", "pitfall", "fact")
+PROJECT_TRUST = ("observed", "derived", "external")   # anything else a project file says is read as observed
+OWNER_ID_PREFIXES = ("own-", "pref-")
 
 
 def confidence(item: dict) -> float:
@@ -131,29 +142,82 @@ def project_item_files(project: Path | None) -> list[Path]:
     return sorted((Path(project) / ".brain" / "memory").glob("*.jsonl"))
 
 
-def load_items(brain_root: Path | None = None, project: Path | None = None, include_inactive: bool = False) -> list[dict]:
-    """All items with ``_file`` and ``_confidence`` added. Demoted and retired
-    items are left out unless asked for."""
-    out = []
-    root = Path(brain_root or c.BRAIN_ROOT)
-    for f in brain_item_files(root) + project_item_files(project):
+def project_claim(item: dict, brain_ids: frozenset | set = frozenset()) -> str:
+    """Why a row of a project file may not be loaded, or "". A project file
+    cannot present itself as the owner or as the brain."""
+    iid = str(item.get("id", ""))
+    if item.get("trust") == "owner-stated" or item.get("type") in ("standing", "preference") \
+            or iid.startswith(OWNER_ID_PREFIXES):
+        return f"claims owner authority (type {item.get('type')}, trust {item.get('trust')})"
+    if item.get("type") not in PROJECT_TYPES:
+        return f"type {item.get('type')} cannot live in a project (only {', '.join(PROJECT_TYPES)})"
+    if iid in brain_ids:
+        return "reuses the id of a brain item"
+    return ""
+
+
+def _brain_ids(brain_root: Path) -> frozenset:
+    return frozenset(str(r.get("id", "")) for f in brain_item_files(brain_root) for r in c.read_jsonl(f))
+
+
+def load_project_items(project: Path | None, brain_ids: frozenset | set = frozenset()) -> tuple[list[dict], list[str]]:
+    """(items, refusals) from a project's .brain/memory. Every item comes back
+    with scope project, trust at most observed and ``_project`` set; a row
+    that ``project_claim`` rejects is left out and described in refusals."""
+    items, refused = [], []
+    for f in project_item_files(project):
         for raw in c.read_jsonl(f):
             it = normalise(raw)
-            if not include_inactive and it["status"] in ("demoted", "retired"):
+            why = project_claim(it, brain_ids)
+            if why:
+                refused.append(f"{f.name}: {it.get('id', '?')} {why}")
                 continue
-            try:
-                it["_file"] = str(f.relative_to(root))
-            except ValueError:
-                it["_file"] = str(f)
-            it["_confidence"] = confidence(it)
+            it["scope"] = "project"
+            if it.get("trust") not in PROJECT_TRUST:
+                it["trust"] = "observed"
+            it["_file"], it["_project"] = str(f), True
+            items.append(it)
+    return items, refused
+
+
+def project_refusals(project: Path | None, brain_root: Path | None = None) -> list[str]:
+    """One line per row of the project's item files that is not loaded."""
+    if not project_item_files(project):
+        return []
+    return load_project_items(project, _brain_ids(Path(brain_root or c.BRAIN_ROOT)))[1]
+
+
+def load_items(brain_root: Path | None = None, project: Path | None = None, include_inactive: bool = False) -> list[dict]:
+    """All items with ``_file`` and ``_confidence`` added. Demoted and retired
+    items are left out unless asked for. Project items carry ``_project`` and
+    only what ``load_project_items`` lets through."""
+    out = []
+    root = Path(brain_root or c.BRAIN_ROOT)
+    for f in brain_item_files(root):
+        for raw in c.read_jsonl(f):
+            it = normalise(raw)
+            it["_file"] = str(f.relative_to(root))
             out.append(it)
+    if project_item_files(project):
+        out += load_project_items(project, frozenset(i["id"] for i in out))[0]
+    out = [i for i in out if include_inactive or i["status"] not in ("demoted", "retired")]
+    for it in out:
+        it["_confidence"] = confidence(it)
     return out
 
 
-def check_files(files: list[Path]) -> list[str]:
+def check_files(files: list[Path], project_files: list[Path] | tuple = ()) -> list[str]:
+    """Schema problems in ``files`` plus, for each of ``project_files``, the
+    rows a project file may not hold (see ``project_claim``)."""
     errs: list[str] = []
     seen: dict[str, str] = {}
-    for f in files:
+    brain_ids = frozenset(str(r.get("id", "")) for f in files for r in c.read_jsonl(f))
+    for f in project_files:
+        for raw in c.read_jsonl(f):
+            why = project_claim(normalise(raw), brain_ids)
+            if why:
+                errs.append(f"{f.name}: {raw.get('id', '?')} {why}; a project file holds only project lessons")
+    for f in [*files, *project_files]:
         raw_lines = [l for l in c.read_text(f).splitlines() if l.strip()]
         rows = c.read_jsonl(f)
         if len(rows) != len(raw_lines):
@@ -188,8 +252,9 @@ def render_markdown(jsonl_path: Path, title: str | None = None) -> str:
 # ---------------------------------------------------------------- cli
 def cmd_check(args) -> int:
     proj = c.resolve_project(getattr(args, "project", None))
-    files = brain_item_files() + project_item_files(proj if proj and c.is_managed(proj) else None)
-    errs = check_files(files)
+    mine = project_item_files(proj if proj and c.is_managed(proj) else None)
+    files = brain_item_files() + mine
+    errs = check_files(brain_item_files(), mine)
     n = sum(len(c.read_jsonl(f)) for f in files)
     if errs:
         print(f"items: {len(errs)} problem(s) in {n} items")

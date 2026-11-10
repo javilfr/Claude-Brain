@@ -122,5 +122,13 @@
     "too_early": 5,
     "medium": 15,
     "high": 30
+  },
+  "recall": {
+    "_help": "Recall relevance cuts (engine/recall.py); the inline fallbacks there are kept equal to these by a test. floor: the share of the query's IDF weight the best match must cover, else the answer is silence. companion: a further item is shown only when it covers this fraction of what the best match covers. min_units: 2 means silence unless some item shares two units with a query of two or more. standing_coverage: an owner standing instruction is seated first only from this coverage up; below it it competes like any item. unconfirmed_coverage: what a candidate must cover to get the one slot labelled unconfirmed. Measured 2026-11-10 on evals/recall_golden.jsonl over evals/recall_snapshot, production path (k 3, 300 tokens), 60 English queries and 45 with no answer. floor 0.15 without companion: recall@3 0.728, precision 0.404, 150 tokens a query, silent on 25 of 45. floor 0.20 with companion 0.5 (set): 0.728, 0.514, 122 tokens, silent on 30. floor 0.25: 0.719, silent on 33. floor 0.30: 0.694 (four queries go silent), 0.539, silent on 36. min_units 2 at floor 0.20: 0.719 (one query lost), silent on 43. The floor stays where recall@3 does not fall.",
+    "floor": 0.2,
+    "companion": 0.5,
+    "min_units": 1,
+    "standing_coverage": 0.4,
+    "unconfirmed_coverage": 0.5
   }
 }
