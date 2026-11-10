@@ -380,6 +380,7 @@ def suggest(task_class: str, role: str = "lead", stats: dict | None = None, mode
     table = (stats or {}).get("classes", stats or {}).get(task_class, {}) if isinstance(stats, dict) else {}
     options = []
     for key, rec in (table.items() if isinstance(table, dict) else []):
+        key = key.replace("|", "/")  # the learning pipeline writes "model|effort"
         if not isinstance(rec, dict) or "/" not in key:
             continue
         p, f = int(rec.get("pass", 0) or 0), int(rec.get("fail", 0) or 0)
