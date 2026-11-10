@@ -111,11 +111,76 @@ def ensure_stub(project: Path, title: str, made: list[str]) -> None:
     elif BEGIN not in existing:
         c.write_text(target, block + "\n" + existing)  # the block itself says which text wins
         made.append("CLAUDE.md (pointer block added above existing content)")
+    ensure_agents_import(project, made)
 
 
-def init(project: Path, title: str, family: str, manifest_overrides: dict | None = None) -> list[str]:
+AGENTS_IMPORT = "@AGENTS.md"
+AGENTS_ADDED = "CLAUDE.md (import of AGENTS.md added below the block)"
+_AGENTS_IMPORTED = re.compile(r"(?<![\w/.@])@(?:\./)?AGENTS\.md(?![\w/])")
+
+
+def agents_not_imported(project: Path) -> bool:
+    """True when the project has an AGENTS.md that its CLAUDE.md does not
+    import. Claude Code reads AGENTS.md only while there is no CLAUDE.md, so
+    without the import a repository's own instructions stop loading the
+    moment the contract adds CLAUDE.md."""
+    project = Path(project)
+    return (project / "AGENTS.md").is_file() and not _AGENTS_IMPORTED.search(c.read_text(project / "CLAUDE.md"))
+
+
+def ensure_agents_import(project: Path, made: list[str]) -> None:
+    """Keep an existing AGENTS.md loading: one import line just below the
+    managed block (outside it, so the block's size is unchanged), added once."""
+    target = Path(project) / "CLAUDE.md"
+    if not target.is_file() or not agents_not_imported(project):
+        return
+    text = c.read_text(target)
+    if END in text:
+        text = text.replace(END, END + "\n" + AGENTS_IMPORT, 1)
+    else:
+        text = text.rstrip("\n") + "\n\n" + AGENTS_IMPORT + "\n"
+    c.write_text(target, text)
+    made.append(AGENTS_ADDED)
+
+
+def agents_note(project: Path) -> str:
+    """One line for `validate` when AGENTS.md is there but not imported, else ""."""
+    if not agents_not_imported(project):
+        return ""
+    return f"note: AGENTS.md is not imported by CLAUDE.md, so Claude Code does not load it: add a line `{AGENTS_IMPORT}` below the brain block in CLAUDE.md"
+
+
+def owner_language(manifest: dict) -> str:
+    """``es`` or ``en``: the language of the files the owner reads, from the
+    manifest's first ``languages`` entry."""
+    langs = manifest.get("languages")
+    first = str(langs[0]).lower() if isinstance(langs, list) and langs else "en"
+    return "es" if first.startswith("es") else "en"
+
+
+# What the owner reads before the first checkpoint rewrites STATUS.md.
+FIRST_STATUS = {
+    "en": "# Status: {title}\n\nNothing has been built yet. Say what you want in the chat to begin.\n",
+    "es": "# Estado: {title}\n\nTodavía no se ha construido nada. Di en el chat lo que quieres para empezar.\n",
+}
+NEEDS_YOU_TEMPLATE = {"en": "NEEDS_YOU.md", "es": "NEEDS_YOU.es.md"}
+# Caches that are never part of the work. Without this a check that runs
+# Python or Node leaves the tree dirty and the next release refuses it.
+STARTER_IGNORE = "# Caches and local files, never part of the work (from brain init; edit freely)\n__pycache__/\n*.pyc\n.pytest_cache/\nnode_modules/\n.venv/\n.DS_Store\n"
+
+
+def ensure_readme(project: Path, made: list[str]) -> None:
+    """The map of .brain/: what each file is for, who writes it and how a new
+    chat continues. Written only when missing, so an edited one is kept."""
+    project = Path(project)
+    _create(project / ".brain" / "README.md", c.read_text(TEMPLATE / ".brain" / "README.md"), made, project)
+
+
+def init(project: Path, title: str, family: str, manifest_overrides: dict | None = None, starter_ignore: bool = True) -> list[str]:
     """Install the contract. Returns the list of things created (empty when
-    everything was already there)."""
+    everything was already there). ``starter_ignore=False`` (adopt) leaves the
+    folder's root without a .gitignore when it has none: an existing codebase
+    gets contract files only."""
     project = Path(project)
     made: list[str] = []
     b = project / ".brain"
@@ -128,7 +193,9 @@ def init(project: Path, title: str, family: str, manifest_overrides: dict | None
                 m[k] = v
         c.write_json(b / "project.json", m)
         made.append(".brain/project.json")
-    title = c.load_manifest(project).get("project", {}).get("title", title)
+    manifest = c.load_manifest(project)
+    title, lang = manifest.get("project", {}).get("title", title), owner_language(manifest)
+    ensure_readme(project, made)
     _create(b / "STATE.md", _state_text(), made, project)
     _create(b / "requirements.jsonl", "", made, project)
     _create(b / "PLAN.md", c.read_text(TEMPLATE / ".brain" / "PLAN.md"), made, project)
@@ -137,8 +204,10 @@ def init(project: Path, title: str, family: str, manifest_overrides: dict | None
     _create(b / "ext" / "README.md", "# Project extensions\n\nSkills, agents, tools and playbook overrides that belong only to this project. They add to the brain's defaults for this project; they cannot change the contract.\n", made, project)
     _create(b / "log" / ".gitkeep", "", made, project)
     _create(b / ".gitignore", "cache/\nlog/run/\n.tmp-*\n", made, project)  # .tmp-*: what an interrupted atomic write leaves
-    _create(project / "NEEDS_YOU.md", c.read_text(TEMPLATE / "NEEDS_YOU.md"), made, project)
-    _create(project / "STATUS.md", f"# Status: {title}\n\nNothing has been built yet. Say what you want in the chat to begin.\n", made, project)
+    _create(project / "NEEDS_YOU.md", c.read_text(TEMPLATE / NEEDS_YOU_TEMPLATE[lang]), made, project)
+    _create(project / "STATUS.md", FIRST_STATUS[lang].replace("{title}", title), made, project)
+    if starter_ignore:
+        _create(project / ".gitignore", STARTER_IGNORE, made, project)
     ensure_stub(project, title, made)
     return made
 
@@ -176,6 +245,8 @@ def survey(project: Path) -> dict:
             found["commands"]["check_full"] = "make test"
     if (p / "vercel.json").exists() or any(p.glob("*/vercel.json")):
         found["signals"].append("vercel.json (deploys from a branch; ask whether main-on-green applies)")
+    if agents_not_imported(p):
+        found["signals"].append("AGENTS.md (it stops loading once CLAUDE.md exists; adopt adds an import line to keep it)")
     names = [f.suffix.lower() for f in p.rglob("*") if f.is_file() and ".git" not in f.parts and "node_modules" not in f.parts][:5000]
     code = sum(n in (".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".swift", ".kt", ".java") for n in names)
     prose = sum(n in (".md", ".txt", ".docx", ".tex") for n in names)
@@ -193,7 +264,7 @@ def adopt(project: Path, title: str | None = None, family: str | None = None) ->
     gate_cmd = s["commands"].get("check_full") or s["commands"].get("check_fast") or ""
     over["gates"] = [{"id": "checks", "kind": "command", "command": gate_cmd}]
     old_handbook = len(c.read_text(project / "CLAUDE.md").encode())
-    made = init(project, title or project.name, family or s["family"], over)
+    made = init(project, title or project.name, family or s["family"], over, starter_ignore=False)
     s["old_handbook_bytes"] = old_handbook
     if old_handbook > OLD_HANDBOOK_LIMIT and "Slim the old handbook" not in c.read_text(project / "NEEDS_YOU.md"):
         with open(project / "NEEDS_YOU.md", "a", encoding="utf-8") as f:
@@ -254,11 +325,17 @@ def validate(project: Path, brain_root: Path | None = None) -> list[str]:
     elif (project / "CLAUDE.md").is_file():
         errs.append("CLAUDE.md has no brain pointer block")
     seen: set[str] = set()
+    from . import gate
+    masked = getattr(gate, "masked_command", None)  # the gate module's own rule for a command that cannot fail
     for i, g in enumerate(m.get("gates", []) if isinstance(m.get("gates"), list) else []):
         if not isinstance(g, dict):
             continue  # the schema check above has already said so
         if g.get("kind") == "command" and "command" not in g:
             errs.append(f"gate {g.get('id')}: kind 'command' needs a command (may be empty until known)")
+        command = g.get("command")
+        why = masked(command) if masked and g.get("kind") == "command" and isinstance(command, str) and command.strip() else ""
+        if why:
+            errs.append(f"gate {g.get('id')}: its command cannot fail as written ({why}); correct it in .brain/project.json so a red check is recorded red")
         # Checked here, not in the frozen schema (I-15): the gate log is keyed
         # by id, so two gates with one id hide each other's result.
         gid = g.get("id")
@@ -328,9 +405,11 @@ def migrate(project: Path, target: int = c.CONTRACT_VERSION, migrations_dir: Pat
         return 1, ["manifest has no integer 'contract'"]
     if ver > target:
         return 3, [f"stale brain: project is v{ver}, brain is v{target}; nothing written"]
+    added: list[str] = []
+    ensure_readme(project, added)  # a project made by an earlier brain has no map yet
     if ver == target:
-        return 0, [f"already on contract v{target}"]
-    msgs: list[str] = []
+        return 0, [f"already on contract v{target}" + (f"; added {added[0]}" if added else "")]
+    msgs: list[str] = [f"added {added[0]}"] if added else []
     while ver < target:
         script = mdir / f"{ver}_to_{ver + 1}.py"
         if not script.is_file():
@@ -415,7 +494,8 @@ def cmd_init(args) -> int:
     if args.language:
         over["languages"] = args.language
     made = init(project, args.title or project.name, args.family, over)
-    did = [f"created {len(made)} file(s)"] if made else []
+    files = [x for x in made if x != AGENTS_ADDED]
+    did = ([f"created {len(files)} file(s)"] if files else []) + (["CLAUDE.md now imports AGENTS.md"] if AGENTS_ADDED in made else [])
     kept = ""
     if (args.check or "").strip():
         result = set_check(project, args.check.strip())
@@ -453,8 +533,10 @@ def cmd_adopt(args) -> int:
         print(c.secret_problem(args.title))
         return 1
     s, made = adopt(project, args.title, args.family)
-    pointer = " (CLAUDE.md got a pointer block above its content)" if any(x.startswith("CLAUDE.md (") for x in made) else ""
-    print(f"adopted {project.name}: family {c.load_manifest(project).get('family')}; added {len(made)} contract file(s); existing files kept{pointer}")
+    pointer = " (CLAUDE.md got a pointer block above its content)" if any(x.startswith("CLAUDE.md (pointer") for x in made) else ""
+    agents = "; CLAUDE.md now imports AGENTS.md, which would otherwise stop loading" if AGENTS_ADDED in made else ""
+    print(f"adopted {project.name}: family {c.load_manifest(project).get('family')}; added {len([x for x in made if x != AGENTS_ADDED])} contract file(s); "
+          f"existing files kept{pointer}{agents}")
     if s.get("old_handbook_bytes", 0) > OLD_HANDBOOK_LIMIT:
         print(f"  the existing CLAUDE.md is about {s['old_handbook_bytes'] // 4:,} tokens on every request: a 'Slim the old handbook' item was added to NEEDS_YOU.md")
     for k, v in s["commands"].items():
@@ -483,9 +565,9 @@ def cmd_validate(args) -> int:
             print(f" - … and {len(errs) - VALIDATE_LINES} more: fix these, then run `brain validate` again")
         return 1
     print(f"{project.name}: contract v{c.load_manifest(project).get('contract')} valid")
-    note = reserved_note(project)
-    if note:
-        print(note)
+    for note in (reserved_note(project), agents_note(project)):
+        if note:
+            print(note)
     return 0
 
 
