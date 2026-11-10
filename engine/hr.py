@@ -47,6 +47,8 @@ DEFAULT_CFG = {
     "min_settled": 5,
     "pool_k": 5,
     "gamma": 0.97,
+    "structural_weight": 0.5,
+    "settle_timeout": 600,
     "prior_pass": [2.0, 1.0],
     "score_clamp": [0.7, 1.3],
     "lcb_z": 1.28,
@@ -225,21 +227,36 @@ def hr_state(state: dict) -> dict:
     return h
 
 
+def stat_key(tid: str, version=None) -> str:
+    """The pass-table key of one wording of a template. Version 1, and records
+    written before the version was stored, share the bare id, so old records
+    still fold as they did; a rewritten template (version 2 and up) has its
+    own key and so starts its own record."""
+    if isinstance(version, int) and not isinstance(version, bool) and version > 1:
+        return f"{tid}@{version}"
+    return tid
+
+
 def fold_hire(state: dict, cfg: dict, r: dict) -> None:
     """Fold one settled hire into the learning state. Called by mlearn.fold.
 
     Pass counts move only when the record carries a check result (an exit
     code), never a self-report. Wage ratios move whenever real usage exists.
-    Deterministic: uses only the record's own fields."""
+    Deterministic: uses only the record's own fields, and a field a record
+    does not carry (older records) changes nothing about how it folds."""
     h = hr_state(state)
     hc = DEFAULT_CFG if not isinstance(cfg.get("hr"), dict) else {**DEFAULT_CFG, **cfg["hr"]}
     tid, group = str(r.get("template") or "_plain"), str(r.get("group") or "_none")
     passed = r.get("passed")
-    # A pass or fail counts only when this script ran the sealed check (I-17).
-    if isinstance(passed, bool) and r.get("sealed") is True:
-        for table, key in ((h["t"], tid), (h["g"], group), (h["g"], "_all")):
+    # A pass or fail counts only when this script ran the sealed check (I-17)
+    # and a helper really worked the brief: a hire nobody was given says
+    # nothing about its template.
+    if isinstance(passed, bool) and r.get("sealed") is True and r.get("helper_seen") is not False:
+        # Passing a check that only looks for a file is weak evidence; failing even that is not.
+        gain = float(hc["structural_weight"]) if passed and r.get("check_kind") == "structural" else 1.0
+        for table, key in ((h["t"], stat_key(tid, r.get("template_version"))), (h["g"], group), (h["g"], "_all")):
             cell = table.setdefault(key, [0.0, 0.0, 0])
-            cell[0] = cell[0] * hc["gamma"] + (1.0 if passed else 0.0)
+            cell[0] = cell[0] * hc["gamma"] + (gain if passed else 0.0)
             cell[1] = cell[1] * hc["gamma"] + (0.0 if passed else 1.0)
             cell[2] += 1
     # The ratio is real use over the size band, never over the wage: the wage
@@ -254,9 +271,11 @@ def fold_hire(state: dict, cfg: dict, r: dict) -> None:
         h["settled"] += 1
 
 
-def pass_posterior(h: dict, hc: dict, tid: str, group: str) -> tuple[float, float, float]:
+def pass_posterior(h: dict, hc: dict, tid: str, group: str, version=None) -> tuple[float, float, float]:
     """(alpha, beta, trials) for a template, shrunk toward its group and the
-    whole rack so a template with two trials is not judged on two trials."""
+    whole rack so a template with two trials is not judged on two trials.
+    ``version`` is the template's current version: a rewritten template is
+    judged on its own hires, not on the wording it replaced."""
     a0, b0 = hc["prior_pass"]
     k = hc["pool_k"]
     ga, gb, _ = h["g"].get("_all", [0.0, 0.0, 0])
@@ -267,7 +286,7 @@ def pass_posterior(h: dict, hc: dict, tid: str, group: str) -> tuple[float, floa
     a, b = a + gra, b + grb
     scale = k / max(k, a + b)
     a, b = a * scale, b * scale
-    ta, tb, n = h["t"].get(tid, [0.0, 0.0, 0])
+    ta, tb, n = h["t"].get(stat_key(tid, version), [0.0, 0.0, 0])
     return a + ta, b + tb, n
 
 
@@ -277,10 +296,10 @@ def lcb(a: float, b: float, z: float) -> float:
     return max(0.0, mean - z * sd)
 
 
-def performance_multiplier(h: dict, hc: dict, tid: str, group: str) -> float:
+def performance_multiplier(h: dict, hc: dict, tid: str, group: str, version=None) -> float:
     """How much a template's record moves its ranking: 1.0 with no record,
     within the clamp otherwise, so retrieval relevance always matters most."""
-    a, b, n = pass_posterior(h, hc, tid, group)
+    a, b, n = pass_posterior(h, hc, tid, group, version)
     if n == 0:
         return 1.0
     a0, b0 = hc["prior_pass"]
@@ -289,8 +308,8 @@ def performance_multiplier(h: dict, hc: dict, tid: str, group: str) -> float:
     return max(lo, min(hi, 1.0 + (lcb(a, b, hc["lcb_z"]) - base)))
 
 
-def on_probation(h: dict, hc: dict, tid: str, group: str) -> bool:
-    a, b, n = pass_posterior(h, hc, tid, group)
+def on_probation(h: dict, hc: dict, tid: str, group: str, version=None) -> bool:
+    a, b, n = pass_posterior(h, hc, tid, group, version)
     return n >= hc["probation"]["min_trials"] and lcb(a, b, hc["lcb_z"]) < hc["probation"]["lcb_below"]
 
 
@@ -388,23 +407,32 @@ def _quantile(xs: list[float], q: float) -> float:
     if not xs:
         return 1.0
     pos = min(len(xs) - 1, max(0, math.ceil(q * (len(xs) + 1)) - 1))  # conformal-style rank: errs high on small samples
+    if 1 < len(xs) < 9:
+        # Below nine samples that rank is the largest value, so one runaway
+        # run would set the wage for the next several hires: take the second largest.
+        pos = min(pos, len(xs) - 2)
     return xs[pos]
+
+
+WAGE_CLAMP = (0.4, 3.0)  # a wage follows real use no further than this from its size band
 
 
 def wage(size: str, model_alias: str, tid: str | None, state: dict | None, hc: dict, models_cfg: dict) -> dict:
     """The budget for one helper, in output-equivalent tokens and list-price
     dollars. Starts from the size band; once enough hires are settled, the
-    band is scaled by the 80th-percentile ratio of real use to wage (the
-    template's own ratios when it has enough, else its size band's, else all)."""
+    band is scaled by the 80th-percentile ratio of real use to the size band
+    (the template's own ratios when it has enough, or the plain helpers' own
+    for a hire with no template; else its size band's, else all)."""
     h = hr_state(state if isinstance(state, dict) else {})
     if size not in hc["bands"]:
         raise ValueError(f"unknown size '{size}' (use one of {', '.join(hc['bands'])})")
     band = float(hc["bands"][size])
     basis, factor = f"size band {size} (no settled hires yet)", 1.0
-    for key, label in ((f"t:{tid}", "this template"), (f"s:{size}", f"size {size}"), ("_all", "all hires")):
+    # A hire with no template is folded under "_plain": read it under the same key.
+    for key, label in ((f"t:{tid or '_plain'}", "this template" if tid else "plain helpers"), (f"s:{size}", f"size {size}"), ("_all", "all hires")):
         rs = h["ratios"].get(key, [])
         if len(rs) >= hc["min_settled"]:
-            factor = max(0.4, min(3.0, _quantile(rs, hc["quantile"])))
+            factor = max(WAGE_CLAMP[0], min(WAGE_CLAMP[1], _quantile(rs, hc["quantile"])))
             basis = f"size band {size} x {factor:.2f} from {len(rs)} settled hire(s) of {label}"
             break
     tokens = int(round(band * factor, -3))
@@ -509,9 +537,19 @@ def contract_dir(project: Path | None) -> Path:
 
 def seal_path(cid: str) -> Path:
     """Where the fingerprint of a contract's check is kept: outside the
-    project, so the helper working in the project is not handed the file that
-    decides whether it passed."""
+    project, so an edit to the contract file does not carry its seal along.
+    It is a guard against accidental or careless change, not against a helper
+    that sets out to cheat: the seal is a plain hash at a predictable path,
+    and a helper with a shell runs as the same user. The file is removed once
+    the contract is finished."""
     return Path(tempfile.gettempdir()) / "brain-hr-seals" / re.sub(r"[^A-Za-z0-9_-]", "_", c.session_id())[:40] / f"{cid}.seal"
+
+
+def _drop_seal(cid: str) -> None:
+    try:
+        seal_path(cid).unlink()
+    except OSError:
+        pass
 
 
 def seal_of(contract: dict) -> str:
@@ -606,34 +644,90 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     return contract
 
 
+def _delegated(path: Path, cid: str) -> bool:
+    """Whether a helper transcript was started with this contract's delegation
+    line: "(contract <id>)" in its first user message. A helper that only
+    mentions the id (a reviewer of the work) is not the hire, and <id>-2 is
+    another contract."""
+    marker = re.compile(r"\(contract\s+" + re.escape(cid) + r"\)")
+    for i, row in enumerate(c.iter_jsonl_stream(path)):
+        if i > 6:
+            break
+        if row.get("type") == "user":
+            msg = row.get("message") if isinstance(row.get("message"), dict) else {}
+            return bool(marker.search(json.dumps(msg.get("content", ""))))
+    return False
+
+
 def find_helper_usage(contract: dict, sub_paths: list[Path], models_cfg: dict) -> dict | None:
-    """Real usage of the helper that was given this contract's brief: the
-    helper transcript whose first messages mention the contract id."""
+    """Real usage of the helper that was given this contract's brief: every
+    helper transcript started with the delegation line, summed, since the same
+    brief sent twice is two runs of one hire. ``ran_model`` and ``ran_effort``
+    are what the transcripts say ran, whatever was planned."""
     from . import ledger
     cid = contract["id"]
+    cost, tokens, out_tokens, turns, runs, model, effort = 0.0, 0.0, 0, 0, 0, "", ""
     for p in sub_paths:
-        head = ""
-        for i, row in enumerate(c.iter_jsonl_stream(p)):
-            if i > 6:
-                break
-            head += json.dumps(row.get("message", {}).get("content", ""))[:4000]
-        if cid not in head:
+        if not _delegated(p, cid):
             continue
         data = ledger.read_transcript(p)
-        cost, out_tokens, model = 0.0, 0, ""
+        run_cost, run_model = 0.0, ""
         for m in data["messages"]:
-            cost += ledger.price(m["model"], m["usage"], models_cfg)
+            run_cost += ledger.price(m["model"], m["usage"], models_cfg)
             out_tokens += m["usage"].get("out", 0)
-            model = m["model"]
-        price_out = ledger.rates_for(model, models_cfg).get("out", 20.0) if model else 20.0
-        return {"cost": round(cost, 4), "out_tokens": out_tokens, "actual_tokens": int(cost / price_out * 1e6), "model": model, "turns": len(data["messages"])}
-    return None
+            run_model = m["model"]
+        price_out = ledger.rates_for(run_model, models_cfg).get("out", 20.0) if run_model else 20.0
+        tokens += run_cost / price_out * 1e6
+        cost += run_cost
+        turns += len(data["messages"])
+        runs += 1
+        model, effort = run_model or model, data.get("effort") or effort
+    if not runs:
+        return None
+    alias = (ledger.rates_for(model, models_cfg).get("alias") or model) if model else ""
+    return {"cost": round(cost, 4), "out_tokens": out_tokens, "actual_tokens": int(round(tokens)), "model": model, "turns": turns,
+            "runs": runs, "ran_model": alias, "ran_effort": effort}
 
 
-def settle(contract_path: Path, brain_root: Path | None = None, project: Path | None = None, sub_paths: list[Path] | None = None) -> dict:
+STRUCTURAL_CMD = re.compile(r"^!?\s*(test\s|\[\s|ls(\s|$)|wc(\s|$)|true$|:$|grep\s+(-[A-Za-z]*q[A-Za-z]*|--quiet)(\s|$))")
+
+
+def check_kind(check) -> str:
+    """What a pass on this check is worth as evidence: "none" (no command),
+    "structural" (it only looks at what exists: test, [, ls, grep -q, wc, true)
+    or "behavioural" (anything that runs the work). Pure, so a record's kind
+    can always be recomputed from its command."""
+    text = str(check or "").strip()
+    if not text:
+        return "none"
+    if re.search(r"[`]|\$\(", text):
+        return "behavioural"  # a substitution runs something else
+    parts = [p.strip() for p in re.split(r"&&|\|\||[;|\n]", text) if p.strip()]
+    return "structural" if parts and all(STRUCTURAL_CMD.match(p) for p in parts) else "behavioural"
+
+
+def _run_check(check: str, where: Path, project: Path | None, timeout: int, results: dict | None) -> dict:
+    """Run a contract's check, or reuse the run another contract with the same
+    command and folder already paid for (``results``). ``timed_out`` is set
+    when the command was stopped at the limit: that is no result, not a fail."""
+    key = (check, str(Path(where).resolve()))
+    if results is not None and key in results:
+        return results[key]
+    from . import gate
+    r = gate.run_filtered(check, where, project, timeout=timeout)
+    r = dict(r, timed_out=bool(r.get("timed_out")) or (r["exit"] == 124 and r.get("seconds", 0) >= timeout))
+    if results is not None:
+        results[key] = r
+    return r
+
+
+def settle(contract_path: Path, brain_root: Path | None = None, project: Path | None = None, sub_paths: list[Path] | None = None,
+           results: dict | None = None, drop_unused: bool = False) -> dict:
     """Close one contract: real usage from the helper's transcript, the check
     run by this script (an exit code, not a claim), and a `hire` record in the
-    brain's inbox that names no project."""
+    brain's inbox that names no project. ``results`` lets one run of a check
+    serve every contract that shares it; ``drop_unused`` (close) drops a brief
+    no helper was given instead of settling it."""
     root = Path(brain_root or c.BRAIN_ROOT)
     contract = c.read_json(contract_path, None)
     if not isinstance(contract, dict) or not contract.get("id"):
@@ -641,9 +735,18 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
     if contract.get("status") == "settled":
         return contract  # already settled: nothing is run or recorded twice
     models_cfg = c.read_json(root / "memory" / "models.json", {}) or {}
+    timeout = int(cfg_of(root).get("settle_timeout") or 600)
     if sub_paths is None:
         _main, sub_paths = c.transcript_paths()
     usage = find_helper_usage(contract, sub_paths, models_cfg)
+    # Whether anyone worked the brief is part of the result: without a helper
+    # the check's outcome is the lead's own work and says nothing about the template.
+    contract["helper_seen"] = bool(usage)
+    if not usage and drop_unused:
+        contract["status"], contract["dropped_at"] = "unused", c.now_iso()
+        c.write_json(contract_path, contract)
+        _drop_seal(contract["id"])
+        return contract
     # The result comes only from running the check here. Whatever `passed`
     # the file holds is ignored, and the check must be the one that was sealed
     # at hire time: the contract sits where the helper works, so neither its
@@ -651,52 +754,102 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
     seal = c.read_text(seal_path(contract["id"])).strip()
     sealed = bool(seal) and seal == seal_of(contract)
     contract["sealed"] = sealed
+    contract["check_kind"] = check_kind(contract.get("check"))
     passed = None
     where = project or (Path(contract["workdir"]) if contract.get("workdir") and Path(contract["workdir"]).is_dir() else None)
     if contract.get("check") and where is not None:
         if seal and not sealed:
             contract["tampered"] = True  # the check or identity changed after hiring: do not run a command nobody approved
         else:
-            from . import gate
-            r = gate.run_filtered(contract["check"], where, project)
-            passed = r["exit"] == 0
+            r = _run_check(contract["check"], where, project, timeout, results)
+            if r["timed_out"]:
+                contract["check_timed_out"] = timeout  # stopped at the limit: no result
+            else:
+                passed = r["exit"] == 0
             contract["check_exit"], contract["check_log"] = r["exit"], Path(r["log"]).name
     contract["passed"] = passed
     if usage:
         contract.update({"actual_tokens": usage["actual_tokens"], "actual_cost": usage["cost"], "actual_out": usage["out_tokens"], "turns": usage["turns"],
+                         "runs": usage["runs"], "ran_model": usage["ran_model"], "ran_effort": usage["ran_effort"],
                          "overrun": round(usage["actual_tokens"] / contract["wage_tokens"], 2) if contract.get("wage_tokens") else None})
     if not usage and passed is None:
         return dict(contract, status="unmatched")  # stays open on disk, so a later settle can still find the helper
+    if contract.get("template") and "template_version" not in contract:
+        # Which wording was hired: read from the rack when the contract does not say.
+        ver = next((t.get("version") for t in load_rack(root, include_retired=True) if t["id"] == contract["template"]), None)
+        if isinstance(ver, int) and not isinstance(ver, bool):
+            contract["template_version"] = ver
     contract["status"] = "settled"
     contract["settled_at"] = c.now_iso()
     c.write_json(contract_path, contract)
-    if contract["status"] == "settled":
-        rec = {"kind": "hire", "session": c.session_id(), "at": contract["settled_at"],
-               "id": hashlib.sha256(("hire|" + contract["id"]).encode()).hexdigest()[:16],
-               "template": contract.get("template"), "group": contract.get("group"), "base_agent": contract.get("base_agent"),
-               "size": contract.get("size"), "model": contract.get("model"), "effort": contract.get("effort"),
-               "task_class": contract.get("task_class"), "family": contract.get("family"), "risk": contract.get("risk"),
-               "has_check": contract.get("has_check"), "explored": contract.get("explored"), "propensity": contract.get("propensity"),
-               "wage_tokens": contract.get("wage_tokens"), "band_tokens": contract.get("band_tokens"),
-               "actual_tokens": contract.get("actual_tokens"), "passed": contract.get("passed"), "sealed": sealed}
-        inbox = root / "learning" / "inbox" / f"{c.today()}-{c.session_id()}.jsonl"
-        have = {r.get("id") for r in c.read_jsonl(inbox)}
-        if rec["id"] not in have:  # settling twice records once
-            c.append_jsonl(inbox, rec)
+    if passed is not False:
+        _drop_seal(contract["id"])  # kept after a failed check, so one retry can still be held to the sealed command
+    rec = {"kind": "hire", "session": c.session_id(), "at": contract["settled_at"],
+           "id": hashlib.sha256(("hire|" + contract["id"]).encode()).hexdigest()[:16],
+           "template": contract.get("template"), "template_version": contract.get("template_version"),
+           "group": contract.get("group"), "base_agent": contract.get("base_agent"),
+           "size": contract.get("size"), "model": contract.get("model"), "effort": contract.get("effort"),
+           "ran_model": contract.get("ran_model"), "ran_effort": contract.get("ran_effort"), "runs": contract.get("runs"),
+           "task_class": contract.get("task_class"), "family": contract.get("family"), "risk": contract.get("risk"),
+           "has_check": contract.get("has_check"), "check_kind": contract["check_kind"],
+           "explored": contract.get("explored"), "propensity": contract.get("propensity"),
+           "wage_tokens": contract.get("wage_tokens"), "band_tokens": contract.get("band_tokens"),
+           "actual_tokens": contract.get("actual_tokens"), "passed": contract.get("passed"), "sealed": sealed,
+           "helper_seen": contract["helper_seen"]}
+    inbox = root / "learning" / "inbox" / f"{c.today()}-{c.session_id()}.jsonl"
+    have = {r.get("id") for r in c.read_jsonl(inbox)}
+    if rec["id"] not in have:  # settling twice records once
+        c.append_jsonl(inbox, rec)
     return contract
 
 
+def retry(contract_path: Path, brain_root: Path | None = None, project: Path | None = None) -> tuple[int, str]:
+    """Run the sealed check of a settled, failed contract once more, after the
+    helper was sent back with the failing output. The second result is kept in
+    the contract; the first stays the one the template is judged on. Returns
+    (exit code, one line)."""
+    con = c.read_json(contract_path, None)
+    cid = Path(contract_path).stem
+    if not isinstance(con, dict) or con.get("status") != "settled" or con.get("passed") is not False:
+        return 1, f"{cid}: nothing to retry: a retry follows a settled contract whose check failed (brain hr settle {cid})"
+    if "passed_after_retry" in con:
+        return 1, f"{cid}: already retried at {con.get('retried_at')} (check {'passed' if con['passed_after_retry'] else 'failed'}); one retry is recorded per hire"
+    seal = c.read_text(seal_path(cid)).strip()
+    where = project or (Path(con["workdir"]) if con.get("workdir") and Path(con["workdir"]).is_dir() else None)
+    if (seal and seal != seal_of(con)) or where is None:
+        return 1, f"{cid}: retry not run: " + ("the contract was changed after hiring" if where is not None else "its working folder is gone") + f"; run the check yourself: brain run -- {con.get('check')}"
+    timeout = int(cfg_of(Path(brain_root or c.BRAIN_ROOT)).get("settle_timeout") or 600)
+    r = _run_check(con["check"], where, project, timeout, None)
+    if r["timed_out"]:
+        return 1, f"{cid}: retry: check did not finish in {timeout}s: no result recorded"
+    con.update({"passed_after_retry": r["exit"] == 0, "retried_at": c.now_iso(), "retry_log": Path(r["log"]).name})
+    c.write_json(contract_path, con)
+    _drop_seal(cid)
+    word = "check passed" if r["exit"] == 0 else "CHECK FAILED again"
+    return (0 if r["exit"] == 0 else 1), f"{cid}: retry: {word} (the first result, failed, is the one the template is judged on)"
+
+
 def settle_open(project: Path | None, brain_root: Path | None = None, sub_paths: list[Path] | None = None) -> str:
-    """Settle every open contract of this session; one summary line, or ""."""
+    """Settle every open contract of this session; one summary line, or "".
+    A check shared by several contracts runs once, and a brief no helper was
+    given is dropped: nothing is run or recorded for it."""
     paths = open_contracts(project, mine_only=True)
     if not paths:
         return ""
-    done = [settle(p, brain_root=brain_root, project=project, sub_paths=sub_paths) for p in paths]
+    results: dict = {}
+    done = [settle(p, brain_root=brain_root, project=project, sub_paths=sub_paths, results=results, drop_unused=True) for p in paths]
     settled = [d for d in done if d["status"] == "settled"]
+    unused = sum(1 for d in done if d["status"] == "unused")
     over = sum(1 for d in settled if (d.get("overrun") or 0) > 1.0)
     failed = sum(1 for d in settled if d.get("passed") is False)
-    return (f"hr: {len(settled)} of {len(done)} contract(s) settled" + (f", {over} over wage" if over else "")
-            + (f", {failed} failed its check" if failed else ""))
+    slow = sum(1 for d in settled if d.get("check_timed_out"))
+    parts = []
+    if len(done) > unused:
+        parts.append(f"{len(settled)} of {len(done) - unused} contract(s) settled" + (f", {over} over wage" if over else "")
+                     + (f", {failed} failed its check" if failed else "") + (f", {slow} check(s) did not finish in time" if slow else ""))
+    if unused:
+        parts.append(f"{unused} brief{'' if unused == 1 else 's'} never delegated (no helper transcript names {'it' if unused == 1 else 'them'}): dropped, nothing recorded")
+    return "hr: " + " · ".join(parts)
 
 
 def open_contracts(project: Path | None, mine_only: bool = False) -> list[Path]:
@@ -709,6 +862,18 @@ def open_contracts(project: Path | None, mine_only: bool = False) -> list[Path]:
     return out
 
 
+def _pending_hires(root: Path) -> int:
+    """Hire records in inbox files no consolidation has consumed yet. A
+    consumed file stays in place, so counting every file would ask for a
+    consolidation that changes nothing."""
+    try:
+        from . import learn
+        files = learn.pending_inbox(root)
+    except Exception:
+        files = sorted((root / "learning" / "inbox").glob("*.jsonl"))
+    return sum(1 for f in files for r in c.read_jsonl(f) if r.get("kind") == "hire")
+
+
 def report_lines(brain_root: Path | None = None) -> list[str]:
     root = Path(brain_root or c.BRAIN_ROOT)
     hc = cfg_of(root)
@@ -718,24 +883,40 @@ def report_lines(brain_root: Path | None = None) -> list[str]:
     except Exception:
         h = hr_state({})
     rack = {t["id"]: t for t in load_rack(root)}
+    current = {stat_key(tid, t.get("version")): t for tid, t in rack.items()}  # the record each template is judged on now
+    group_of = lambda key: (current.get(key) or rack.get(key.split("@")[0]) or {}).get("group", "")
     lines = [f"rack: {len(rack)} templates · settled hires folded into learning: {h['settled']}"]
-    waiting = sum(1 for f in (root / "learning" / "inbox").glob("*.jsonl") for r in c.read_jsonl(f) if r.get("kind") == "hire")
+    waiting = _pending_hires(root)
     if waiting:
         lines.append(f"{waiting} settled hire(s) are recorded in the inbox and count once the next consolidation runs (say \"Consolidate\")")
     if not h["t"] and not h["settled"]:
         return lines + ["until then wages use the size bands and every template ranks on fit alone"]
-    used = sorted(h["t"].items(), key=lambda kv: -kv[1][2])[:5]
-    for tid, (a, b, n) in used:
-        pa, pb, _ = pass_posterior(h, hc, tid, rack.get(tid, {}).get("group", ""))
-        flag = " · ON PROBATION" if on_probation(h, hc, tid, rack.get(tid, {}).get("group", "")) else ""
-        lines.append(f"{tid}: {n} checked hire(s), passes first time about {pa / (pa + pb):.0%} (lower bound {lcb(pa, pb, hc['lcb_z']):.0%}){flag}")
-    rs = h["ratios"].get("_all", [])
+    # Every template on probation is named, however little it is used.
+    probation = sorted(k for k in h["t"] if k in current and on_probation(h, hc, k, group_of(k)))
+    if probation:
+        lines.append(f"ON PROBATION ({len(probation)}): " + ", ".join(probation) + " — ranked down until rewritten or retired (hr/GUIDELINES.md, Changing the rack)")
+    used = sorted(h["t"].items(), key=lambda kv: (-kv[1][2], kv[0]))[:5]
+    for key, (a, b, n) in used:
+        pa, pb, _ = pass_posterior(h, hc, key, group_of(key))
+        flag = " · ON PROBATION" if key in probation else " · earlier wording, no longer ranks" if key not in current and key.split("@")[0] in rack else ""
+        lines.append(f"{key}: {n} checked hire(s), passed at settling about {pa / (pa + pb):.0%} (lower bound {lcb(pa, pb, hc['lcb_z']):.0%}){flag}")
+    rs = sorted(h["ratios"].get("_all", []))
     if rs:
         within = sum(r <= 1.0 for r in rs) / len(rs)
-        lines.append(f"wages: {within:.0%} of {len(rs)} settled hire(s) stayed within the wage; median use {sorted(rs)[len(rs) // 2]:.2f}x the wage")
+        median = (rs[(len(rs) - 1) // 2] + rs[len(rs) // 2]) / 2
+        lines.append(f"wages: {within:.0%} of the last {len(rs)} settled hire(s) stayed within the size band; median use {median:.2f}x the size band")
         if len(rs) < 8:
             lines.append("too few settled hires to call the wages calibrated (fewer than 8)")
-    return lines[:10]
+    # A wage follows real use only as far as the clamp: beyond it the template's size is what is wrong.
+    off = []
+    for key, vals in sorted(h["ratios"].items()):
+        if key.startswith("t:") and len(vals) >= hc["min_settled"]:
+            q = _quantile(vals, hc["quantile"])
+            if not WAGE_CLAMP[0] <= q <= WAGE_CLAMP[1]:
+                off.append(f"{key[2:]} ({q:.1f}x)")
+    if off:
+        lines.append("real use is beyond what a wage can follow from the size band: " + ", ".join(off[:8]) + " — change the template's size (a reviewed rack change)")
+    return lines[:15]
 
 
 # ---------------------------------------------------------------- cli
@@ -788,46 +969,81 @@ def cmd_settle(args) -> int:
     project = c.resolve_project(args.project)
     if project is not None and not c.is_managed(project):
         project = None
+    if project is None:
+        why = c.locate_project(args.project)[1]
+        if "projects attached" in why:  # several projects and none named: say so instead of looking elsewhere silently
+            print(f"{why}; without it only contracts hired with no project are seen")
     d = contract_dir(project)
     if args.contract and not CONTRACT_ID.match(args.contract):
         print("that is not a contract id (they look like h-20261110-1a2b3c)")
         return 1
+    known = bool(args.contract) and (d / f"{args.contract}.json").is_file()
+    if (args.abandon or getattr(args, "retry", False)) and not known:
+        ids = [p.stem for p in open_contracts(project, mine_only=True)]
+        flag = "--abandon" if args.abandon else "--retry"
+        print(f"name an existing contract: brain hr settle <id> {flag}" + (f" (open: {', '.join(ids[:6])})" if ids else " (no contract of this session is open)"))
+        return 1
     if args.abandon:
-        if not args.contract or not (d / f"{args.contract}.json").is_file():
-            print("name an existing contract to abandon")
-            return 1
         con = c.read_json(d / f"{args.contract}.json", {}) or {}
+        if con.get("status") == "settled":
+            print(f"{args.contract}: already settled at {con.get('settled_at')}; left as it is")
+            return 0
         con["status"] = "abandoned"
         c.write_json(d / f"{args.contract}.json", con)
+        _drop_seal(args.contract)
         print(f"{args.contract}: abandoned; nothing recorded")
         return 0
+    if getattr(args, "retry", False):
+        code, line = retry(d / f"{args.contract}.json", project=project)
+        print(line)
+        return code
     paths = [d / f"{args.contract}.json"] if args.contract else open_contracts(project, mine_only=True)
     if not paths:
         print("no open contract to settle")
         return 0
     worst = 0
     hc = cfg_of()
+    results: dict = {}  # one run of a check serves every contract that shares it
     for p in paths:
         if not p.is_file():
             print(f"no contract {p.stem}")
             worst = 1
             continue
+        con = c.read_json(p, {}) or {}
+        if con.get("status") == "settled":
+            # Nothing is run twice, and the line must not read as if it had been.
+            then = "check passed" if con.get("passed") is True else "check failed" if con.get("passed") is False else "no check result"
+            more = ""
+            if con.get("passed") is False:
+                retried = con.get("passed_after_retry")
+                more = f"; retry {'passed' if retried else 'failed'}" if retried is not None else f"; after the helper's fix: brain hr settle {p.stem} --retry"
+                worst = worst if retried else 1
+            print(f"{p.stem}: settled at {con.get('settled_at')}, {then} then; not re-run{more}")
+            continue
         if args.passed is not None:
-            con = c.read_json(p, {}) or {}
             if con.get("check"):
                 print(f"{p.stem}: it has a check command, so the result comes from running it, not from --passed")
             else:
                 print(f"{p.stem}: --passed ignored; a result counts only when a check command produced it (hire with --check)")
-        con = settle(p, project=project)
+        con = settle(p, project=project, results=results)
         if con["status"] == "unmatched":
-            print(f"{con['id']}: no helper transcript mentions this contract yet and no check could run; still open (settle again later, or --abandon)")
+            print(f"{con['id']}: no helper transcript names this contract yet and no check could run; still open (settle again later, or --abandon)")
             continue
         over = f" ({con['overrun']:.2f}x)" if isinstance(con.get("overrun"), (int, float)) else ""
-        use = f"used {con['actual_tokens']:,} of {con['wage_tokens']:,}{over}" if con.get("actual_tokens") else "usage not found on this machine"
+        runs = f" in {con['runs']} runs" if (con.get("runs") or 0) > 1 else ""
+        if con.get("actual_tokens"):
+            use = f"used {con['actual_tokens']:,} of {con['wage_tokens']:,}{over}{runs}"
+        elif con.get("helper_seen"):
+            use = "usage not found on this machine"
+        else:
+            use = "no helper transcript names this contract, so the result does not count for its template"
         res = ("check passed" if con.get("passed") is True else "CHECK FAILED" if con.get("passed") is False
-               else "CHECK NOT RUN: the contract was changed after hiring" if con.get("tampered") else "no check result")
+               else "CHECK NOT RUN: the contract was changed after hiring" if con.get("tampered")
+               else f"check did not finish in {con['check_timed_out']}s: no result" if con.get("check_timed_out") else "no check result")
         flag = " · OVER WAGE" if (con.get("overrun") or 0) > hc["overrun_flag"] else ""
-        print(f"{con['id']}: {con.get('template') or 'plain'} on {con['model']} · {use}{flag} · {res}")
+        ran = (con.get("ran_model") or con.get("model"), con.get("ran_effort") or con.get("effort"))
+        arm = f" · ran on {ran[0]}/{ran[1]}, hired as {con.get('model')}/{con.get('effort')}" if con.get("helper_seen") and ran != (con.get("model"), con.get("effort")) else ""
+        print(f"{con['id']}: {con.get('template') or 'plain'} on {con['model']} · {use}{flag} · {res}{arm}")
         if con.get("passed") is False:
             worst = 1
     return worst
@@ -946,6 +1162,7 @@ def register(sub) -> None:
     t.add_argument("contract", nargs="?", help="contract id (default: every open contract)")
     t.add_argument("--passed", type=int, choices=(0, 1), help="ignored: results come from the check command")
     t.add_argument("--abandon", action="store_true", help="drop a contract that will not be used; nothing is recorded")
+    t.add_argument("--retry", action="store_true", help="after a failed check went back to the helper once: run the check again and keep the second result beside the first")
     t.set_defaults(func=cmd_settle)
     r = s.add_parser("rack", help="list the template rack, search it, or show one template")
     r.add_argument("--search")

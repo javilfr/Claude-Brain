@@ -64,10 +64,20 @@ class Base(unittest.TestCase):
         os.environ.pop("BRAIN_PROJECT", None)
         os.environ["BRAIN_SESSION_ID"] = "sess-hr"
         os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
+        # Isolation (hr-14, ml-planning-07, templates-a-30): seals, contracts
+        # hired without a project and run logs go to the shared temp folder,
+        # and "no project" falls back to a managed folder beside the brain.
+        # Both are pointed inside this test's own folder.
+        os.environ["TMPDIR"] = str(Path(self._tmp.name) / "tmp")
+        Path(os.environ["TMPDIR"]).mkdir()
+        tempfile.tempdir = None
+        self._siblings, c.sibling_dirs = c.sibling_dirs, lambda *_a, **_k: []
 
     def tearDown(self):
+        c.sibling_dirs = self._siblings
         os.environ.clear()
         os.environ.update(self._env)
+        tempfile.tempdir = None
         self._tmp.cleanup()
 
     def project(self) -> Path:
@@ -330,7 +340,10 @@ class LeadVersusHelpers(Base):
         os.environ["BRAIN_SESSION_ID"] = "another-session"
         hr.hire("Review the diff of this branch before merge", brain_root=self.b, project=p, check="true")
         os.environ["BRAIN_SESSION_ID"] = "sess-hr"
-        line = hr.settle_open(p, brain_root=self.b, sub_paths=[])
+        # A helper really worked this brief: since instructions-09 and
+        # e2e-trial-07, close drops a brief nobody was given instead of settling it.
+        worked = Contracts.helper_transcript(self, mine["id"], 1000)
+        line = hr.settle_open(p, brain_root=self.b, sub_paths=[worked])
         self.assertIn("1 of 1 contract(s) settled", line)
         self.assertEqual(len(hr.open_contracts(p)), 1)
         self.assertEqual(c.read_json(p / ".brain" / "log" / "hr" / f"{mine['id']}.json")["status"], "settled")
@@ -396,10 +409,7 @@ class ReviewFindings(Base):
 
     def test_cap_counts_this_sessions_contracts_with_or_without_a_project(self):
         """S1: the four-helper cap applies with no project; other sessions' leftovers do not block."""
-        os.environ["TMPDIR"] = str(Path(self._tmp.name) / "tmp")
-        Path(os.environ["TMPDIR"]).mkdir()
-        import tempfile as _t
-        _t.tempdir = None
+        import tempfile as _t   # the temp folder is this test's own since Base.setUp (hr-14)
         try:
             os.environ["BRAIN_SESSION_ID"] = "crashed-session"
             for i in range(4):
