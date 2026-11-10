@@ -4,6 +4,10 @@ For the Claude session that opens this repository on its own. The owner's instru
 
 ## Where things stand
 
+**Update 2026-11-10, second session:** CB-200 to CB-206 are done; evidence for each is under "2026-11-10 improvement session" in `docs/BUILD_STATUS.md`. Open: CB-207 (research round four; also absorbs the research pass on the five thinly sourced data templates from CB-205), CB-208 (red team and final review), CB-209 (close out). Gate at this point: 421 tests OK; doctor, lint, hr audit, eval audit clean. Headline results to carry forward: template briefs cost 66% more tokens than plain briefs with no measured gain on the 8 dev tasks (verdict revert, n = 8); word-based template selection finds the right template in the top three for 47 of 100 independent requests; the guard hook fires in a one-repo session; helpers honour model, effort and omitClaudeMd.
+
+Earlier state, from the build session:
+
 - Phase A is built: core file, ten skills, six agents, the engine (`bin/brain`, 22 modules, standard library only), the learning pipeline, the update radar, the evaluation system, and the HR department with its rack of 100 templates.
 - Last gate before this handover: 407 tests OK; `doctor`, `lint`, `hr audit`, `items check`, `eval audit` exit 0.
 - Nothing has been proven in a live session beyond: skills and agents load from the brain, and two helpers were hired and settled through `brain hr`.
