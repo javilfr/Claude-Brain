@@ -1,0 +1,351 @@
+{
+ "summary": "The radar works through this container's proxy (10 of 10 sources, 0 errors, 0.70 s forced; 2.09 MB when nothing is cached) and the evaluation statistics are exact and sound (a false 'ship' at most 3.5% of the time at every count I enumerated), but neither system does its job end to end yet. The evaluation system cannot say whether the brain helps: there is no runner, the 12 tasks pass hard-coded and off-task answers, the held-out set can never reach the 8-pair floor, and `eval compare` prints 'ship' with no pre-registration, with a backdated or edited one, or after losing tasks are left out. Fixing that (findings 1 to 6) is the most important change, because CB-109 and CB-203 rest on it. The radar loses what it finds: at boot a model-launch release note was outranked by a changelog line and a marketing page, consolidation marked three unseen official leads as handled, a source that breaks is invisible, two sessions conflict on merge, and behind a slow connection `boot` never exits (fix prototyped and measured). The repo map ranks test files and generated code above source because local variable names count as references. One mistake of mine to report: a command whose folder variable was lost ran in the real repository and reset the ten `last_checked` stamps in `/home/user/Claude-Brain/learning/radar/state.json` for a few minutes; I restored the committed bytes (same sha256 as HEAD, `git status` clean, no commit included it).",
+ "strengths": [
+  "Radar safety and speed hold up live: `brain radar --force` in a scratch copy checked 10 of 10 sources through the HTTPS proxy in 0.70 s with 0 errors; the host allowlist, same-host redirect rule, 2 MB cap, text cleaning and 'first run is a baseline' are covered by 44 passing tests. Keep all of it.",
+  "The decision statistics are exact and conservative: enumerating the default rule for 1 to 12 differing tasks, the chance of 'ship' when the arms do not differ never exceeds 0.035, fewer than 8 pairs is always 'not proven', and nothing depends on sampling. Keep `sign_test`, `prob_win_share_above_half` and the floor.",
+  "Graders cannot be fooled by editing the visible tests (the grader's own files are written over a temporary copy), `eval audit` proves every task's grader passes its reference and fails its null solution (12 of 12), and a malformed run row is an error rather than a skipped line.",
+  "The repo map is small and fast: 12 lines, 716 bytes (about 193 tokens) for the 262-file brain, 2.18 s cold and 0.16 s from cache; Python is parsed exactly with `ast` and a syntax error does not break the map.",
+  "A lead never becomes memory by itself: `brain learn note --trust external --source <url>` refused my imperative wording with 'external text cannot become a rule; state it as a fact with a source', and accepted the same content stated as a fact."
+ ],
+ "findings": [
+  {
+   "title": "`eval compare` says 'ship' with no pre-registration, and a pre-registration can be written after the run, backdated or edited",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/evals.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-verify/SKILL.md",
+    "/home/user/Claude-Brain/evals/README.md",
+    "/home/user/Claude-Brain/tests/test_evals.py"
+   ],
+   "evidence": "Scratch copy, nothing in evals/prereg. Eight dev tasks recorded with `brain eval record e1 --task T --arm plain --passed 0 --tokens 1000` and `--arm brain --passed 1 --tokens 900`; `brain eval compare e1 --a plain --b brain` printed `verdict: ship · p 0.004 · P(better) 1.00` and `Verdict: adopted.` (exit 0). Then, after the run, `BRAIN_NOW=2026-01-01T00:00:00Z brain eval prereg e2-after ...` wrote a pre-registration dated before it and `compare e1 ... --prereg e2-after` printed `verdict: ship`. A second run with 1 win, 0 losses, 7 ties printed `verdict: not-proven`; after I edited that file's decision by hand to alpha 0.5 and ship_prob 0.51 the same command printed `verdict: ship · p 0.500 ... sign test p 0.500 <= 0.5; tokens not recorded, cost guard not checked`. Code: evals.py:743 (prereg optional), :728-737 (record never looks for one), :372-375 (alpha up to 0.5 and ship_prob just above 0.5 are valid), :567-572 (both dates are self-declared; `created` comes from `c.now_iso()`, which honours BRAIN_NOW). No hash or git check exists (`grep -n prereg engine/guard.py engine/lint.py` prints nothing). brain-verify/SKILL.md:35 tells the lead to run `BRAIN eval compare <run-file> --a ARM --b ARM` with no `--prereg`. tests/test_evals.py:393-397 asserts `verdict: ship` from a compare with no pre-registration, so the suite pins the defect.",
+   "repro": "B='python3 <copy>/bin/brain'; for each of 8 dev task ids: $B eval record e1 --task T --arm plain --passed 0 --tokens 1000; $B eval record e1 --task T --arm brain --passed 1 --tokens 900; then $B eval compare e1 --a plain --b brain  -> 'verdict: ship'. Then BRAIN_NOW=2026-01-01T00:00:00Z $B eval prereg e2-after --hypothesis x --metric pass --direction up --tasks <the 8 ids>; $B eval compare e1 --a plain --b brain --prereg e2-after -> 'verdict: ship'.",
+   "proposed_fix": "At the command boundary only (the functions `verdict` and `compare` keep their signatures). (1) `cmd_compare`: with no `--prereg`, look for evals/prereg/<run name>.json; if there is none, print the counts under 'exploratory: no pre-registration, so no verdict' and never the words ship or adopted. (2) `cmd_record` (and the new `eval trial`, finding 3) refuse when evals/prereg/<run>.json is missing, and store `prereg_sha` (sha256 of the file's bytes) in every row; `cmd_compare` recomputes it and refuses on a mismatch or on rows with differing hashes. (3) `check_prereg_against_run`: when the brain is a git work tree, require the prereg to be committed and unmodified (`git log -1 --format=%cI -- <path>` non-empty, `git diff --quiet HEAD -- <path>`), and compare the first trial with that commit time when it is later than `created`. (4) `validate_prereg`: a decision rule may only be as strict as `DEFAULT_DECISION` or stricter (alpha <= 0.05, ship_prob >= 0.95, cost_guard <= 1.10). (5) Add an `attempt` number (1 + earlier preregs with the same `target`), divide alpha by it and print it, so repeated tries are visible and paid for. (6) brain-verify/SKILL.md:35 and evals/README.md name `BRAIN eval compare <change>`. The one existing test that asserts the defect, `test_record_then_compare_through_the_cli`, gets a prereg written first and keeps every other assertion.",
+   "acceptance": "New tests in tests/test_r4_h.py: test_compare_without_prereg_never_says_ship, test_record_refuses_without_prereg, test_edited_prereg_is_refused, test_backdated_prereg_is_refused (temp git repo), test_prereg_cannot_loosen_the_decision_rule. The three command sequences in the repro print 'exploratory' or a one-line refusal with exit 1.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "radar-map-evals-01"
+  },
+  {
+   "title": "A pre-registered run still ships after losing tasks are left out, failures are relabelled as infrastructure errors, or one arm is re-run; passes are typed by hand",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/evals.py",
+    "/home/user/Claude-Brain/tests/test_evals.py"
+   ],
+   "evidence": "Each case in a scratch copy with a valid prereg passed to compare. (1) Prereg lists all 12 tasks; trials recorded for 8 only (A fail, B pass): `pairs 8 ... wins 8 · losses 0 · ties 0` / `verdict: ship · p 0.004`; the four missing tasks are not mentioned. (2) B's first trial on four tasks recorded `--passed 0 --infra-error`, then a second trial `--passed 1`: `pairs 8 (4 infra-error trial(s) dropped, re-run them) · wins 8` / `verdict: ship`. (3) Both arms fail every task once (all ties); B alone gets two more trials until one passes: `wins 8 · losses 0 · ties 0` / `verdict: ship`. (4) `--passed` and `--infra-error` are typed by whoever records; `eval grade` and `eval record` are not connected (evals.py:719-737). Code: `check_prereg_against_run` (evals.py:560-573) only checks that the run's tasks are a subset of the prereg; `pair_runs` (:534-557) drops every infra row and scores a task by its pass fraction over however many trials each arm happens to have. HR had the same hole ('a pass that could be recorded without the check running') and closed it; evals did not.",
+   "repro": "$B eval prereg e12 --hypothesis x --metric pass --direction up --tasks <all 12 ids>; record A fail and B pass for the 8 dev tasks only; $B eval compare e12 --a A --b B --prereg e12 -> 'verdict: ship'. Same pattern with `--infra-error` on B's failures, and with extra B trials after an all-fail tie.",
+   "proposed_fix": "In `compare()` when a prereg is given: (1) every task in `prereg.tasks` must have both arms, otherwise the decision is not-proven with reason 'incomplete: k of n pre-registered tasks have both arms' (this also removes optional stopping). (2) The prereg carries `trials` (default 1); `pair_runs(..., trials=k)` uses only the first k non-infra trials per task and arm in file order and reports the rest as 'extra trials ignored'. (3) At most one infra row per task and arm is dropped; a second counts as a fail; `record --infra-error` needs `--note`. (4) Rows written by `eval trial` (finding 3) carry `graded: true` and the grader's reason; with a prereg, `compare` refuses rows without it unless the prereg says `\"grading\": \"manual\"`. `pair_runs` without the new argument behaves as today, so `test_pairs_by_task_with_trials_and_infra_errors` holds.",
+   "acceptance": "tests/test_r4_h.py: test_missing_preregistered_task_blocks_any_verdict, test_extra_trials_do_not_change_a_pair, test_second_infra_error_counts_as_a_fail, test_hand_recorded_pass_is_refused_under_prereg. Re-running the three sequences prints `verdict: not-proven` each time.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "radar-map-evals-02"
+  },
+  {
+   "title": "A paired comparison cannot be run end to end: no command sets up a trial, grades and records it in one step, or ties tokens to it",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/evals.py",
+    "/home/user/Claude-Brain/evals/README.md",
+    "/home/user/Claude-Brain/docs/BUILD_STATUS.md"
+   ],
+   "evidence": "`brain eval --help` lists contract, audit, grade, record, compare, prereg, defects. For one trial the lead must today copy the `setup` files out of the task JSON by hand (no command writes them), word the delegation, read the helper's tokens off `brain ledger` by eye (`ledger --help` takes only `--session`), run `eval grade`, then retype its result into `eval record --passed 0|1 --tokens N`. Nothing defines an arm or fixes the order of trials (README rule 6 asks for interleaving). `ls evals/runs` -> 'No such file or directory': no trial has ever been recorded, and BUILD_STATUS lists CB-109 and CB-203 (the first comparison) as open. With 8 tasks, 2 arms and 1 trial that is 16 trials of about five manual steps each.",
+   "repro": "python3 bin/brain eval --help; ls evals/runs",
+   "proposed_fix": "The smallest harness is three subcommands in engine/evals.py (about 120 lines) and three prereg fields. Prereg gains `arms` ({\"A\": \"one line: how this arm is run\", \"B\": ...}), `trials` and `seed`. (1) `brain eval next <change>` prints the next trial (task, arm, trial number) from a seeded order (tasks shuffled once, arm order alternating AB/BA per task) and the two commands to run it; when every cell is filled it prints 'done: brain eval compare <change>'. (2) `brain eval setup <change> --task T --arm X --dir D` refuses a non-empty D or a D inside the brain, writes the task's setup files and TASK.md (the prompt only: no grader, no reference), and prints the one line to hand to the helper plus the arm's description. (3) `brain eval trial <change> --task T --arm X --dir D (--hire ID | --tokens N) [--minutes M]` checks the prereg hash, runs `grade`, appends the row with `passed` from the grader, `graded: true` and the reason, takes tokens from the settled hire record or the flag, and sets infra_error only when the grader could not start or timed out. (4) `brain eval compare <change>` finds prereg and arms by name. Start to verdict: prereg, then per trial `next` -> `setup` -> delegate -> `trial`, then `compare`: two commands per trial besides the delegation. For brain versus no brain, arm A's line is 'helper started with the plain prompt in D' and arm B's 'helper started through `brain hr hire`'; the brain copy given to arm B has evals/tasks and evals/seeded_defects removed (finding 5).",
+   "acceptance": "tests/test_r4_h.py::test_harness_end_to_end: a fake helper copies the reference solution for arm B and the null solution for arm A on 8 tasks; the loop next/setup/trial ends with `compare` printing `verdict: ship`; with the same solution in both arms it prints `not-proven` (every task tied). `brain eval next <change>` after the last trial prints 'done'. evals/README.md shows the loop in six lines.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "radar-map-evals-03"
+  },
+  {
+   "title": "The 12 tasks cannot separate careful work from careless work: hard-coded and off-task answers pass, and the reviewer test gives 83% to one generic sentence",
+   "severity": "should-fix",
+   "kind": "test-gap",
+   "files": [
+    "/home/user/Claude-Brain/evals/tasks/sw-fix-median.json",
+    "/home/user/Claude-Brain/evals/tasks/sw-fix-chunks.json",
+    "/home/user/Claude-Brain/evals/tasks/sw-add-slugify.json",
+    "/home/user/Claude-Brain/evals/tasks/know-memo-facts.json",
+    "/home/user/Claude-Brain/evals/tasks/lang-es-glossary.json",
+    "/home/user/Claude-Brain/evals/seeded_defects",
+    "/home/user/Claude-Brain/engine/evals.py",
+    "/home/user/Claude-Brain/tests/test_evals.py"
+   ],
+   "evidence": "`brain eval grade` printed `pass` for all six hand-made folders: sw-fix-median with `def median(v): return {3: 2, 4: 2.5, 2: 5}[len(v)]`; sw-fix-chunks with a lookup keyed on len(items); sw-add-slugify with a test file holding only a comment (the prompt asks for a unit test); know-memo-facts with 'The bridge is closing in May, so go before then.' (the unverified rumour, reworded past the two forbidden strings); lang-es-glossary with the three glossary terms followed by 'hola' 34 times; sw-fix-median with the bug untouched plus a file unittest.py containing `raise SystemExit(0)`, which shadows the module the grader runs. Control: the untouched setup failed (`command exit 1: FAILED (failures=2)`). The two bug-fix graders run exactly the tests the task shows. Size: prompts are 86 to 226 characters, setups at most 565, each software bug is one expression; three of the twelve tasks are a label lookup with the scale printed in the prompt (route-*); none is above size 1. On the pass metric 'ship' needs at least 5 tasks that arm A fails and arm B passes (fewest wins to ship, enumerated: 5 with 0 losses), so a suite a plain run passes can only return 'every task tied'. `brain eval defects score` printed `caught 5 of 6 planted defects (83%)` for a findings file with one generic sentence repeated for every artefact; there is no clean artefact to catch a reviewer that flags everything, and no skill or agent uses the command. Not measured: real pass rates of a model on these tasks (I had no way to run one); the saturation claim rests on the size of the tasks.",
+   "repro": "Write a folder with the task's setup plus stats.py = 'def median(v):\\n    return {3: 2, 4: 2.5, 2: 5}[len(v)]'; python3 bin/brain eval grade sw-fix-median <folder> -> 'sw-fix-median: pass'. For the reviewer test: a JSONL with {artefact, finding: one sentence naming unsupported, idempotent, off by one, last items, contradicts, trivial, twice} per artefact; python3 bin/brain eval defects score <file> -> 'caught 5 of 6'.",
+   "proposed_fix": "(1) Each task gets a `shortcuts` list beside `reference` and `null`: gamed solutions that must fail; `audit_task` grades them and `eval audit` prints 'N shortcuts, N rejected'. Store the six above. (2) Graders: hidden cases for the two bug fixes in `grader.files` (other inputs plus a comparison with `statistics.median` / a re-join check); slugify grader counts at least one test method in test_text_utils; `grade()` fails a work folder whose top-level names shadow a standard module (`sys.stdlib_module_names`); know-memo-facts forbids the word 'bridge'; lang-es-glossary adds regex checks for content words (domingo, disco externo, cuatro). (3) Defects: add three clean artefacts, count a finding only when it names the defect's file and at most two findings exist for that file, report caught minus false alarms. (4) `brain eval calibrate <run>` prints arm A's pass rate per task and flags 0% and 100%; a pass-metric prereg refuses flagged tasks. (5) Add at least eight size-2 tasks with a trap that a brain rule addresses (see the trap-task idea). `test_split_families_and_size` asserts exactly 8 dev and 4 held-out; it becomes 'at least 8 of each', which is stricter.",
+   "acceptance": "`python3 bin/brain eval audit` prints '12 tasks, 12 sound' and '6 shortcuts, 6 rejected'. tests/test_r4_h.py::test_shortcut_solutions_fail and ::test_generic_review_scores_at_most_one. `brain eval grade sw-fix-median <hard-coded folder>` prints fail.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "radar-map-evals-04"
+  },
+  {
+   "title": "The held-out split is neither hidden nor usable: answers sit in the same files, `ablate` includes it by default, and 4 tasks can never reach the 8-pair floor",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/evals.py",
+    "/home/user/Claude-Brain/evals/tasks",
+    "/home/user/Claude-Brain/evals/README.md"
+   ],
+   "evidence": "`grep -rn heldout engine/` finds only the validator (evals.py:273-274): no command reads `split`. Held-out tasks live in evals/tasks/ beside the dev tasks and every file carries its `reference` solution, so an arm that has the brain attached (the 'with brain' arm of CB-109) can read the answers to all 12. `brain ablate CLAUDE.md:5` wrote a prereg with `tasks (12)` including data-unique-visitors, know-reading-list, route-project and sw-fix-chunks (evals.py:786 defaults to every task). `brain eval prereg heldout-confirm --tasks <the 4 held-out ids>` was accepted (`wrote ... 4 tasks`), and 4 wins of 4 printed `verdict: not-proven · p 0.062 · P(better) 0.97 · 4 paired tasks; at least 8 are needed for any claim`: under I-16 the held-out set can never confirm anything. The dev set has exactly 8 tasks: with one B trial marked as an infra error, 7 wins of 7 printed `not-proven ... 7 paired tasks; at least 8 are needed`.",
+   "repro": "python3 bin/brain ablate CLAUDE.md:5 (lists 12 tasks); python3 bin/brain eval prereg heldout-confirm --hypothesis x --metric pass --direction up --tasks data-unique-visitors,know-reading-list,route-project,sw-fix-chunks (accepted); record A fail and B pass on the four; compare -> 'not-proven ... 4 paired tasks'.",
+   "proposed_fix": "`make_prereg`: refuse a task list shorter than `min_pairs` ('4 tasks can never reach the 8-pair floor') and refuse a list that mixes splits. `eval prereg` takes `--split dev|heldout` (default dev); `ablate` defaults to dev tasks only. A held-out prereg must name `confirmation_of: <dev change id>` and is refused unless that run exists with a ship verdict; each use appends a line to evals/heldout_uses.jsonl and `eval audit` warns at the third use of a task (README rule 2). Keep answers out of reach: `eval setup` copies only the prompt and setup files to a folder outside the brain, and the harness gives the 'with brain' arm a brain copy without evals/tasks and evals/seeded_defects. Grow the suite to at least 10 dev and 8 held-out tasks so each split clears the floor with room for one lost pair.",
+   "acceptance": "tests/test_r4_h.py: test_prereg_refuses_fewer_tasks_than_min_pairs, test_prereg_refuses_mixed_splits, test_ablate_defaults_to_dev_tasks, test_heldout_prereg_needs_a_shipped_dev_run. `python3 bin/brain ablate CLAUDE.md:5` lists dev tasks only.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "radar-map-evals-05"
+  },
+  {
+   "title": "The I-16 floor counts pairs that were never measured: a token claim shipped on 5 measured tasks, and the cost guard is skipped when tokens are missing",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/evals.py"
+   ],
+   "evidence": "`brain eval prereg e4 --metric tokens --direction down --tasks <8 dev ids>`; five tasks recorded with tokens (A 1000, B 900), three recorded with no `--tokens`; `brain eval compare e4 --a A --b B --prereg e4` printed `pairs 8 ... wins 5 · losses 0 · ties 3` and `verdict: ship · p 0.031 · P(better) 0.98`. The three unmeasured tasks count as ties and toward the floor: evals.py:151-159 (`n = len(pairs)`; wins and losses only where both values exist) and :180. I-16 says no efficiency claim on fewer than 8 paired tasks. With metric pass and no token numbers the guard is waved through (evals.py:168-169: `guard_ok, guard = True, \"tokens not recorded, cost guard not checked\"`), seen in `verdict: ship ... tokens not recorded, cost guard not checked`, so leaving `--tokens` off is enough to pass the cost rule.",
+   "repro": "$B eval prereg e4 --hypothesis x --metric tokens --direction down --tasks <8 ids>; for 5 tasks record both arms with --passed 1 and --tokens 1000 / 900; for 3 tasks record both arms with --passed 1 and no --tokens; $B eval compare e4 --a A --b B --prereg e4 -> 'verdict: ship'.",
+   "proposed_fix": "`verdict()`: compare the number of pairs that have both values of the registered metric with `need`, and put the unmeasured count in the reason and in the owner line ('5 of 8 tasks measured'). `compare()` with a prereg whose metric is pass: when tokens are missing on any pair the decision is not-proven ('cost not measured on k tasks') unless the prereg was written with `\"cost_guard\": null`, in which case the owner line says 'cost not measured'. `verdict(pairs)` with complete data and no prereg is unchanged, so `test_ship_needs_nine_of_ten` and `test_token_metric_requires_no_loss_of_passes` hold.",
+   "acceptance": "tests/test_r4_h.py::test_unmeasured_pairs_do_not_count_toward_the_floor (5 measured of 8 -> not-proven, reason names 5) and ::test_pass_ship_needs_tokens_under_prereg. The repro prints `verdict: not-proven`.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "radar-map-evals-06"
+  },
+  {
+   "title": "At boot a platform release note about a new model lost both news lines to a changelog entry and a marketing page",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/radar.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/memory/radar_sources.json"
+   ],
+   "evidence": "Scratch copy: I removed the two newest seen ids of platform-relnotes, cc-changelog, anthropic-sitemap and platform-llms from state.json and set last_checked two days back, so real current items counted as new. `brain boot \"Continue\"` (0.84 s) printed exactly two news lines: `news: cc-changelog · - · v2.1.321: Added Claude Fable 5.2 ( claude-fable-5-2 ), now the default Fable model ... · https://raw.githubusercontent.com/anthropics/claude…` (cut at 220 characters: URL and reason lost) and `news: anthropic-sitemap · 2026-11-10 · roadshow launch · https://www.anthropic.com/news/roadshow-launch · why: new`. `brain radar --trust official --force` on the same state shows what was left out, in third place: `platform-relnotes · 2026-11-09 · We’ve launched Claude Fable 5.2 ( claude-fable-5-2 ) ... Claude Mythos 5.2 ...`. Cause: a source with an empty keyword list scores 0 for every item (radar.py:335-337) and the pool is ordered by trust, score, date (radar.py:530-534), so any source with keywords beats the release notes (the changelog list contains 'claude'), and among score-0 items a newer marketing page beats an older release note. detect.py:202 clips each line to 220 characters. A second boot the same day printed no news line and left the state untouched, so once-a-day holds.",
+   "repro": "In a copy: edit learning/radar/state.json as described; python3 bin/brain boot \"Continue\"; then python3 bin/brain radar --trust official --force --max 12.",
+   "proposed_fix": "Add `priority` per source to memory/radar_sources.json (kernel file: one owner-approved change): platform-relnotes 1, status 1, cc-changelog 2, the two llms.txt sources 3, anthropic-sitemap 4. In `_run` order the pool by trust, then priority, then one line per source in turn before any source gets a second line, then score, then date. Give platform-relnotes keywords (model, pric, deprecat, retire, default, context, cache, effort, skill, hook, agent) so its score means something. For boot, `due_lines` builds a short form (source · date · title cut to 110 characters · url) so the URL survives the 220-character cap.",
+   "acceptance": "tests/test_r4_h.py::test_boot_shows_the_release_note_first: with fixtures that add one release-note entry, one changelog version and one sitemap page, `radar.due_lines(max_lines=2)` returns a platform-relnotes line first and both lines end with a complete https URL.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "radar-map-evals-07"
+  },
+  {
+   "title": "Official leads are marked handled without being shown, and leads written after the day's file was consolidated are never counted",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/learn.py",
+    "/home/user/Claude-Brain/engine/radar.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-learn/SKILL.md"
+   ],
+   "evidence": "Scratch copy with 5 official leads in the pending radar file (1 real, 4 planted, among them 'Deprecation of claude-opus-5-5 on 2027-01-15'). `brain learn status` -> `5 unhandled official lead(s)`. `brain learn consolidate` printed two `lead to confirm at its source: ...` lines and `and 3 more official lead(s)`, then `2 inbox file(s) consolidated`. `brain learn status` -> `0 unhandled official lead(s)`. Three leads were never shown and are now handled (learn.py:1545-1548 prints `leads[:2]`; the file is marked whole). No command lists leads (`brain learn --help`, `brain radar --help`). Later the same day a radar run appended to that already-consolidated file (`lead records before=7 after=908`) and `brain learn status` still said `0 unhandled official lead(s)`: radar.py:434 always writes `<date>-radar.jsonl`, while session records step around consumed files (learn.py:186-196). Recording the confirmed fact (`brain learn note --trust external --source <url> --text \"Claude Fable 5.2 (claude-fable-5-2) launched on 2026-11-09 ...\" --class models` -> `note recorded`) is not linked to the lead. Research and community leads are written but listed nowhere (learn.py:243-247 keeps official only). The learning analyst's report proposes printing every official lead at consolidation because 'they are capped by the radar already'; they are not (901 in one run, finding 12).",
+   "repro": "Append four official lead records to learning/inbox/<today>-radar.jsonl in a copy; python3 bin/brain learn status; python3 bin/brain learn consolidate; python3 bin/brain learn status.",
+   "proposed_fix": "(1) `brain radar leads [--all]`: one line per open lead with a short id (id · source · date · title cut to 90 · url), official first. (2) `brain radar confirm <id> --text \"<fact>\" --class C` runs the existing external-fact note with the lead's URL as source and writes a `lead_done` record {lead, result: confirmed}; `brain radar dismiss <id> [--why ...]` writes result dismissed. A lead is open until a `lead_done` record names it. (3) `learn.official_leads` reads leads from every inbox file of the last 30 days, consumed or not, minus the `lead_done` ids, so consolidation no longer closes them; `learn status`, `consolidate` and boot print the count and the command ('3 official leads open: brain radar leads'). (4) `radar._write_leads` writes to the session's writable inbox file (`learn._writable_session_file`), never to a consumed one. (5) brain-learn/SKILL.md: replace the 'Radar leads' paragraph with the two commands.",
+   "acceptance": "tests/test_r4_h.py::test_unshown_leads_survive_consolidation (5 official leads; after consolidate `radar leads` lists 5; after confirm or dismiss on each, 0) and ::test_leads_written_after_consolidation_are_counted.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "radar-map-evals-08"
+  },
+  {
+   "title": "Radar and boot never exit behind a slow connection, and every boot pays 4 s while the network is down (M15 measured, with a tested fix)",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/radar.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/tests/test_radar.py"
+   ],
+   "evidence": "Measured in a scratch copy with a local fake proxy (script: /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/radar-map-evals/tools/fakeproxy.py). Healthy network: `brain radar --force` 0.70 s inside, 0.85 s wall. Proxy that accepts and never answers: `radar: 10 checked ... 12.04s, 10 errors` (12.18 s wall; 10 sources through 8 workers is two rounds of the 6 s timeout); `brain boot` 4.2 s on each of three boots in a row, and the official sources' last_checked never moved, because the per-request timeout equals the wait (radar.py:484, :497) so no check finishes in time and nothing is stamped (radar.py:504-506). Proxy that answers the CONNECT and then sends one byte per second: `brain radar --force` printed `radar: 0 checked ... 20.0s, 10 errors` and then did not exit; `timeout 60` killed it (exit 124). `brain boot` had its full output after about 4.5 s and was still alive at 45 s (killed). Cause: `ThreadPoolExecutor` workers are joined when the interpreter exits, whatever `shutdown(wait=False)` says (radar.py:495-498). I-14 says at most 20 s in total. Fix prototyped in a second copy (diff: /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/radar-map-evals/radar_daemon_threads.diff): daemon threads joined against one deadline. Same proxies after the change: slow proxy 20.13 s and exit 0; silent proxy 6.17 s; boot behind the slow proxy 4.15 s; healthy network 0.74 s; all 44 radar tests pass.",
+   "repro": "python3 fakeproxy.py drip 45902 & ; HTTPS_PROXY=http://127.0.0.1:45902 https_proxy=http://127.0.0.1:45902 timeout 60 python3 <copy>/bin/brain radar --force ; echo $?  -> prints the summary at 20 s, then 124 at 60 s.",
+   "proposed_fix": "`radar._run`: replace the executor with one daemon `threading.Thread` per due source writing into a dict, joined against `t0 + max_seconds` (the diff above). Set the per-request timeout to `min(REQUEST_TIMEOUT, 0.75 * max_seconds)` so a refused or silent source fails inside the wait and is stamped. Record an attempt time even when no source answered, and let `detect.radar_due` wait 6 hours after an attempt in which nothing answered.",
+   "acceptance": "tests/test_r4_h.py::test_process_exits_within_budget_when_a_source_stalls (a subprocess runs `brain radar --force` with HTTPS_PROXY pointing at a local socket that sends one byte per second; wall time under 25 s, exit 0) and ::test_boot_does_not_retry_a_dead_network (second boot under 1 s). `python3 -m unittest tests.test_radar` still reports 44 tests OK.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "radar-map-evals-09"
+  },
+  {
+   "title": "Two sessions that each ran the radar conflict on merge in two files (M20, with the concrete fix and its cost measured)",
+   "severity": "should-fix",
+   "kind": "risk",
+   "files": [
+    "/home/user/Claude-Brain/engine/radar.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/state.py",
+    "/home/user/Claude-Brain/docs/EXECUTION_PLAN.md"
+   ],
+   "evidence": "A clone of the scratch copy, two branches from one commit, `brain radar --force --trust official` on each one second apart, commit, merge both: `CONFLICT (content): Merge conflict in learning/radar/state.json` (6 conflict blocks), and `learning/inbox/2026-11-10-radar.jsonl` is unmerged too, because both branches appended the same 8 leads with different `at` stamps to the one shared dated file. The owner merges pull requests on his phone, where a conflict is a dead end. Every run rewrites all `last_checked` lines even with no news (radar.py:541 writes unconditionally): a forced no-news run changed 17 lines of a 30,078-byte, 1,339-line file, and state.py:190 commits learning/radar with every checkpoint push. Only about 620 bytes of the file are volatile; 20,194 are seen ids. What the alternative costs: boot's official check took 0.45 to 0.72 s with stored validators and 0.43 to 0.50 s with only the seen ids kept (three runs each), so validators and stamps do not need to be tracked.",
+   "repro": "git clone <copy> base; cd base; git checkout -b a; python3 bin/brain radar --force --trust official; git commit -am a; git checkout -; git checkout -b b; python3 bin/brain radar --force --trust official; git commit -am b; git checkout -; git merge a; git merge b -> CONFLICT in both files.",
+   "proposed_fix": "Split the state. The tracked learning/radar/state.json keeps only `{source: {\"seen\": [...]}}` with the ids sorted, and is written only when its text would change (so it changes exactly when a source shows an item never seen). Everything that changes on every run (`last_checked`, `last_status`, `etag`, `last_modified`, `hash`, health counters) moves to `<brain>/.cache/radar.json`; `.cache/` is already in .gitignore. `detect.radar_due` reads the stamps from that file; when it is missing the radar is due. The consequence to write into EXECUTION_PLAN 4.3: a fresh container checks once at its first boot instead of once per 24 hours, at the measured 0.4 to 0.7 s and no tokens when nothing is new. Leads go to the session's own inbox file (finding 8), which removes the second conflict. A helper `radar.load_state(root)` merges both files so the existing tests that read `last_status` keep their assertions.",
+   "acceptance": "tests/test_r4_h.py::test_run_without_news_leaves_tracked_state_byte_identical and ::test_two_branches_that_ran_the_radar_merge_cleanly (temp git repo, same injected fetch, different `now`; `git merge` exits 0). After `python3 bin/brain radar --force` with no new item, `git status --short learning/radar` prints nothing.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "radar-map-evals-10"
+  },
+  {
+   "title": "A source that changes format, is blocked or disappears goes silent: nothing at boot, nothing in doctor",
+   "severity": "should-fix",
+   "kind": "gap",
+   "files": [
+    "/home/user/Claude-Brain/engine/radar.py",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/engine/doctor.py"
+   ],
+   "evidence": "`radar.run` with an injected fetch, one release-notes source. Day 1 baseline: 2 items seen. Day 2 the page keeps its content but uses '## 2026-11-12' headings and adds 'Price of claude-x changed': `lines=0 errors=[] last_status=200`. Day 4 a block page ('Access denied by proxy policy') served with status 200: `lines=0 errors=[]`. Day 5 the page returns 404: `errors=['relnotes: http 404']` from `run`, but what boot would print is `[]` (due_lines returns lines only) and `brain doctor | grep -i -c radar` is 0. A status source: run 2 gets an unreadable body with a new ETag -> `errors=['status: parse failed'] etag=e2`; run 3 -> `errors=[] last_status=304`, because the ETag is stored before the parser runs (radar.py:395-398, parser at :402-408), so a failed parse is reported once and then looks healthy. The radar's main job is to notice new models and prices; the day a page's format changes it stops without a word.",
+   "repro": "See the two scripts in the session: radar.run(root, fetch=server(BODY, etag), now=...) with the bodies above; print result['lines'], result['errors'] and the stored last_status.",
+   "proposed_fix": "`_check`: store the validators only after a successful parse; keep `items` (count parsed), `empty_runs` (status 200, parse fine, 0 items where the last good run had some) and `fail_runs` (any other status, refusal or parse failure) per source in the untracked run file, reset on a good run; report 'no items parsed (format changed?)' as an error. `due_lines`: when an official source has `empty_runs + fail_runs >= 3`, add one line 'radar: N official source(s) silent for 3 checks (ids): brain radar --health'. `brain radar --health`: one line per source with status, items and the date of its newest item. `doctor`: the same sources as one warning line.",
+   "acceptance": "tests/test_r4_h.py::test_empty_parse_after_items_is_an_error, ::test_failed_parse_is_retried_despite_etag, ::test_boot_names_a_source_silent_for_three_checks, ::test_doctor_lists_silent_radar_sources.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "radar-map-evals-11"
+  },
+  {
+   "title": "One run can write 901 lead records; the Hacker News source returns nothing by construction; research filters pass half of everything and nobody reads the result",
+   "severity": "should-fix",
+   "kind": "inefficiency",
+   "files": [
+    "/home/user/Claude-Brain/engine/radar.py",
+    "/home/user/Claude-Brain/memory/radar_sources.json",
+    "/home/user/Claude-Brain/engine/detect.py",
+    "/home/user/Claude-Brain/tests/fixtures/radar/hn_v1.json"
+   ],
+   "evidence": "(1) No cap on leads: with platform-llms's seen ids made unrecognisable (what a documentation restructure or host move does), one `brain radar --force --trust official` took the radar inbox file from 7 to 908 records, 286,205 bytes (radar.py:526 keeps every relevant item; an empty keyword list makes every new page relevant). In two real runs today, 9 official leads were written: 8 were pages or the note of one compliance feature and 1 a marketing page; none was about models, prices or Claude Code. (2) hn-claude: a live fetch of the configured URL returned 20 stories from 12:56 to 18:01 of one day with points [17, 3, 3, 3, 3, 2, ...]; `min_points` 20 is applied after the newest-20 cut, so 0 items parsed. With `&numericFilters=points%3E%3D20` added to the URL the same parser returned 20 stories from 2026-11-03 to 11-09, 15 passing the keywords. The test fixture has one story with 50 points, so the tests cannot see this. (3) arxiv-agent-memory: 10 of 10 results pass (the query words are the keywords), all dated the same day, among them 'Fluctuation-Response Relations and Memory in Tissue Cell Number Dynamics'. (4) hf-blog: 12 of 25 pass, 10 on the single word 'model'. hf-daily-papers: 8 of 30 pass, among them 'SkinMind ... Dermatology AI' (on 'agent') and 'Spatial Harness ... Physics Engines' ('harness'); one title hit scores 2, the whole threshold (radar.py:341-348). (5) Boot polls official sources only and then treats the radar as done for 24 hours (detect.py:166-178); after `brain boot` the four research and community sources still showed last_checked 2026-11-08, and no skill tells the lead to run `brain radar`. (6) anthropic-sitemap keeps the 25 newest by lastmod; 103 news and research pages share lastmod 2026-10-14, so a bulk re-publish reports old pages as new. Live per-source figures (status, bytes, items, items passing): relnotes 200, 144,497, 6, 6; platform-llms 200, 99,918, 900, 900; cc-docs-llms 200, 63,658, 239, 239; cc-changelog 200, 1,193,584, 15, 13; sitemap 200, 76,068, 25, 25; status 200, 157, 0, 0; hf-daily-papers 200, 177,599, 30, 8; hf-blog 200, 266,569, 25, 12; arxiv 200, 27,443, 10, 10; hn 200, 37,886, 0, 0.",
+   "repro": "In a copy: reverse every id in state['platform-llms']['seen'], drop its hash and last_modified, run python3 bin/brain radar --force --trust official, count lines in learning/inbox/*radar*.jsonl. For Hacker News: fetch the configured URL and print the points of the 20 hits.",
+   "proposed_fix": "Code: `max_leads` per source and run (default 10): write the first 10 and one summary lead ('N more new pages under <common path>'). `relevance()`: research and community items need two different keywords, or a title hit on a word boundary plus one more hit. Research and community sources are polled by `learn consolidate` when their last check is older than 7 days, and shown by `radar leads --all`. Sources file (kernel: put the exact diff in NEEDS_YOU.md for the owner): hn-claude URL gains `&numericFilters=points%3E%3D20`; the arXiv query is limited to cs.AI, cs.CL and cs.SE with 'LLM' in the abstract; the two llms.txt sources get keywords (model, pricing, deprecat, caching, context, effort, skill, hook, agent, memory, mcp, release-notes); hf-blog loses 'model', 'context' and 'reasoning' or is dropped; the sitemap gets `limit` 600 and `seen_cap` 1500 so 'new' means a URL never seen, with `brain radar --rebaseline <id>` for the one-time reset.",
+   "acceptance": "tests/test_r4_h.py::test_lead_flood_is_capped (900 new index entries -> at most 11 records), ::test_one_title_keyword_is_not_enough_for_research, ::test_hn_newest_twenty_below_the_floor_yields_nothing (new fixture hn_v3.json shaped like the live answer, documenting why the URL filter is needed). With BRAIN_LIVE_TESTS=1, hn-claude parses at least one item.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "radar-map-evals-12"
+  },
+  {
+   "title": "Repo map ranks test files and generated code above the source: local names count as references, tracked generated files are not recognised, `@/` imports are dropped",
+   "severity": "should-fix",
+   "kind": "bug",
+   "files": [
+    "/home/user/Claude-Brain/engine/repomap.py",
+    "/home/user/Claude-Brain/tests/test_repomap.py"
+   ],
+   "evidence": "`brain map <copy of the brain>`: 12 of 262 files, about 193 tokens (716 bytes), 2.18 s cold, 0.16 s cached. Line 2 is `tests/test_learn.py: NoteCommandCase.args, BrainCase.items, ROOT, SourcedFactTest.base, item`, line 4 `engine/req.py: path, load, register, render, problems`; 4 of the 12 lines are test files, while state.py, items.py and contract.py (5, 5 and 4 importing files) are absent. Cause: `_py_extract` counts every Name and Attribute as a reference (repomap.py:105-109); for `def cmd(args, path): items = load(path) ...` it returns ['args', 'force', 'items', 'load', 'path', 'print', 'row'], and `definers` matches them to any method of that name in any file (repomap.py:208-227). Scratch Python package: rank 2 `src/shop/proto/shop_pb2.py` (header 'Generated by the protocol buffer compiler. DO NOT EDIT!'), rank 3 `tests/test_orders.py`, both above db.py and the services. Scratch TypeScript app: rank 1 `src/generated/api-types.ts` ('@generated ... DO NOT EDIT'); the list also holds package-lock.json, public/vendor/chart.min.js, coverage/lcov-report/index.html, out/_next/static/chunks/main-8f3a1c.js, a .snap file, .brain/STATE.md and .brain/log/gates.jsonl. Lock files, generated clients and protobuf output are tracked files, so they survive the `git ls-files` rule the performance analyst proposed for M8. `repomap._resolve_js(\"src/pages/index.tsx\", \"@/lib/db\", files)` returns None (repomap.py:157): alias imports give no edge. Go and Vue files: 8 files, 1 link, no symbols, alphabetical order. `TEXT_EXT` (repomap.py:35) is never used. Prototype in a second copy (diff: /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/radar-map-evals/repomap_prototype.diff; the 8 existing tests pass): the TypeScript app lists 15 files instead of 25 (about 147 tokens instead of 235) led by Button.tsx, db.ts, Layout.tsx; the Python package gives models.py, db.py, services/orders.py, services/pricing.py, cli.py. On the brain itself, which is mostly documents, the prototype removes the test files but documents take the freed lines, so document-to-document mentions need a lower weight than the 0.25 I tried and code should be printed before documents. Projects were built by /tmp/claude-0/-home-user-Claude-Brain/c34b258b-1734-5756-8764-15f4f3352652/scratchpad/radar-map-evals/tools/mkprojects.py.",
+   "repro": "python3 <copy>/bin/brain map <copy> ; python3 tools/mkprojects.py proj ; python3 <copy>/bin/brain map proj/pyapp --top 30 ; python3 <copy>/bin/brain map proj/tsapp --top 30.",
+   "proposed_fix": "(1) `is_generated(rel, data)` applied in `walk()`: lock-file names (package-lock.json, yarn.lock, pnpm-lock.yaml, poetry.lock, Pipfile.lock, uv.lock, Cargo.lock, composer.lock, Gemfile.lock, go.sum); suffixes .min.js .min.css .map .snap _pb2.py _pb2_grpc.py .pb.go .g.dart .generated.*; any path part ending .egg-info; folders coverage, htmlcov, out, target, .cache, .tox, .ruff_cache, .svelte-kit, .nuxt, .output, .vercel, .parcel-cache, __snapshots__; any .brain/ part except project.json; the first 600 bytes matching `@generated|do not edit|code generated by|generated by |auto-?generated|should not be edited` (case-insensitive); or a line longer than 2,000 characters in the first 20 KB. Use it together with the `git ls-files` list when the root is a work tree. (2) `build_graph`: a name is a reference only from a file that imports its owner (take `imported = {rel: set(edges[rel])}` before the name pass). (3) `_resolve_js`: read baseUrl and paths from tsconfig.json or jsconfig.json, falling back to `@/` and `~/` meaning src/, app/ or the root. (4) Sort by (is a test file, -rank, path), where a test file is under tests/ or test/, or named test_*.py, *_test.py, *_test.go, conftest.py, *.test.*, *.spec.*; print code first and at most three documents after it. (5) Add .vue, .svelte and .astro to JS_EXT and delete TEXT_EXT.",
+   "acceptance": "tests/test_r4_h.py: test_generated_files_are_not_listed (lock file, .min.js, _pb2.py, an '@generated' header, coverage/, .brain/ state), test_local_names_do_not_link_files (a test file that defines Helper.args must not outrank the module every file imports), test_alias_imports_resolve, test_tests_sort_after_source. `python3 bin/brain map .` in the brain shows no tests/ file in its first 12 lines.",
+   "effort": "M",
+   "confidence": "high",
+   "id": "radar-map-evals-13"
+  },
+  {
+   "title": "An A/A run with two chance failures prints 'it did worse': 'revert' fires in 11 to 31% of runs where the arms do not differ",
+   "severity": "minor",
+   "kind": "unclear",
+   "files": [
+    "/home/user/Claude-Brain/engine/evals.py",
+    "/home/user/Claude-Brain/evals/README.md"
+   ],
+   "evidence": "`brain eval compare aa-run --a A1 --b A2 --prereg aa-run` on 8 tasks where both arms pass 6 and the second arm fails 2: `pairs 8 ... wins 0 · losses 2 · ties 6`, `verdict: revert · p 1.000 · P(better) 0.12 · P(B worse) 0.88 >= 0.80; over half the tasks tied, the set is saturated`, and for the owner `Verdict: not adopted; over 8 tasks it did worse, so the old version stays.` Enumerating the default rule (evals.py:187-189) when the arms do not differ, 'revert' has probability 0.250, 0.125, 0.312, 0.188, 0.109, 0.227, 0.145 for 2 to 8 differing tasks (and 0.254, 0.172, 0.274, 0.194 for 9 to 12). README rule 3 asks for an A/A run first; roughly one in five will print this sentence. For `brain ablate` (arm B is the rule removed) the same sentence reads as proof that a rule earns its place. The action is right either way (the old version stays); the wording claims more than the data.",
+   "repro": "$B eval prereg aa-run --hypothesis 'same arm twice' --metric pass --direction up --tasks <8 dev ids>; record arm A1 pass on all 8; arm A2 fail on 2 and pass on 6; $B eval compare aa-run --a A1 --b A2 --prereg aa-run.",
+   "proposed_fix": "Keep the decision values (the tests on the revert threshold stay as they are) and add `strength`: 'clear' when the sign test in the losing direction also reaches p <= alpha, else 'leaning'. `owner_lines` for a leaning revert: 'Verdict: not adopted; it did worse on L and better on W of n tasks, which can be chance, so the old version stays.' A prereg may carry `\"kind\": \"aa\"`; `compare` then prints 'A/A: no difference was expected; k of n tasks differed, which is the noise to expect' and no verdict sentence. README rule 3 says an A/A run may lean either way and must not ship.",
+   "acceptance": "tests/test_r4_h.py::test_owner_line_for_two_losses_does_not_say_worse and ::test_aa_run_prints_noise_not_a_verdict; `test_preregistered_revert_and_its_threshold` unchanged and passing.",
+   "effort": "S",
+   "confidence": "high",
+   "id": "radar-map-evals-14"
+  },
+  {
+   "title": "Idea: check models and retirement dates by script against the official pages instead of waiting for a keyword lead",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/radar.py",
+    "/home/user/Claude-Brain/memory/models.json",
+    "/home/user/Claude-Brain/memory/radar_sources.json"
+   ],
+   "evidence": "Three official pages exist as Markdown on a host already on the allowlist and are listed in the platform llms.txt. Fetched live through the radar's own `_get`: models/overview.md (22,915 bytes) names 4 model ids, exactly the four keys of memory/models.json (claude-fable-5-2, claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5); about-claude/model-deprecations.md (14,826 bytes) names 22 ids including all four; about-claude/pricing.md (55,180 bytes) gives prices by model name. Today a new model reaches the lead only as a free-text line that has to win the ranking (finding 7) and then be confirmed by hand.",
+   "repro": "",
+   "proposed_fix": "A source kind `models_md` and `brain radar models`: extract the id set from models/overview.md and the ids with a retirement date from model-deprecations.md, compare with the keys of memory/models.json, and emit exact official leads at priority 1: 'new model id on the official page: X', 'id in models.json no longer listed: Y', 'retirement date listed for Z: DATE', each with a ready NEEDS_YOU item that proposes the models.json change (kernel, owner approval). Prices follow once ids map to names. No model tokens are spent; the two pages add about 38 KB per check.",
+   "acceptance": "tests/test_r4_h.py::test_models_page_diff with two fixture pages and a models.json: the command prints exactly the three line kinds above and nothing when the sets agree.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "radar-map-evals-15"
+  },
+  {
+   "title": "Idea: an exact signed-rank test for token and time comparisons, which proves the same saving with fewer tasks",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/evals.py"
+   ],
+   "evidence": "Seeded simulation, 20,000 runs per cell, true token saving 20%, run-to-run noise 20% per arm: chance of 'ship' with the current sign test 0.460 at 8 tasks, 0.503 at 12, 0.746 at 16; with an exact Wilcoxon signed-rank test (dynamic programme over rank sums, standard library only) 0.574, 0.793, 0.895. With no true difference both stay at or below 0.047. For a 30% saving: 0.808 against 0.910 at 8 tasks. The sign test throws away how large each difference is, which is all a token or minutes comparison has; for pass or fail it is already the right test.",
+   "repro": "",
+   "proposed_fix": "Add `signed_rank_test(diffs)` to evals.py (exact null distribution by dynamic programming, ties in rank averaged, zero differences dropped) and use it in `verdict()` when the metric is tokens or minutes, on log ratios; keep the sign test for the pass metric and keep the 8-pair floor and the pass guard. Record the test name in the prereg's `decision_text` so the choice is made before the run. Add `brain eval power --tasks N --effect 20 --noise 20` (seeded simulation) so a lead sees before registering whether the run can reach a verdict.",
+   "acceptance": "tests/test_r4_h.py::test_signed_rank_matches_enumeration (all 2^n sign patterns for n up to 10) and ::test_false_ship_rate_stays_under_alpha_by_seeded_simulation.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "radar-map-evals-16"
+  },
+  {
+   "title": "Idea: trap tasks drawn from the brain's own lessons, kept only if a plain run fails them some of the time",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/evals/tasks",
+    "/home/user/Claude-Brain/engine/evals.py",
+    "/home/user/Claude-Brain/memory/items.jsonl"
+   ],
+   "evidence": "Every current task is one bounded edit at size 0 or 1 (prompts 86 to 226 characters), where the brain's process cannot help and its start-up cost can only count against it on the token metric. The pass metric needs at least five tasks that the baseline fails (finding 4). The brain's rules name the mistakes it exists to prevent: a sentence of the request left out, 'done' without evidence, a test skipped to get green, a claim with no source, work not checkpointed.",
+   "repro": "",
+   "proposed_fix": "Write 12 to 16 size-2 tasks, each built around one such mistake and graded by script: a five-sentence request where the grader checks all five outcomes; a failing hidden test that only shows up if the tests are run; a memo whose sources contradict a tempting note; a migration that must be safe to run twice; a task whose setup has a pre-existing failing test that must be reported, not deleted. Calibrate with `brain eval calibrate`: run the plain arm three times per task and keep tasks it passes between 20% and 80% of the time. Split them 10 dev and 8 held-out, with the held-out files kept outside the copy any arm can read.",
+   "acceptance": "`brain eval audit` sound for every new task with its shortcuts rejected; `brain eval calibrate <pilot run>` lists at least 10 dev tasks inside the 20 to 80% band.",
+   "effort": "L",
+   "confidence": "medium",
+   "id": "radar-map-evals-17"
+  },
+  {
+   "title": "Idea: use real sessions as standing paired evidence between brain versions",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/evals.py",
+    "/home/user/Claude-Brain/engine/ledger.py",
+    "/home/user/Claude-Brain/stats/ledger"
+   ],
+   "evidence": "A live benchmark of 8 tasks, 2 arms and 1 trial costs 16 helper runs each time, and none has been run (`ls evals/runs`: no such directory; CB-109 open). Meanwhile every closed session already writes its outcome, task class, size, tokens by model and gate results to the ledger (stats/ledger/2026-11.jsonl is being filled), and VERSION.json names the brain version. That is the owner's real work, which no synthetic suite matches.",
+   "repro": "",
+   "proposed_fix": "`brain eval history --a <version> --b <version>`: pair sessions by family, task class and size across two brain versions, compare first-pass gate rate, rework and tokens per finished item with the same verdict machinery, and label the result 'observational: sessions were not assigned at random' so it can support or contradict a benchmark but never ship a change alone. Stamp the brain version into each ledger row at `close` if it is not there yet. The weekly digest gets one line from it.",
+   "acceptance": "tests/test_r4_h.py::test_history_pairs_sessions_by_class_and_version on a fixture ledger; the command prints n and the word 'observational' on every run.",
+   "effort": "M",
+   "confidence": "low",
+   "id": "radar-map-evals-18"
+  },
+  {
+   "title": "Idea: a map focused on the request, added to builder briefs, and measured with the harness",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/repomap.py",
+    "/home/user/Claude-Brain/engine/hr.py",
+    "/home/user/Claude-Brain/.claude/skills/brain-new/SKILL.md"
+   ],
+   "evidence": "The map is named in one place only (.claude/skills/brain-new/SKILL.md:13, when adopting a repository) and always returns the same global ranking whatever the task. It costs about 190 tokens for 12 lines and 0.16 s from cache, so it is cheap enough to hand to every helper that works in a codebase; whether it saves exploration is exactly the kind of claim the harness in finding 3 can test on the token metric.",
+   "repro": "",
+   "proposed_fix": "`brain map --for \"<request>\" [--near FILE ...]`: PageRank with the restart weight placed on files whose path or symbols match the request's words and on the named files, so the top lines are the files this task is likely to touch; add signatures for the top symbols. `brain hr hire` puts the top five lines into a builder's brief when the project has more than 50 source files. Cache extraction per file by content hash (the performance analyst's proposal) so the focused run stays fast. Pre-register 'brief with map against brief without' on the token metric before making it the default.",
+   "acceptance": "tests/test_r4_h.py::test_focused_map_puts_the_matching_module_first; a prereg file for the map comparison exists before the default changes.",
+   "effort": "M",
+   "confidence": "low",
+   "id": "radar-map-evals-19"
+  },
+  {
+   "title": "Idea: definitions and imports for Go, Rust, Java, Kotlin, C#, PHP, Ruby, Swift and Dart by one table of patterns",
+   "severity": "idea",
+   "kind": "opportunity",
+   "files": [
+    "/home/user/Claude-Brain/engine/repomap.py"
+   ],
+   "evidence": "A scratch tree with Go and Vue files: `brain map` printed 8 files, 1 link, no symbols for any .go or .vue file, in alphabetical order (`_kind` treats every extension other than Python and JS/TS as text, repomap.py:77-83, so only file names mentioned in text make links). A project in any of these languages gets a map that says nothing a directory listing does not.",
+   "repro": "mkdir -p goapp/internal/store goapp/cmd/server; write store.go (type Store, func Open) and main.go importing \"example.com/shop/internal/store\"; python3 bin/brain map goapp.",
+   "proposed_fix": "One table `LANGS = {ext: (definition pattern, import pattern, resolver)}` in repomap.py. Definitions: a line-start pattern per language (func, type, struct, fn, trait, impl, class, interface, enum, def, module, object, protocol). Imports: Go package paths and Java, Kotlin, C# and PHP dotted or slashed names resolved by path suffix against the file list (to a folder's files for Go); Rust `mod x;` and `use crate::x` to x.rs or x/mod.rs; Ruby `require_relative`; Dart and Swift relative imports. Keep the rule that a name links two files only where an import does (finding 13).",
+   "acceptance": "tests/test_r4_h.py::test_go_rust_java_imports_rank_the_shared_file_first: three tiny trees, the shared package or module is line 1 with its symbols.",
+   "effort": "M",
+   "confidence": "medium",
+   "id": "radar-map-evals-20"
+  }
+ ]
+}

@@ -84,7 +84,7 @@ Themes from the analysts still running when this version was written (learning, 
 
 ## 6. Work packages (generated from the findings)
 
-Findings in: 285 from 15 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, redteam, research-models, research-platform, templates-a, templates-b). Decisions: 240 do, 3 do in part, 1 reproduce first, 41 later.
+Findings in: 305 from 16 analyst report(s) (core, e2e-trial, instructions, lead, learning, ml-planning, owner-docs, performance, quality-path, quality2, radar-map-evals, redteam, research-models, research-platform, templates-a, templates-b). Decisions: 255 do, 3 do in part, 1 reproduce first, 46 later.
 
 Each row is one finding. The full text (evidence, reproduction, proposed fix, acceptance) is in `docs/review/2026-11-10-audit/<area>.json` under the same id. Decision: **do**, **part** (the named part now), **check** (reproduce first), **later** (with the reason).
 
@@ -249,6 +249,7 @@ Owns: `engine/learn.py`, `learning/`, `tests/test_rehearsal.py`. New tests go in
 | learning-13 | should-fix | S | do | The pitfall rule cannot fire for a fail-then-fix inside one session and can fire across unrelated sessions |  |
 | learning-14 | should-fix | M | do | Conflicts are detected by keyword, can never be cleared, and harm votes lower an owner item's rank |  |
 | performance-06 | should-fix | S | do | Consolidation re-tokenises both texts four times for every note-item pair: 0.8 s becomes 9.9 s at 2,000 items |  |
+| radar-map-evals-08 | should-fix | M | do | Official leads are marked handled without being shown, and leads written after the day's file was consolidated are never counted |  |
 | redteam-09 | should-fix | S | do | The brain's own test suite goes red after the first real lesson is consolidated, and again after the first decay |  |
 | redteam-11 | should-fix | M | do | Three red sessions in a row demote the rules that were followed, including facts and the release rule |  |
 | redteam-14 | should-fix | L | do | Learning dead ends: lessons noted once are never shown again, the routing learner can never start, and one item over 400 stops every later consolidation |  |
@@ -316,10 +317,29 @@ Owns: `engine/radar.py`, `engine/repomap.py`, `engine/evals.py`, `evals/`, `memo
 
 | Id | Severity | Size | Decision | Finding | Why later or in part |
 |---|---|---|---|---|---|
+| radar-map-evals-01 | should-fix | M | do | `eval compare` says 'ship' with no pre-registration, and a pre-registration can be written after the run, backdated or edited |  |
+| radar-map-evals-02 | should-fix | M | do | A pre-registered run still ships after losing tasks are left out, failures are relabelled as infrastructure errors, or one arm is re-run; passes are typed by hand |  |
+| radar-map-evals-03 | should-fix | M | do | A paired comparison cannot be run end to end: no command sets up a trial, grades and records it in one step, or ties tokens to it |  |
+| radar-map-evals-04 | should-fix | L | do | The 12 tasks cannot separate careful work from careless work: hard-coded and off-task answers pass, and the reviewer test gives 83% to one generic sentence |  |
+| radar-map-evals-05 | should-fix | M | do | The held-out split is neither hidden nor usable: answers sit in the same files, `ablate` includes it by default, and 4 tasks can never reach the 8-pair floor |  |
+| radar-map-evals-06 | should-fix | S | do | The I-16 floor counts pairs that were never measured: a token claim shipped on 5 measured tasks, and the cost guard is skipped when tokens are missing |  |
+| radar-map-evals-07 | should-fix | S | do | At boot a platform release note about a new model lost both news lines to a changelog entry and a marketing page |  |
+| radar-map-evals-09 | should-fix | S | do | Radar and boot never exit behind a slow connection, and every boot pays 4 s while the network is down (M15 measured, with a tested fix) |  |
+| radar-map-evals-10 | should-fix | M | do | Two sessions that each ran the radar conflict on merge in two files (M20, with the concrete fix and its cost measured) |  |
+| radar-map-evals-11 | should-fix | S | do | A source that changes format, is blocked or disappears goes silent: nothing at boot, nothing in doctor |  |
+| radar-map-evals-12 | should-fix | M | do | One run can write 901 lead records; the Hacker News source returns nothing by construction; research filters pass half of everything and nobody reads the result |  |
+| radar-map-evals-13 | should-fix | M | do | Repo map ranks test files and generated code above the source: local names count as references, tracked generated files are not recognised, `@/` imports are dropped |  |
 | research-models-08 | should-fix | M | do | The eval design cannot detect modest effects with 12 tasks and never says so |  |
 | performance-09 | minor | M | do | The repo map's cache is defeated by the brain's own bookkeeping, and bookkeeping files are ranked as source (measurement and fix for open item M8) |  |
+| radar-map-evals-14 | minor | S | do | An A/A run with two chance failures prints 'it did worse': 'revert' fires in 11 to 31% of runs where the arms do not differ |  |
 | research-models-10 | minor | S | do | memory/models.json lacks sizes and source URLs, and its 90-day re-check would have missed five launches and a price change in 70 days |  |
 | learning-19 | idea | S | do | Idea: a `brain eval recall` command that reports recall, precision, silence and token cost under production settings |  |
+| radar-map-evals-15 | idea | M | do | Idea: check models and retirement dates by script against the official pages instead of waiting for a keyword lead |  |
+| radar-map-evals-16 | idea | M | later | Idea: an exact signed-rank test for token and time comparisons, which proves the same saving with fewer tasks | the sign test is enough until a token comparison is actually run |
+| radar-map-evals-17 | idea | L | later | Idea: trap tasks drawn from the brain's own lessons, kept only if a plain run fails them some of the time | writing discriminating tasks is its own project; the shortcut audit (radar-map-evals-04) is done first |
+| radar-map-evals-18 | idea | M | later | Idea: use real sessions as standing paired evidence between brain versions | needs many recorded sessions on two brain versions |
+| radar-map-evals-19 | idea | M | later | Idea: a map focused on the request, added to builder briefs, and measured with the harness | needs the harness (radar-map-evals-03) to measure it |
+| radar-map-evals-20 | idea | M | later | Idea: definitions and imports for Go, Rust, Java, Kotlin, C#, PHP, Ruby, Swift and Dart by one table of patterns | the owner's projects are Python and JavaScript today; add a language when a project needs it |
 
 ### Package I: HR engine and selection (CB-220)
 
