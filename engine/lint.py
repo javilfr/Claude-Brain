@@ -178,9 +178,10 @@ def _placeholder(tok: str) -> bool:
 def _argument_problem(cmd: str, rest: list[str]) -> str:
     """What the real parser says about the values in one mention: a value
     that is not among an option's choices, a value of the wrong type, or a
-    required argument left out of a call that has arguments. Slots are given
-    a valid sample first, so only literal text is judged; "" when it parses,
-    or when the mention is a bare name or cannot be read as one call."""
+    required argument left out of a call that gives literal values. Slots
+    (`<id>`, `N`) are given a valid sample first, so only literal text is
+    judged; "" when it parses, when the mention is a bare name or names
+    flags and slots only, or when it cannot be read as one call."""
     if "--" in rest:
         rest = rest[:rest.index("--")] + ["--", "x"]
     try:  # `<file to read first>` is one slot, however many words describe it
@@ -203,6 +204,7 @@ def _argument_problem(cmd: str, rest: list[str]) -> str:
         return str(next(iter(action.choices))) if action.choices else "1"
 
     argv: list[str] = []
+    literal = False   # the mention gives at least one real value: it is a call, not a reference to a flag
     i = 0
     while i < len(tokens):
         tok = tokens[i]
@@ -218,12 +220,14 @@ def _argument_problem(cmd: str, rest: list[str]) -> str:
                 while not eq and i + 1 < len(tokens) and not tokens[i + 1].startswith("--") and (many or not values):
                     i += 1
                     values.append(tokens[i])
+                literal = literal or any(not _placeholder(v) for v in values)
                 argv += [name] + ([sample(action) if _placeholder(v) else v for v in values] or [sample(action)])
             else:
                 argv.append(name)
         elif tok.startswith("--"):
             return ""  # an unknown flag is reported by name already
         else:
+            literal = literal or not _placeholder(tok)
             argv.append("1" if _placeholder(tok) else tok)
         i += 1
     try:
@@ -241,7 +245,7 @@ def _argument_problem(cmd: str, rest: list[str]) -> str:
     if m and m.group(3).strip("'\"") != "1":
         return f"{call}: {m.group(1).split('/')[-1]} takes a number ({m.group(2)}), not '{m.group(3).strip(chr(39) + chr(34))}'"
     m = re.match(r"the following arguments are required: (.+)$", msg)
-    if m:
+    if m and literal:
         return f"{call} needs {m.group(1)} (required), and this call leaves it out"
     return ""
 
@@ -521,8 +525,8 @@ def fix_facts(root: Path) -> int:
             if value is None or re.sub(r"[,\s]", "", m.group(2)) == str(value):
                 return m.group(0)
             changed += 1
-            new = f"{value:,}" if "," in m.group(2) or (value >= 1000 and not m.group(2).strip().isdigit()) else str(value)
-            return m.group(0).replace(m.group(2) + "<!--", new + "<!--", 1) if m.group(2) else m.group(0).replace("--><!--", f"-->{new}<!--", 1)
+            new = f"{value:,}" if "," in m.group(2) else str(value)   # keep the document's way of writing thousands
+            return m.group(0)[:m.start(2) - m.start()] + new + m.group(0)[m.end(2) - m.start():]
 
         new_text = FACT.sub(put, text)
         if new_text != text:
@@ -668,10 +672,17 @@ NOTE_TITLES = {
     "agent-tokens": "token numbers in agent text",
     "unnamed": "commands no instruction file names",
 }
+# The part of a hit that says where, for the one-line form.
+NOTE_SHORT = {
+    "triggers": re.compile(r'^(\S+): trigger phrase ("[^"]*")'),
+    "reasons": re.compile(r"^(\S+:\d+):"),
+    "agent-tokens": re.compile(r"^(\S+:\d+):"),
+    "unnamed": re.compile(r"`brain ([^`]+)`"),
+}
 
 
-def _note_lines(hits: dict[str, list[str]], full: bool) -> list[str]:
-    """One line per rule with its count and first hits; every hit with ``full``."""
+def _note_lines(hits: dict[str, list[str]], full: bool, width: int = 230) -> list[str]:
+    """One line per rule: its count and as many places as fit; every hit with ``full``."""
     out = []
     for rule in RULES:
         rows = hits.get(rule) or []
@@ -679,11 +690,19 @@ def _note_lines(hits: dict[str, list[str]], full: bool) -> list[str]:
             continue
         if full:
             out += [f"note: {r}" for r in rows]
-        elif len(rows) == 1:
-            out.append("note: " + c.clip(rows[0], 240))
-        else:
-            out.append(c.clip(f"note: {NOTE_TITLES.get(rule, rule)} ({len(rows)}): " + "; ".join(c.clip(r, 90) for r in rows[:2]), 240)
-                       + f" (+{len(rows) - 2}: brain lint --notes)" * (len(rows) > 2))
+            continue
+        if len(rows) == 1:
+            out.append("note: " + c.clip(rows[0], width))
+            continue
+        line, shown = f"note: {NOTE_TITLES.get(rule, rule)} ({len(rows)}): ", 0
+        for r in rows:
+            m = NOTE_SHORT[rule].search(r) if rule in NOTE_SHORT else None
+            piece = " ".join(m.groups()) if m else c.clip(r, 80)
+            if shown and len(line) + len(piece) > width:
+                break
+            line += ("; " if shown else "") + piece
+            shown += 1
+        out.append(line + (f" (+{len(rows) - shown}: brain lint --all)" if shown < len(rows) else ""))
     return out
 
 
@@ -699,11 +718,12 @@ def cmd_lint(args) -> int:
     quiet = REPORT_ONLY | NOTE_ONLY
     errs = [h for rule in RULES if rule not in quiet for h in hits[rule]]
     notes = sum(len(hits[rule]) for rule in RULES if rule in quiet)
-    for e in errs[:12]:
-        print("error:", c.clip(e, 240))
-    if len(errs) > 12:
-        print(f"… {len(errs) - 12} more errors")
-    for line in _note_lines(hits, args.notes) if not errs or args.notes else []:
+    shown = errs if args.all else errs[:12]
+    for e in shown:
+        print("error:", e if args.all else c.clip(e, 240))
+    if len(errs) > len(shown):
+        print(f"… {len(errs) - len(shown)} more errors: brain lint --all")
+    for line in _note_lines(hits, args.all) if not errs or args.all else []:
         print(line)
     print(f"lint: {len(errs)} error(s), {notes} note(s)" + ("" if errs else " — instruction surface is consistent with the engine"))
     return 1 if errs else 0
@@ -719,7 +739,7 @@ def cmd_skill_audit(args) -> int:
 def register(sub) -> None:
     p = sub.add_parser("lint", help="check instruction files against the real commands, budgets and rules")
     p.add_argument("--transcript", action="store_true", help="report behaviour rules measured on this session's transcript")
-    p.add_argument("--notes", action="store_true", help="list every note, not one line per rule")
+    p.add_argument("--all", action="store_true", help="every error and every note in full, not the short form")
     p.add_argument("--fix-facts", action="store_true",
                    help="rewrite numbers marked <!-- fact: name -->N<!-- /fact --> in documents from the code, then lint")
     p.set_defaults(func=cmd_lint)

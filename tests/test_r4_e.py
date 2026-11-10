@@ -701,7 +701,8 @@ class LintCommandTest(unittest.TestCase):
         self.assertTrue(any("`brain req drop`" in e and "--reason" in e for e in errs), errs)
         self.assertTrue(any("`brain guard path`" in e and "path" in e for e in errs), errs)
         self.skill("`BRAIN req drop R-001 --reason \"superseded by R-004\"`, `BRAIN req drop <id> --reason \"<why>\"`,\n"
-                   "the bare names `BRAIN req drop` and `brain guard path`, and `BRAIN guard path memory/items.jsonl`\n")
+                   "the bare names `BRAIN req drop` and `brain guard path`, and `BRAIN guard path memory/items.jsonl`;\n"
+                   "a flag or a slot named alone is a reference, not a call: `BRAIN req evidence --done`, `BRAIN req drop <id>`\n")
         self.assertEqual(lint.check_commands(self.b, self.tree), [])
 
     def test_path_and_variable_call_forms_are_checked(self):
@@ -901,9 +902,9 @@ class LintOutputTest(unittest.TestCase):
         notes = [l for l in lines if l.startswith("note:")]
         self.assertTrue(all(len(l) <= 260 for l in notes), notes)
 
-    def test_notes_flag_lists_every_hit(self):
-        self.assertEqual(self.lint("--notes").returncode, 0)
-        short, full = self.lint().stdout, self.lint("--notes").stdout
+    def test_all_flag_lists_every_hit(self):
+        self.assertEqual(self.lint("--all").returncode, 0)
+        short, full = self.lint().stdout, self.lint("--all").stdout
         total = int(re.search(r"(\d+) note\(s\)", short).group(1))
         self.assertEqual(len([l for l in full.splitlines() if l.startswith("note:")]), total)
 
