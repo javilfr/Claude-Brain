@@ -1,0 +1,124 @@
+{
+ "package": "E",
+ "findings": [
+  {
+   "id": "core-03",
+   "status": "partial",
+   "note": "Fixed and tested: a session that ran close is marked closed in its ledger record; mark_open takes over its stale marker silently (both routes: marker pushed before the close, and marker left on a second project), and repair_unclosed never replaces a real record with an 'unrecorded' stub. The packet's repro through the command line prints no 'earlier session' line and keeps the real ledger. Remains: close still does not push what it writes (not in decision 3; the push functions are package A's). So in a new container whose brain clone does not hold the session's inbox record, the next boot still records a gap. That needs close to run before the last checkpoint --push, or A's end-of-session command. The proposed detect change (no mark_open in mode 'choose') is also A's.",
+   "tests": "tests.test_r4_e.ClosedSessionTest: test_stale_marker_of_a_closed_session_keeps_its_real_ledger, test_boot_takes_over_the_marker_of_a_closed_session_silently, test_a_real_record_is_never_replaced_by_a_stub, test_repro_prints_no_earlier_session_line, test_an_unclosed_session_is_still_reported"
+  },
+  {
+   "id": "e2e-trial-10",
+   "status": "fixed",
+   "note": "close without --tier takes the size from the head of the project's .brain/STATE.md, then the manifest's tier; --tier still overrides. The outcome and ledger records carry it and the sizing learner gets a label after folding.",
+   "tests": "tests.test_r4_e.CloseSizeTest: test_close_without_tier_takes_the_size_from_state_then_manifest, test_manifest_size_is_the_fallback_and_the_flag_overrides, test_no_recorded_size_stays_empty"
+  },
+  {
+   "id": "lead-01",
+   "status": "already-fixed",
+   "note": "Nothing to do: common.helper_transcripts and tests/test_helper_transcripts.py were already in the tree and pass in the whole-suite run.",
+   "tests": "tests.test_helper_transcripts (3 tests)"
+  },
+  {
+   "id": "lead-02",
+   "status": "fixed",
+   "note": "The session-end hook now captures into learning/inbox/.live/<date>-<session>.jsonl (added to .gitignore) and writes nothing tracked, nothing in the project, and leaves the open marker in place. capture merges tracked and live records, close writes the tracked record and removes the live file, repair reads the live file first, then the transcript, then keeps a real record, then writes the gap. close also promotes live files of other sessions that died (with no project there is no marker to trigger a repair). Not wired, because state.py is A's: checkpoint --push should call ledger.promote_live() (see cross_package); until then a session that never closes and loses its container loses its ledger.",
+   "tests": "tests.test_r4_e.LiveCaptureTest (10 tests, e.g. test_hook_leaves_a_git_brain_clean, test_close_after_a_live_capture_writes_one_tracked_record_and_removes_the_live_file, test_repair_uses_the_live_file_when_the_transcript_is_gone, test_a_live_file_does_not_fail_the_learned_zone_checks)"
+  },
+  {
+   "id": "quality-path-08",
+   "status": "fixed",
+   "note": "In a locked brain the hook asks the owner for a kernel path (PreToolUse 'ask', exit 0), refuses VERSION.json, .claude/hooks/, .claude/settings.json and engine/guard.py, reads notebook_path, and refuses a shell command that appears to write a learned-zone path or a lock file (pattern check, said so in the docstring; I extended it to the lock files because sed -i on VERSION.json was the same hole). guard diff fails when the base was locked and the tree is not. zone_of ignores case. Unlocked brain: no output, exit 0. Not done, not in the decisions: --strict-kernel and a CI label step.",
+   "tests": "tests.test_r4_e.GuardHookTest (8 tests, e.g. test_guard_hook_asks_for_kernel_paths_when_locked, test_guard_hook_denies_the_lock_machinery, test_bash_write_to_learned_zone_is_caught, test_an_unlocked_brain_behaves_as_before); GuardEngineTest: test_unlocking_in_a_diff_fails_guard, test_zone_of_ignores_case, test_first_lock_is_not_an_unlock"
+  },
+  {
+   "id": "quality-path-09",
+   "status": "fixed",
+   "note": "All three hook commands in .claude/settings.json test for the script first and exit 0 when it is missing or CLAUDE_PROJECT_DIR is unset; with the script present they still run it.",
+   "tests": "tests.test_r4_e.SettingsTest: test_hook_commands_exit_zero_when_the_script_is_missing, test_hook_commands_still_run_the_scripts, test_the_guard_also_sees_shell_and_notebook_calls"
+  },
+  {
+   "id": "quality-path-13",
+   "status": "fixed",
+   "note": "Lint now reads the path and $BRAIN call forms, reads each call of a chain separately, and parses each mention with the real parser (invalid choice, wrong type, required argument missing from a call that gives literal values). It scans docs/NEXT_SESSION.md, hr/GUIDELINES.md and the text fields of rack, memory, playbook and owner records. Repeated sentences are errors, as the spec says. lint --transcript has the helper-reply rule and reads limits.helper_reply_tokens. A constants table compares models.json limits with the code. All five probe lines from the finding are caught; the real tree has 0 errors from these rules.",
+   "tests": "tests.test_r4_e.LintCommandTest: test_invalid_choice_is_an_error, test_missing_required_option_is_an_error, test_path_and_variable_call_forms_are_checked, test_a_chain_is_read_as_separate_commands, test_stale_command_in_a_memory_item_is_an_error; LintRuleTest: test_repeated_sentence_fails_the_lint, test_constant_that_disagrees_with_the_code_is_reported, test_helper_reply_over_cap_is_reported"
+  },
+  {
+   "id": "quality2-03",
+   "status": "partial",
+   "note": "Ledger side done: summaries, ledger and outcome records carry tokens_oe (cost / main model's output price; outcomes also tokens_oe_all) and active_minutes; existing fields unchanged. Deviation to decide: with 'each gap capped at five minutes' the two-burst example gives 12, not the 7 in the finding's acceptance (7 needs long gaps dropped, not capped); I followed the decision. The cap is read from memory/ml_config.json ledger.active_gap_minutes, default 5; the key is not in the file yet. Remains (package G): mlearn still calibrates on tokens and minutes.",
+   "tests": "tests.test_r4_e.UnitsTest: test_active_minutes_cap_idle_gaps, test_gap_cap_is_read_from_the_learning_constants, test_outcome_carries_output_equivalent_tokens, test_unknown_usage_has_no_units, test_ledger_command_shows_both_units"
+  },
+  {
+   "id": "quality2-04",
+   "status": "fixed",
+   "note": "summarise returns unpriced_models; brain ledger and brain close print 'priced at the fallback rate: <model>; add it to memory/models.json', and the ledger record keeps the list. Fast mode: usage.speed is kept, a per-model fast_multiplier is applied only if models.json has one, otherwise the count is flagged in one line. No price was added to models.json.",
+   "tests": "tests.test_r4_e.UnitsTest: test_unknown_model_is_flagged_not_silently_priced, test_fast_mode_is_priced_only_with_a_recorded_multiplier"
+  },
+  {
+   "id": "instructions-18",
+   "status": "fixed",
+   "note": "New rules: every quoted trigger phrase needs a case in evals/routing.jsonl (26 hits today, the audit's number); the reason check covers skills and agents (2 hits); a token number in an agent body (6 hits, one per agent); a list of commands no instruction file names (21). The trigger rule is shipped as a note because it fires on files I do not own; the other three are report-only by design.",
+   "tests": "tests.test_r4_e.LintRuleTest: test_trigger_phrase_without_a_routing_case_is_reported, test_absolute_rule_without_a_reason_in_a_skill_or_agent_is_noted, test_token_number_in_an_agent_body_is_noted, test_a_rule_listed_as_note_only_does_not_fail_the_lint; LintCommandTest.test_commands_nobody_names_are_listed; LintOutputTest (3 tests)"
+  },
+  {
+   "id": "quality-path-20",
+   "status": "partial",
+   "note": "Lint part done: a document can mark a number as <!-- fact: name -->N<!-- /fact -->; lint fails when it differs from the code and lint --fix-facts rewrites it. Facts: engine-modules, claude-md-bytes, templates, tests. Deviation: 'tests' counts test functions in tests/ (478 today, equal to the suite) instead of reading the last recorded run, because run logs in /tmp/brain-run are shared by every copy of the brain and would make the lint depend on which copy ran last. Remains (package D): req.load raising on a repeated requirement id.",
+   "tests": "tests.test_r4_e.LintRuleTest: test_marked_fact_that_drifted_is_an_error, test_a_marker_shown_as_an_example_is_not_a_claim, test_fact_values_of_the_real_brain; LintOutputTest.test_fix_facts_reports_in_one_line_and_then_lints"
+  },
+  {
+   "id": "redteam-07",
+   "status": "fixed",
+   "note": "Only the part given to this package (decision 9): brain close --note is refused with common.secret_problem's one line and exit 2 before anything is written.",
+   "tests": "tests.test_r4_e.CloseNoteTest.test_a_note_that_holds_a_credential_is_refused"
+  }
+ ],
+ "suite": "Whole suite (python3 bin/brain run -- python3 -m unittest discover -s tests -t .): \"Ran 478 tests in 50.104s\" / \"OK\". python3 bin/brain doctor: \"brain is healthy\" (exit 0). python3 bin/brain lint: \"lint: 0 error(s), 56 note(s) — instruction surface is consistent with the engine\" (exit 0). tests.test_r4_e alone: \"Ran 63 tests in 7.692s\" / \"OK\". Also run on Python 3.12 and 3.11 with BRAIN_NO_NETWORK=1 (test_r4_e, test_lint, test_guard, test_ledger): \"Ran 103 tests\" / \"OK\" on both, before the last two test additions.",
+ "head_commit": "e6e170616b8e50c2da8055057b71478833b5eae5",
+ "existing_tests_changed": [
+  "tests/test_guard.py::HookTest::test_session_end_hook_records_ledger (lead-02): it asserted that the hook writes the tracked file learning/inbox/*-sess-1.jsonl, which is the behaviour the finding proved wrong. It now asserts the tracked inbox stays empty and the record is in learning/inbox/.live/. Nothing else in the test changed."
+ ],
+ "cross_package": [
+  "Nothing was appended to a module I do not own. Files touched: engine/ledger.py, engine/guard.py, engine/lint.py, .claude/hooks/guard_paths.py, .claude/hooks/session_end.py, .claude/settings.json, .gitignore, tests/test_r4_e.py, and one test in tests/test_guard.py.",
+  "Package A (engine/state.py), most important: `checkpoint --push` and `handover` should call `ledger.promote_live()` just before `push_brain_records()`. The hook no longer writes a tracked inbox file, so without this call a session that never runs close and loses its container leaves only an 'unrecorded' gap. The function exists and is tested (LiveCaptureTest.test_promote_live_is_what_a_checkpoint_can_call).",
+  "Package A or K: close still does not push. The marker removal, run record, STATUS.md and inbox record it writes reach the remotes only if a checkpoint --push or handover follows. Either the end-of-session command runs close first and then pushes, or the instructions put close before the last push.",
+  "Package A (engine/detect.py): session_start_lines appends 'earlier session was not closed: ' even when repair_unclosed returns \"\". mark_open now returns None for a closed session so that path is not reached, but an `if line:` guard there would be safer. The finding's other proposal (no mark_open in mode 'choose' unless --name) is not done.",
+  "Package G (engine/mlearn.py): outcomes now carry tokens_oe, tokens_oe_all and active_minutes; calibration and drift still read tokens_all/tokens and minutes. The help of `close --est-tokens` now says the estimate is in output-equivalent tokens, which is only true once mlearn compares it with tokens_oe_all.",
+  "memory/ml_config.json (lead or G): add \"ledger\": {\"active_gap_minutes\": 5}. The code reads it and falls back to 5; the plan wants tunables in that file.",
+  "memory/models.json (lead or H), lint note 'constants' (1 hit): limits.recall_budget_tokens is 600 but engine/recall.py DEFAULT_BUDGET is 300. After it is fixed, remove \"constants\" from lint.NOTE_ONLY to make the rule an error. A per-model \"fast_multiplier\" may be added there if the owner approves a fast-mode price; none was invented.",
+  "evals/routing.jsonl (G) or skill descriptions (K), lint note 'triggers' (26 hits, phrase has no routing case): brain-build \"build it\", \"constrúyelo\"; brain-create \"propose options\", \"give me 5\", \"propón opciones\", \"dame 5\"; brain-handover \"get ready to continue in a new chat\", \"context is running low\", \"prepara el relevo\"; brain-learn \"consolidate\", \"learning digest\", \"consolida\"; brain-new \"adopt this repo\", \"adopta este repo\"; brain-plan \"plan this\", \"make a plan\", \"planifica\"; brain-research \"find out\", \"compare\"; brain-start \"empieza\"; brain-status \"where are we?\", \"how much has this cost?\", \"¿cuánto ha costado?\"; brain-verify \"ship it\", \"publícalo\", \"súbelo a main\". After they have cases, remove \"triggers\" from lint.NOTE_ONLY.",
+  "Package K, report-only lint notes: token numbers in agent text (6): .claude/agents/builder.md:16, redteam.md:20, researcher.md:19, reviewer.md:20, scout.md:20, writer.md:21. Absolute rules without a stated reason (2): .claude/skills/brain-handover/SKILL.md:22, .claude/skills/brain-verify/SKILL.md:29.",
+  "Package K, report-only: commands no instruction file names (21): ablate, detect, eval audit, eval defects, eval grade, eval prereg, eval record, guard path, hr audit, items check, learn apply, learn review, learn status, lint, ml alarms, ml flaky, plan assign, plan packet, radar, req set, skill-audit.",
+  "Package D (engine/req.py): the second half of quality-path-20, req.load raising LedgerError on a repeated id, is not done here.",
+  "Package B (engine/common.py), seen and not changed: transcript_paths(sid) returns the BRAIN_TRANSCRIPT override for any session id, so a repair of another session would read this session's transcript whenever that variable is set.",
+  "Lead (.github/workflows/ci.yml, not in my list): guard diff now exits 1 on a diff that unlocks the zone; no CI change is needed for that. A --strict-kernel flag and an owner-label step were proposed in quality-path-08 and are not built.",
+  "Other packages' later edits must keep lint green under the new error rules: a call with a literal value outside an option's choices, a literal value of the wrong type, a call with literal values that leaves out a required argument, stale commands in rack, memory, playbook and owner records and in docs/NEXT_SESSION.md and hr/GUIDELINES.md, and a sentence repeated in three or more instruction files."
+ ],
+ "instruction_notes": [
+  "docs/ENGINE_SPEC.md:95: 'capture (`close` or the Stop hook) clears this session's marker; `repair_unclosed(project, marker)` captures the earlier session from its transcript if it is still on disk, else appends a `ledger` record with `unrecorded: true`'. Now: only close (a tracked capture) clears the marker; the Stop hook's live capture leaves it. mark_open(project, sid, brain_root) returns None for a marker whose session ran close. repair order: closed, nothing; live file; transcript; a real tracked record is kept; else the unrecorded record.",
+  "docs/ENGINE_SPEC.md:63: '... what `close` and the Stop hook do when they re-record a session.' The Stop hook no longer rewrites the tracked inbox file; it writes learning/inbox/.live/<date>-<session>.jsonl, which git ignores. close, a repair and ledger.promote_live are what rewrite the tracked file.",
+  "docs/ENGINE_SPEC.md:40: the `ledger` record also has `active_minutes`, `tokens_oe`, `closed: true` when written by close, and `unpriced_models` when a model was priced at the fallback rate. Line 41: the `outcome` record also has `tokens_oe`, `tokens_oe_all` and `active_minutes` (null with usage unknown), and `tier` defaults to the project's STATE.md, then the manifest.",
+  "docs/ENGINE_SPEC.md:30 (zones): zone_of now compares case-folded paths, and guard.LOCK_FILES / LOCK_DIRS (VERSION.json, .claude/settings.json, engine/guard.py, .claude/hooks/) are refused by the hook in a locked brain.",
+  "docs/EXECUTION_PLAN.md section 4.5, bullet 'Unclosed sessions: ... if that session's transcript is still on disk, run capture for it; otherwise append an inbox `ledger` record marked `unrecorded: true`': add the closed check and the live file, as above.",
+  "docs/EXECUTION_PLAN.md section 4.6: the lint paragraph should add: values and required arguments checked with the real parser; rack, memory, playbook and owner records, docs/NEXT_SESSION.md and hr/GUIDELINES.md scanned; marked facts; a constants table and trigger phrases (notes until the files are fixed); `--all` and `--fix-facts`. 'adds the six rules' is now true: `lint --transcript` prints the helper-reply line (seven lines with 'helpers started').",
+  "NEEDS_YOU.md:34: '... recording the session automatically at the end'. The hook's capture is now provisional and git-ignored; the tracked record is written by `brain close`, or by the next boot's repair in the same container.",
+  "docs/MASTER_PLAN.md:545: 'A local guard that blocks direct edits to the learned zone, active wherever hooks load.' It now also asks the owner before a kernel edit, refuses the lock's own files, and refuses shell commands that appear to write either.",
+  "docs/BUILD_STATUS.md:133 (hook check): still true for the learned zone; a kernel path now gets an owner prompt instead of passing.",
+  ".claude/skills/brain-learn/SKILL.md:12 (the documented close line): still correct. It could say that the size is taken from the project's state, so `--tier` is only an override.",
+  ".claude/skills/brain-handover/SKILL.md:18-19: step 1 pushes the open marker and step 2 (close) removes it only locally; this is harmless now when the brain holds the session's record, and `BRAIN handover` pushes the removal. Worth keeping the order in mind when K rewrites the steps."
+ ],
+ "new_commands_and_flags": [
+  "brain lint --all: every error and every note in full; the default prints at most 12 errors and one line per note rule with its count.",
+  "brain lint --fix-facts: rewrites numbers marked in documents from the code, prints one line with the count, then lints.",
+  "Fact marker for documents: <!-- fact: NAME -->N<!-- /fact --> with NAME one of engine-modules, claude-md-bytes, templates, tests. A marker inside a code span or fenced block is treated as an example and ignored.",
+  "brain close: no new flag. --tier now defaults to the project's STATE.md, then the manifest. --note is refused (exit 2) when it holds something shaped like a credential. Output adds output-equivalent tokens, active minutes and, when it applies, one line naming models priced at the fallback rate.",
+  "brain ledger: first line shows active minutes, total line shows output-equivalent tokens, plus the fallback-price line when it applies; --json has active_minutes, tokens_oe, tokens_oe_main, unpriced_models, fast_at_standard.",
+  "brain lint --transcript: new line 'helper replies over ~2,000 tokens: N of M' (cap read from memory/models.json limits.helper_reply_tokens).",
+  "brain guard diff: exits 1 when the base had learned_zone_locked true and the tree does not.",
+  "Engine API for other packages: ledger.promote_live(brain_root, sid), ledger.capture(..., live=False, closed=False), ledger.mark_open(project, sid, brain_root=None), ledger.is_closed, ledger.recorded_tier, ledger.output_equivalent, ledger.summarise(..., gap_minutes=5.0); guard.hook_decision, guard.bash_write_targets, guard.is_lock_file; lint.NOTE_ONLY (remove a rule's name to make it an error), lint.FACTS, lint.CONSTANTS, lint.check_facts, lint.fix_facts, lint.check_triggers, lint.check_constants, lint.command_texts, lint.real_parser.",
+  ".claude/settings.json: a second PreToolUse entry with matcher 'NotebookEdit|Bash' runs the same guard script; entry 0 is unchanged apart from the missing-script test.",
+  "Optional data keys the code now reads: memory/ml_config.json ledger.active_gap_minutes (default 5); memory/models.json models.<id>.fast_multiplier (absent today)."
+ ],
+ "remaining": "Everything is committed on r4/e at e6e1706 and the tree is clean. Not done, with the owner of each: (1) close does not push what it writes, so core-03 still shows a gap in a new container whose brain clone lacks the session's record (A or K). (2) checkpoint --push does not yet call ledger.promote_live(), so an unclosed session's capture does not survive its container (A; one line). (3) mlearn does not yet use tokens_oe and active_minutes (G). (4) req.load does not reject a repeated id (D). (5) --strict-kernel and a CI owner-label step were not built (not in the decisions). Three choices I made that the lead may want to reverse: active_minutes caps each long gap at five minutes, which gives 12 for the finding's two-burst example where its acceptance says 7; the 'tests' fact counts test functions in the code instead of reading the last recorded run; the Stop hook's live capture no longer writes the project's run record or STATUS.md and no longer clears the open marker, because a provisional capture must leave the session repairable and the project tree clean. Behaviour worth knowing when merging: lint's default output is now six lines (five note lines) until the 26 trigger phrases, the models.json limit and the agent token lines are fixed."
+}
