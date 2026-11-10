@@ -135,3 +135,24 @@ The owner's instruction: a comprehensive analysis, a very detailed improvement p
 | Do a skill's own hooks fire? | Not applicable: no brain skill declares hooks | `grep -l '^hooks:' .claude/skills/*/SKILL.md` prints nothing |
 | Does an effort change keep the prompt cache? | Not testable from inside a session: only the owner can change effort. Left to the research memo | — |
 | Does the ledger see helpers started by a workflow? | It did not: it reported 1 helper and $3.42 while seven were running. Fixed (CB-210); the same moment then read 7 helpers and $13.14 | `tests/test_helper_transcripts.py` |
+
+### Outcome of the improvement session (end of 2026-11-10)
+
+The analysis found 337 issues (17 analysts; reports in `docs/review/2026-11-10-audit/`; plan in `docs/plan/IMPROVEMENT_PLAN.md`). The session stopped part-way through execution when the Fable usage limit was reached; it was finished on Opus.
+
+**Merged and checked** (full gate: 825 tests OK, `doctor` healthy, `lint` 0 errors, `hr audit` sound, `items check` 141 valid, `eval audit` 12 sound, `learn verify` matches):
+
+| Package | What changed |
+|---|---|
+| A continuity | A new chat is told where the last chat's saved state is and continues from it (`brain resume --adopt`, fast-forward only). The state lives in the project's repository only (D-17). Checked by hand: a fresh clone on a new branch resumed the exact item, next step and note. Checkpoints say when nothing reached the remote; nothing but bookkeeping reaches the release branch; the brain's records are pushed only for this session, never from a copy. One end-of-session command (`brain handover --item --note --outcome`). |
+| B, B2 contract | No traceback on a damaged manifest (fuzz test), one project resolver, `doctor --project`, `init --check`, faster start-up, a self-explaining `.brain/README.md` in each project. |
+| C gates | Release runs the gates itself; pipes, `|| true`, skipped or removed tests and a falling test count hold a release; owner and checklist gates count; the runner kills its whole process group on timeout. |
+| D requirements | Evidence must resolve to something real; `req verify` runs a line's check; the ledger is held against the request; `brain done` gives one verdict. |
+| E ledger, guard, lint | The session hook no longer dirties the tree each turn; real units (output-equivalent tokens, active minutes); the guard asks for kernel edits once locked; lint parses every command mention. |
+| F learning | A forged inbox line can no longer become an owner rule; a hand-written delta cannot rewrite owner items; shipped knowledge never fades by disuse, and anything faded can be restored; malformed records never crash consolidation. |
+| M recall | Recall works in Spanish; external facts are marked "read at …, not a rule"; a project's files cannot pose as owner instructions. |
+| J templates | 90 of 100 templates corrected (no helper pushes to main by hand; methods fit the agent's tools; Spanish keywords). |
+| I2 HR settling | A hire nobody worked is no longer recorded as a pass or fail. |
+| Secrets | The scan knows 17 credential formats; checkpoint, requirements and close refuse a key. |
+
+**Not done** (builders stopped by the usage limit; their briefs are in the workflow scripts and `docs/review/2026-11-10-audit/`): G routing and learners (this session's own request is still sized wrong), H evaluation harness and radar, I1 template selection (blind set: 22% first, 31% top three; the old 86% figure measured requests too close to the tuning data), the second passes of A, C, E, the instruction surface (K, beyond the edits to brain-start, brain-verify, brain-handover and CLAUDE.md rule 6), owner documents (L), the mutation audit, and the final independent review (CB-208).

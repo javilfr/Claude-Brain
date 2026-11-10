@@ -15,9 +15,9 @@ If the current item is close to finished, finish it; otherwise stop starting new
 
 Order matters here:
 
-1. `BRAIN checkpoint --item <current id> --note "<what is half finished and where it lives>" --push`.
-2. `BRAIN close`. Commit the learning inbox file it wrote in the brain repository and push the brain's working branch (brain-learn says where it goes next).
-3. `BRAIN handover`. It writes `.brain/HANDOVER.md` and `STATUS.md`, commits and pushes the project's bookkeeping files itself, then checks both repositories and prints the line to paste. Fix what it reports and run it again; a repeat run passes once both are clean.
+1. `BRAIN handover --item <current id> --note "<what is half finished and where it lives>" --outcome ok`. It checkpoints, closes the session, pushes both repositories' records in the right order and prints the line to paste, naming the branch.
+2. If it reports something, fix it and run `BRAIN handover` again.
+3. `BRAIN handover` alone, run later, It writes `.brain/HANDOVER.md` and `STATUS.md`, commits and pushes the project's bookkeeping files itself, then checks both repositories and prints the line to paste. Fix what it reports and run it again; a repeat run passes once both are clean.
 
 Ledger lines it counts as open go in the note, never into a claim of done.
 

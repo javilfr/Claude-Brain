@@ -26,11 +26,11 @@ One round; a second only to confirm blocking fixes; stop when only style remains
 
 ## 4. Ledger
 
-`BRAIN req check` exits non-zero while any line lacks evidence. Fix the gap, or `BRAIN req drop <id> --reason "…"`, which he sees. Never narrow the request quietly.
+`BRAIN req check` exits non-zero while any line lacks evidence the engine can resolve (a gate, a run log, an existing path, a commit, a live address); a line with a stored check closes only through `BRAIN req verify`. `BRAIN done` gives the one verdict from tool results; quote its last line in the report. Fix the gap, or `BRAIN req drop <id> --reason "…"`, which he sees. Never narrow the request quietly.
 
 ## 5. Release
 
-Under release rule `main-on-green`: `BRAIN release --run-gates --push`. It refuses uncommitted changes and a branch behind `origin/main` (merge it, re-run, try again), pushes only when every gate is green on this commit, never forces, then checks the live address. Without `--push` it only reports. Push to `main` no other way. `BRAIN release --check-live` re-checks the live address alone; if it fails, say so first and give click steps. Under rule `pr`, open a pull request when he asks.
+Under release rule `main-on-green`: `BRAIN release --run-gates --push`. It refuses uncommitted changes and a branch behind `origin/main` (merge it, re-run, try again), runs every gate itself on this commit and pushes only when all pass (skipped, removed or masked tests hold it unless `--accept-skips "<reason>"`), never forces, then checks the live address. Without `--push` it only reports. Push to `main` no other way. `BRAIN release --check-live` re-checks the live address alone; if it fails, say so first and give click steps. Under rule `pr`, open a pull request when he asks.
 
 A change to the brain itself needs `BRAIN eval contract` passing; a claim that it helps needs `BRAIN eval compare <run-file> --a ARM --b ARM`.
 

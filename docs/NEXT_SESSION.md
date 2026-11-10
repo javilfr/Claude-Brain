@@ -2,7 +2,11 @@
 
 For the Claude session that opens this repository on its own. The owner's instruction for it, verbatim (2026-11-10): "Test, analyze, research and improve heavily in a new chat we will start right now with renewed context, prepare everything for new chat with only the brain repo in order to work on it until fully done."
 
-## Where things stand
+## Update, end of 2026-11-10
+
+The improvement session merged packages A, B, C, D, E, F, M, J and part of I (see the last section of `docs/BUILD_STATUS.md`). Open, in this order: G routing (`docs/plan/tickets.json` CB-218), I1 selection (CB-220; measure only once on `evals/hr_golden_2.jsonl`), H evaluation and radar (CB-219), the instruction surface and owner documents (CB-222, CB-223), then the independent review (CB-208). Each package's findings are rows in `docs/plan/IMPROVEMENT_PLAN.md` section 6, with full text in `docs/review/2026-11-10-audit/<area>.json`.
+
+## Where things stood before that session
 
 - Phase A is built: core file, ten skills, six agents, the engine (`bin/brain`, 22 modules, standard library only), the learning pipeline, the update radar, the evaluation system, and the HR department with its rack of 100 templates.
 - Last gate before this handover: 407 tests OK; `doctor`, `lint`, `hr audit`, `items check`, `eval audit` exit 0.
