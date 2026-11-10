@@ -17,7 +17,7 @@ Audience: the Claude model building or changing this repository. Not owner-facin
 
 | ID | Invariant | Enforced by |
 |---|---|---|
-| I-01 | Python standard library only in `engine/` and `bin/`. No install, no network at boot except the bounded radar (I-14). | `brain lint` (`lint.check_imports`), `tests/test_lint.py::test_non_stdlib_import_is_an_error` and `::test_the_real_brain_is_clean` |
+| I-01 | Python standard library only in `engine/` and `bin/`. No install, no network at boot except the bounded radar (I-14) and one bounded look at the project's remote branches for a newer checkpoint (at most about 6 s, failure is silence, skipped when `BRAIN_NO_NETWORK=1`; decision D-17). | `brain lint` (`lint.check_imports`), `tests/test_lint.py::test_non_stdlib_import_is_an_error` and `::test_the_real_brain_is_clean` |
 | I-02 | The required core works with hooks, MCP and plugins absent (two-repo cloud session). | rehearsal test runs with no hooks |
 | I-03 | Always-loaded text: `CLAUDE.md` ≤ 6,000 B; project stub ≤ 2,000 B; each agent/skill description ≤ 300 chars; ≤ 6 agents; ≤ 12 skills; total ≤ 3,200 est. tokens; nothing volatile. | `brain budget`, `brain lint` |
 | I-04 | Every command prints ≤ ~15 lines by default; `boot` ≤ 1,500 B. | unit tests |
