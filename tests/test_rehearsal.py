@@ -7,6 +7,7 @@ turns the session into ledger rows, learning statistics and a candidate item.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -72,6 +73,9 @@ class Rehearsal(unittest.TestCase):
 
     def test_full_story(self):
         b = self.brain_cmd
+        # The copied brain carries whatever real candidates it has learned; the
+        # story must add exactly one to that count.
+        before = int(re.search(r"(\d+) candidate", b("learn", "status").stdout).group(1))
         self.assertIn("mode: bootstrap", b("boot", "New project: a tiny tool that greets people").stdout)
         b("init", str(self.proj), "--family", "software", "--title", "Greeter", "--release", "main-on-green")
         out = b("boot", "Continue").stdout
@@ -137,7 +141,7 @@ class Rehearsal(unittest.TestCase):
         self.assertTrue(list((self.brain / "stats" / "ledger").glob("*.jsonl")))
         self.assertTrue((self.brain / "learning" / "manifest.jsonl").read_text().strip())
         learned = b("learn", "status").stdout
-        self.assertIn("1 candidate", learned)
+        self.assertIn(f"{before + 1} candidate", learned)
         second = b("learn", "consolidate").stdout
         self.assertEqual((self.brain / "memory" / "items.jsonl").read_text(), items, "consolidating twice must change nothing")
         b("learn", "digest")

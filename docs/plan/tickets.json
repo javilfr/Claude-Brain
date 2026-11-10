@@ -351,7 +351,8 @@
       "est": 120,
       "accept": "python3 bin/brain eval audit && ls evals/prereg/*.json",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
-      "status": "open"
+      "status": "open",
+      "note": "Run 1 found the read-only plain-brief defect (fixed). Re-registered as *-2026-11-10b; restart run 2 from zero with evals/tools/template_trials.py, as one coordinator batch."
     },
     {
       "id": "CB-204",

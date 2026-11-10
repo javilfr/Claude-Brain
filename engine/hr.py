@@ -35,6 +35,7 @@ ROLES = tuple(ROLE_OF)          # a template may set `role` to take another role
 SIZES = ("S", "M", "L", "XL")
 RISKS = ("trivial", "standard", "high", "one-way-door")
 CONTRACT_ID = re.compile(r"^h-\d{8}-[0-9a-f]{6}(-\d+)?$")
+REPLY_MAX_WORDS = 80  # a helper's reply is re-read by the lead on every later turn
 BRIEF_WARN, BRIEF_MAX = 350, 500  # words: above the first a note, above the second an error
 WRITES = {"builder", "writer"}                 # base agents that change files
 READS_OUTSIDE = {"researcher"}                 # base agents that read untrusted content
@@ -521,8 +522,11 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
         lines += ["", block]
     if base_agent in READS_OUTSIDE:
         lines += ["", HYGIENE]
-    ret = (t or {}).get("return_contract") or "At most 200 words: what you did, the check's result, anything you assumed."
-    lines += ["", f"<return>{ret} Longer notes go in {notes_path}. {HONESTY}</return>"]
+    ret = (t or {}).get("return_contract") or "What you did, the check's result, anything you assumed."
+    # The reply stays in the lead's context for every later turn of a session
+    # that may run for hours, so it is short whatever the template says.
+    lines += ["", f"<return>{ret} Reply in at most {REPLY_MAX_WORDS} words, ending with the RESULT line; "
+                  f"everything longer goes in {notes_path}. {HONESTY}</return>"]
     return "\n".join(lines) + "\n"
 
 

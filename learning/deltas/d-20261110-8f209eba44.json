@@ -1,0 +1,394 @@
+{
+  "at": "2026-11-10T23:04:50Z",
+  "id": "d-20261110-8f209eba44",
+  "ops": [
+    {
+      "op": "ML_FOLD",
+      "records": [
+        {
+          "actual_tokens": 4831,
+          "at": "2026-11-10T22:45:36Z",
+          "band_tokens": 20000,
+          "base_agent": "builder",
+          "effort": "medium",
+          "explored": false,
+          "family": "software",
+          "group": "build",
+          "has_check": true,
+          "id": "f65e0cd0086535a6",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "f79192f0-3270-52a8-982c-ea4c04f7cd53",
+          "size": "S",
+          "task_class": "software.bugfix",
+          "template": "cli-script-builder",
+          "wage_tokens": 20000
+        },
+        {
+          "actual_tokens": 4029,
+          "at": "2026-11-10T22:45:37Z",
+          "band_tokens": 60000,
+          "base_agent": "builder",
+          "effort": "medium",
+          "explored": false,
+          "family": "software",
+          "group": null,
+          "has_check": true,
+          "id": "db0634fe772001c1",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "f79192f0-3270-52a8-982c-ea4c04f7cd53",
+          "size": "M",
+          "task_class": "software.bugfix",
+          "template": null,
+          "wage_tokens": 60000
+        },
+        {
+          "actual_tokens": 66312,
+          "at": "2026-11-10T22:48:44Z",
+          "band_tokens": 60000,
+          "base_agent": "builder",
+          "effort": "medium",
+          "explored": false,
+          "family": "knowledge",
+          "group": "support",
+          "has_check": true,
+          "id": "c5dd6b0718a76668",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "high",
+          "sealed": true,
+          "session": "f79192f0-3270-52a8-982c-ea4c04f7cd53",
+          "size": "M",
+          "task_class": "knowledge.longform",
+          "template": "eval-regression-runner",
+          "wage_tokens": 60000
+        },
+        {
+          "actual_tokens": 19356,
+          "at": "2026-11-10T22:52:42Z",
+          "band_tokens": 20000,
+          "base_agent": "researcher",
+          "effort": "medium",
+          "explored": false,
+          "family": "software",
+          "group": "discovery",
+          "has_check": true,
+          "id": "eda79c4a07d3d166",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "f79192f0-3270-52a8-982c-ea4c04f7cd53",
+          "size": "S",
+          "task_class": "software.ui",
+          "template": "claude-product-answerer",
+          "wage_tokens": 20000
+        },
+        {
+          "actual_tokens": 201048,
+          "at": "2026-11-10T22:53:00Z",
+          "band_tokens": 200000,
+          "base_agent": "writer",
+          "effort": "medium",
+          "explored": false,
+          "family": "data",
+          "group": "writing",
+          "has_check": true,
+          "id": "61c5c54518ce57a6",
+          "kind": "hire",
+          "model": "opus",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "f79192f0-3270-52a8-982c-ea4c04f7cd53",
+          "size": "L",
+          "task_class": "data.analysis",
+          "template": "agent-spec-writer",
+          "wage_tokens": 200000
+        },
+        {
+          "actual_tokens": 22706,
+          "at": "2026-11-10T22:53:48Z",
+          "band_tokens": 200000,
+          "base_agent": "researcher",
+          "effort": "medium",
+          "explored": false,
+          "family": "knowledge",
+          "group": "discovery",
+          "has_check": true,
+          "id": "5b58d9fab519a8b6",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "f79192f0-3270-52a8-982c-ea4c04f7cd53",
+          "size": "L",
+          "task_class": "knowledge.research",
+          "template": "deep-researcher",
+          "wage_tokens": 200000
+        },
+        {
+          "actual_tokens": 86765,
+          "at": "2026-11-10T22:54:39Z",
+          "band_tokens": 20000,
+          "base_agent": "researcher",
+          "effort": "medium",
+          "explored": false,
+          "family": "knowledge",
+          "group": "discovery",
+          "has_check": true,
+          "id": "111df37ec6cc8bd4",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "f79192f0-3270-52a8-982c-ea4c04f7cd53",
+          "size": "S",
+          "task_class": "knowledge.research",
+          "template": "claude-product-answerer",
+          "wage_tokens": 20000
+        }
+      ]
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "platform"
+        ],
+        "conflicts": [],
+        "created": "2026-11-10",
+        "evidence": [
+          "session:f79192f0-3270-52a8-982c-ea4c04f7cd53"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-hooks-declared-skill-frontmatter-registe-29645f",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:f79192f0-327",
+        "recheck_days": 90,
+        "scope": "global",
+        "sessions": 1,
+        "source": "https://code.claude.com/docs/en/hooks",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Hooks declared in a skill's frontmatter are registered when the skill is invoked and keep running for the rest of the session; once: true removes them after the first successful run. Agent hooks run only while that agent runs.",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-10",
+        "verified_on": "2026-11-10"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "platform",
+          "cost"
+        ],
+        "conflicts": [],
+        "created": "2026-11-10",
+        "evidence": [
+          "session:f79192f0-3270-52a8-982c-ea4c04f7cd53"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-claude-code-model-switch-starts-fresh-ca-1cd9f2",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:f79192f0-327",
+        "recheck_days": 90,
+        "scope": "global",
+        "sessions": 1,
+        "source": "https://code.claude.com/docs/en/prompt-caching",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "In Claude Code a model switch starts a fresh cache; an effort change keeps the cache on Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1 or later with an API key or subscription, but not on Bedrock, Google Cloud, a gateway or under HIPAA settings. Spawning a sub-agent does not touch the parent's cache.",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-10",
+        "verified_on": "2026-11-10"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "platform",
+          "cost"
+        ],
+        "conflicts": [],
+        "created": "2026-11-10",
+        "evidence": [
+          "session:f79192f0-3270-52a8-982c-ea4c04f7cd53"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-skill-listing-system-prompt-budgeted-con-425200",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:f79192f0-327",
+        "recheck_days": 90,
+        "scope": "global",
+        "sessions": 1,
+        "source": "https://code.claude.com/docs/en/skills",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "The skill listing in the system prompt is budgeted at 1% of the context window; past it, descriptions of the least-invoked skills are dropped first and names stay. Each description plus when_to_use is capped at 1,536 characters.",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-10",
+        "verified_on": "2026-11-10"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "cost"
+        ],
+        "conflicts": [],
+        "created": "2026-11-10",
+        "evidence": [
+          "session:f79192f0-3270-52a8-982c-ea4c04f7cd53"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-haiku-55-priced-five-times-higher-prompt-005b7b",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:f79192f0-327",
+        "recheck_days": 90,
+        "scope": "global",
+        "sessions": 1,
+        "source": "https://platform.claude.com/docs/en/about-claude/pricing.md",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Haiku 5.5 is priced five times higher for prompts over 100K tokens (0.50 in, 2.50 out per million); Fable 5.2, Opus 5.5 and Sonnet 5.5 are flat up to 1M tokens.",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-10",
+        "verified_on": "2026-11-10"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "models"
+        ],
+        "conflicts": [],
+        "created": "2026-11-10",
+        "evidence": [
+          "session:f79192f0-3270-52a8-982c-ea4c04f7cd53"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-deepresearch-benchmark-high-effort-gains-8bda1a",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:f79192f0-327",
+        "recheck_days": 90,
+        "scope": "global",
+        "sessions": 1,
+        "source": "https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence.md",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "On the deep-research benchmark high effort gains 3.3 points over low effort at 3.2 times the cost.",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-10",
+        "verified_on": "2026-11-10"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "stats/ledger/2026-11.jsonl",
+      "op": "APPEND_STAT",
+      "row": {
+        "at": "2026-11-10T23:02:15Z",
+        "cache_read_share": 0.991,
+        "classes": [],
+        "family": "",
+        "helpers": 23,
+        "id": "f1ffd0908f5892f0",
+        "kind": "ledger",
+        "model": "opus",
+        "models": {
+          "claude-haiku-5-5": {
+            "cache_read": 745761,
+            "cache_write": 129730,
+            "cost": 0.040024,
+            "in": 154,
+            "out": 32670
+          },
+          "claude-opus-5-5": {
+            "cache_read": 40800808,
+            "cache_write": 506011,
+            "cost": 14.386103,
+            "in": 475,
+            "out": 141115
+          },
+          "claude-sonnet-5-5": {
+            "cache_read": 4218868,
+            "cache_write": 361397,
+            "cost": 2.040017,
+            "in": 174,
+            "out": 71429
+          }
+        },
+        "outcome": "",
+        "session": "f79192f0-3270-52a8-982c-ea4c04f7cd53",
+        "task_class": "",
+        "tier": null,
+        "wall_minutes": 24.1
+      }
+    },
+    {
+      "file": "learning/inbox/2026-11-10-f79192f0-3270-52a8-982c-ea4c04f7cd53.jsonl",
+      "op": "MARK_INBOX"
+    },
+    {
+      "file": "learning/inbox/2026-11-10-radar.jsonl",
+      "op": "MARK_INBOX"
+    }
+  ]
+}

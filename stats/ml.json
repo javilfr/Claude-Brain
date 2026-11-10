@@ -24,35 +24,139 @@
   "drift": {},
   "gates": {},
   "hr": {
-    "g": {},
+    "g": {
+      "_all": [
+        6.400572,
+        0.0,
+        7
+      ],
+      "_none": [
+        1.0,
+        0.0,
+        1
+      ],
+      "build": [
+        1.0,
+        0.0,
+        1
+      ],
+      "discovery": [
+        2.9109,
+        0.0,
+        3
+      ],
+      "support": [
+        1.0,
+        0.0,
+        1
+      ],
+      "writing": [
+        1.0,
+        0.0,
+        1
+      ]
+    },
     "ratios": {
       "_all": [
         0.2712,
-        0.41
+        0.41,
+        0.2415,
+        0.0672,
+        1.1052,
+        0.9678,
+        1.0052,
+        0.1135,
+        4.3383
       ],
       "s:L": [
         0.2712,
-        0.41
+        0.41,
+        1.0052,
+        0.1135
+      ],
+      "s:M": [
+        0.0672,
+        1.1052
+      ],
+      "s:S": [
+        0.2415,
+        0.9678,
+        4.3383
       ],
       "t:_plain": [
-        0.2712
+        0.2712,
+        0.0672
+      ],
+      "t:agent-spec-writer": [
+        1.0052
+      ],
+      "t:claude-product-answerer": [
+        0.9678,
+        4.3383
+      ],
+      "t:cli-script-builder": [
+        0.2415
       ],
       "t:code-reviewer": [
         0.41
+      ],
+      "t:deep-researcher": [
+        0.1135
+      ],
+      "t:eval-regression-runner": [
+        1.1052
       ]
     },
-    "settled": 2,
-    "t": {}
+    "settled": 9,
+    "t": {
+      "_plain": [
+        1.0,
+        0.0,
+        1
+      ],
+      "agent-spec-writer": [
+        1.0,
+        0.0,
+        1
+      ],
+      "claude-product-answerer": [
+        1.97,
+        0.0,
+        2
+      ],
+      "cli-script-builder": [
+        1.0,
+        0.0,
+        1
+      ],
+      "deep-researcher": [
+        1.0,
+        0.0,
+        1
+      ],
+      "eval-regression-runner": [
+        1.0,
+        0.0,
+        1
+      ]
+    }
   },
-  "last_at": "2026-11-10T14:35:00Z",
+  "last_at": "2026-11-10T22:54:39Z",
   "log": [],
-  "n": 2,
+  "n": 9,
   "pending": {},
   "promotions": [],
   "reviews": [],
   "seen": [
     "3b5882b82242a22e",
-    "e140ce08fcc71dc0"
+    "e140ce08fcc71dc0",
+    "f65e0cd0086535a6",
+    "db0634fe772001c1",
+    "c5dd6b0718a76668",
+    "eda79c4a07d3d166",
+    "61c5c54518ce57a6",
+    "5b58d9fab519a8b6",
+    "111df37ec6cc8bd4"
   ],
   "sizing": {
     "counts": {},

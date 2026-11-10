@@ -25,3 +25,13 @@ A release was once blocked by a 2,652 ms load time against a 2,600 ms budget, me
 ## Fast mode
 
 It costs double and, on a subscription, is billed from usage credits. It stays off unless the owner asks.
+
+## Context: keeping a session small for hours
+
+Everything that enters the chat is re-read on every later turn, and a full context forces a compaction that loses detail. Measured in the 2026-11-10 improvement session: helper replies of 150-300 words each, delivered automatically on completion, were the largest growth once 24 evaluation trials ran, more than any command output.
+
+- Helper replies are capped at 80 words by the brief (`REPLY_MAX_WORDS` in `engine/hr.py`); detail goes to the notes file, which the lead reads only on a failure.
+- A batch of many similar helper runs (trials, a sweep, a migration across files) goes to one background coordinator agent that runs the batch and returns one table, not to the lead one helper at a time: N replies become one.
+- Commands go through `brain run` (one result line plus failures); searches return paths and line numbers, not file bodies; read a range, never a whole large file twice.
+- State lives in files, not in the chat: the plan, ledger, checkpoint and handover note carry everything a new chat needs, so starting fresh costs one `boot`, not a re-read of the conversation.
+- When the work is long and the chat has grown, finish the current item, checkpoint, write the handover and continue in a new chat with "Continue": a fresh context is cheaper than a compacted one.

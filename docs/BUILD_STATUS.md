@@ -212,3 +212,15 @@ Recorded through `brain learn note --trust external` (five facts with their offi
 | A use for the scout tier | Decision D-16: the lead calls scout directly; no template |
 
 Full suite after these: OK; `brain lint` 0 errors.
+
+### CB-203 Paired template evaluation: started, not finished
+
+Pre-registered and committed before any trial (`evals/prereg/aa-plain-2026-11-10.json`, `template-vs-plain-2026-11-10.json`). Run 1 (12 of 24 trials, Haiku 5.5 on the builder agent) exposed a defect instead of measuring templates: plain briefs for data, knowledge, language and operations tasks went to the researcher agent and said "Read-only: change nothing" while asking for a file, so plain helpers refused or failed (glossary plainB, both idempotent-dirs plain arms). The template arm for the translation task picked a reviewer template (back-translation-checker), which declined to translate. Both fixed with tests; run 1 is kept only as that finding. The comparison was re-registered (`…-2026-11-10b.json`); run 2 completed 4 of 24 trials (all passed) before the session stopped at the owner's request, and its contracts were abandoned so the next run starts clean. **No verdict exists yet: n = 0 valid pairs.** `evals/tools/template_trials.py` prepares and scores a run.
+
+### Context management (owner request at the end of the session)
+
+The chat grew mainly from helper replies (150-300 words each, delivered automatically). Changes: briefs cap a helper's reply at 80 words with detail in its notes file (`REPLY_MAX_WORDS`); a new core rule 7 in `CLAUDE.md` (keep the chat small; continue in a new chat when it has grown); a "Context" section in `method/efficiency.md`; `brain-build` sends a batch of similar runs through one coordinator agent that returns one table. Gate after: full suite OK, `doctor` healthy (`CLAUDE.md` 5,790 bytes, cap 6 KB), `lint` 0 errors.
+
+### Measured cost of this session (`brain ledger`, before close)
+
+23 helpers; about 49 million tokens, about $17 at list prices, helpers 36% of cost; the main conversation read 99% of its input from cache; no tool result over 5,000 tokens. The ledger's "26.1 min" is lower than the wall-clock time of the session; not investigated.
