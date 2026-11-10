@@ -260,10 +260,11 @@ class StateTests(Base):
     def test_checkpoint_round_trip_and_status(self):
         p = self.project()
         state.checkpoint(p, item="A", nxt=["B", "C", "D", "E"], stage="build", note="half done in src/x")
+        self.assertEqual(len(state.read_state(p)["next_list"]), 3)   # at most three next items are kept
         state.checkpoint(p, done="A", item="B")
         st = state.read_state(p)
         self.assertEqual((st["item"], st["last_done"], st["stage"]), ("B", "A", "build"))
-        self.assertEqual(len(st["next_list"]), 3)
+        self.assertEqual(st["next_list"], ["C", "D"])   # B is in progress now, so it is no longer "next" (e2e-trial-04)
         self.assertIn("half done", st["notes"])
         self.assertEqual(c.load_manifest(p)["stage"], "intake", "a checkpoint never edits the manifest")
         text = state.write_status(p)
