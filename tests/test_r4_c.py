@@ -305,6 +305,9 @@ class OwnerAndChecklistGates(Base):
         worst, results = gate.run_gates(p)
         self.assertEqual(results[0]["exit"], 1)
         self.assertIn("2 unchecked", results[0]["note"])
+        code, out = self.gate(p, last=True)  # instructions-16: the recorded reason, with nothing run
+        self.assertEqual(code, 1)
+        self.assertIn("2 unchecked box(es) in docs/dod.md", out)
         (p / "docs" / "dod.md").write_text("Nothing to tick here.\n")
         self.assertEqual(gate.run_gates(p)[1][0]["exit"], 1, "a list with no boxes proves nothing")
         (p / "docs" / "dod.md").write_text("- [x] one\n* [X] two\n1. [x] three\n")
@@ -690,6 +693,16 @@ class RunCommand(Base):
         for r in (a, b):
             self.assertIn("one", Path(r["log"]).read_text())
             self.assertTrue(learn.RUN_LOG_RE.match(Path(r["log"]).name), r["log"])
+
+    def test_digest_is_the_runs_own_output_even_if_the_log_name_is_taken_over(self):
+        """e2e-trial-08 (guard for the new streaming digest, seen for real
+        while this package was built): another process replaced a log of the
+        same name, and the digest showed that process's output."""
+        p = self.project()
+        line = 'echo mine; for f in .brain/log/run/*.log; do echo theirs > "$f.x"; mv "$f.x" "$f"; done; echo still-mine'
+        r = gate.run_filtered(line, p, p)
+        self.assertEqual(r["exit"], 0)
+        self.assertEqual(r["shown"], ["mine", "still-mine"])
 
     def test_digest_paths_are_relative_inside_the_project(self):
         """e2e-trial-20: about 155 of each digest's 220 bytes were an absolute path."""

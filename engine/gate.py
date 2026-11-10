@@ -196,52 +196,55 @@ def _text(raw: bytes) -> str:
     return s.rsplit("\r", 1)[-1] if "\r" in s else s  # a progress bar: its last state
 
 
-def digest_log(path: Path, code: int, tail: int = 6, start: int = 0, end: int | None = None) -> dict:
-    """lines, shown, tests and suspect for the output saved in ``path`` between
-    two byte offsets. The file is streamed, so memory stays flat however much
-    a command printed."""
-    size = os.path.getsize(path) if end is None else end
+def digest_log(src, code: int, tail: int = 6, start: int = 0, end: int | None = None) -> dict:
+    """lines, shown, tests and suspect for the output saved in a log (a path,
+    or the open file itself) between two byte offsets. The file is streamed,
+    so memory stays flat however much a command printed."""
+    if not hasattr(src, "read"):
+        with open(src, "rb") as f:
+            return digest_log(f, code, tail, start, end)
+    f = src
+    size = os.fstat(f.fileno()).st_size if end is None else end
     n, last = 0, b"\n"
     hits: dict[int, str] = {}
-    with open(path, "rb") as f:
+    f.seek(start)
+    left = size - start
+    while left > 0:
+        chunk = f.read(min(1 << 20, left))
+        if not chunk:
+            break
+        n, last, left = n + chunk.count(b"\n"), chunk[-1:], left - len(chunk)
+    if size > start and last != b"\n":
+        n += 1
+    t0 = max(start, size - TAIL_BYTES)
+    f.seek(t0)
+    pieces = f.read(size - t0).split(b"\n")
+    if pieces and pieces[-1] == b"":
+        pieces.pop()
+    if t0 > start and len(pieces) > 1:
+        pieces = pieces[1:]  # the first piece may be half a line
+    tail_lines = [_text(p[:LINE_BYTES]) for p in pieces[-200:]]
+    if code != 0:  # the first failures are usually the cause
         f.seek(start)
-        left = size - start
-        while left > 0:
-            chunk = f.read(min(1 << 20, left))
-            if not chunk:
+        i, pos, found, want_next, fresh = 0, start, 0, False, True
+        limit = min(size, start + SCAN_BYTES)
+        while pos < limit and (found < 3 or want_next):
+            raw = f.readline(LINE_BYTES)
+            if not raw:
                 break
-            n, last, left = n + chunk.count(b"\n"), chunk[-1:], left - len(chunk)
-        if size > start and last != b"\n":
-            n += 1
-        t0 = max(start, size - TAIL_BYTES)
-        f.seek(t0)
-        pieces = f.read(size - t0).split(b"\n")
-        if pieces and pieces[-1] == b"":
-            pieces.pop()
-        if t0 > start and len(pieces) > 1:
-            pieces = pieces[1:]  # the first piece may be half a line
-        tail_lines = [_text(p[:LINE_BYTES]) for p in pieces[-200:]]
-        if code != 0:  # the first failures are usually the cause
-            f.seek(start)
-            i, pos, found, want_next, fresh = 0, start, 0, False, True
-            limit = min(size, start + SCAN_BYTES)
-            while pos < limit and (found < 3 or want_next):
-                raw = f.readline(LINE_BYTES)
-                if not raw:
-                    break
-                pos += len(raw)
-                if fresh:
-                    text = _text(raw)
-                    if want_next:
-                        hits[i], want_next = text, False
-                    if found < 3 and ERROR_RE.search(text):
-                        hits[i], found, want_next = text, found + 1, True
-                fresh = raw.endswith(b"\n")
-                i += fresh
-        head_lines = []
-        if code == 0:
-            f.seek(start)
-            head_lines = [_text(l) for l in f.read(min(4096, size - start)).split(b"\n")[:20]]
+            pos += len(raw)
+            if fresh:
+                text = _text(raw)
+                if want_next:
+                    hits[i], want_next = text, False
+                if found < 3 and ERROR_RE.search(text):
+                    hits[i], found, want_next = text, found + 1, True
+            fresh = raw.endswith(b"\n")
+            i += fresh
+    head_lines = []
+    if code == 0:
+        f.seek(start)
+        head_lines = [_text(l) for l in f.read(min(4096, size - start)).split(b"\n")[:20]]
     if code == 0:
         shown = tail_lines[-3:]
     else:
@@ -320,8 +323,10 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
     timeout = int(timeout) if timeout else int(cfg["run_timeout"])
     log, f = _new_log(project, command)
     header = ("$ " + c.redact_secrets(command).replace("\n", "\\n") + "\n").encode("utf-8", "replace")
-    start, why, sig = time.time(), "", 0
-    with f:
+    start, why, sig, ours = time.time(), "", 0, True
+    # The digest is read through a handle opened now, not through the name
+    # later: whatever happens to the name meanwhile, this is our output.
+    with f, open(log, "rb") as own:
         f.write(header)
         f.flush()
         try:
@@ -331,20 +336,24 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
             code, why = 127, f"could not start: {c.clip(str(e), 120)}"
         else:
             code, why, sig = _wait(proc, f, timeout, cfg)
-        if why:
-            f.write(f"\n[{why}]\n".encode())
-    secs = time.time() - start
-    try:
-        r = digest_log(log, code, tail, len(header))
-        with open(log, "rb") as f:
-            f.seek(-1, os.SEEK_END)
-            open_line = f.read(1) != b"\n"
-        with open(log, "ab") as f:
-            f.write((b"\n" if open_line else b"") + f"[exit {code} in {secs:.1f}s]\n".encode())
-        _cap_log(log, int(cfg["log_cap_mb"]) << 20)
-        _prune_logs(log.parent, int(cfg["keep_logs"]))
-    except OSError as e:  # the log was removed or the disk is full: the exit code still stands
-        r = {"lines": 0, "shown": [f"[the saved output could not be read: {c.clip(str(e), 100)}]"], "tests": None, "suspect": ""}
+        secs = time.time() - start
+        try:
+            if why:
+                f.write(f"\n[{why}]\n".encode())
+                f.flush()
+            r = digest_log(own, code, tail, len(header))
+            own.seek(-1, os.SEEK_END)
+            f.write((b"" if own.read(1) == b"\n" else b"\n") + f"[exit {code} in {secs:.1f}s]\n".encode())
+            f.flush()
+            ours = os.fstat(own.fileno()).st_ino == os.stat(log).st_ino
+        except OSError as e:  # the disk is full or the log is gone: the exit code still stands
+            r, ours = {"lines": 0, "shown": [f"[the saved output could not be read: {c.clip(str(e), 100)}]"], "tests": None, "suspect": ""}, False
+    if ours:
+        try:
+            _cap_log(log, int(cfg["log_cap_mb"]) << 20)
+            _prune_logs(log.parent, int(cfg["keep_logs"]))
+        except OSError:
+            pass
     try:  # relative, so the line is short and means the same on another machine
         ref = str(log.relative_to(Path(project))) if project else str(log)
     except ValueError:
@@ -866,11 +875,12 @@ def show_last(project: Path, only: str | None) -> int:
             continue
         commit = str(rec.get("commit") or "")
         fresh = "this work" if same_work(project, commit, head) and not rec.get("dirty") else "the work has changed since"
+        detail = rec.get("log") if code != 0 and rec.get("log") else rec.get("note")
         lines.append(f"gate {gid}: exit {code} at {str(rec.get('at', ''))[:16]}{_age(rec.get('at', ''))} on {commit[:7] or 'no commit'}, {fresh}"
-                     + (f" · {rec['log']}" if code != 0 and rec.get("log") else ""))
-        if code != 0 and not shown:
+                     + (f" · {detail}" if detail else ""))
+        if code != 0 and rec.get("log") and not shown:
             shown = True
-            log = Path(project) / str(rec.get("log") or "-")
+            log = Path(project) / str(rec["log"])
             if log.is_file():
                 with open(log, "rb") as f:
                     start = len(f.readline())
