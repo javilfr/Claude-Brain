@@ -212,6 +212,20 @@ class DetectTests(Base):
         self.assertEqual(Path(d["project"]).name, "second")  # most recently active
         self.assertEqual(detect.detect(self.brain, named="fresh")["mode"], "work")
 
+    def test_explicit_project_outside_the_brains_folder(self):
+        # A project elsewhere (a scratch trial, a second checkout) is invisible
+        # to the sibling scan; --project and BRAIN_PROJECT must still find it.
+        elsewhere = git_repo(self.ws / "far" / "away")  # "far" is not a repository, so the scan skips it
+        (elsewhere / "README.md").write_text("# away\n")
+        self.assertEqual(detect.detect(self.brain)["mode"], "brain-only")
+        d = detect.detect(self.brain, explicit=str(elsewhere))
+        self.assertEqual((d["mode"], Path(d["project"]).name), ("bootstrap", "away"))
+        os.environ["BRAIN_PROJECT"] = str(elsewhere)
+        try:
+            self.assertEqual(detect.detect(self.brain)["mode"], "bootstrap")
+        finally:
+            os.environ.pop("BRAIN_PROJECT")
+
     def test_boot_is_short_and_shows_position(self):
         p = self.project()
         state.checkpoint(p, item="T-7 build the list view", nxt=["T-8", "T-9"], stage="build", note="x" * 5000)

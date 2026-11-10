@@ -22,10 +22,18 @@ def classify(path: Path) -> str:
     return "unmanaged"
 
 
-def detect(brain_root: Path | None = None, named: str | None = None) -> dict:
-    """Decide the working mode from the folders beside the brain."""
+def detect(brain_root: Path | None = None, named: str | None = None, explicit: str | None = None) -> dict:
+    """Decide the working mode from the folders beside the brain, or from the
+    one project named by --project or BRAIN_PROJECT (the same order every other
+    command resolves a project in)."""
+    import os
     root = Path(brain_root or c.BRAIN_ROOT)
-    sibs = [(p, classify(p)) for p in c.sibling_dirs(root)]
+    chosen = explicit or os.environ.get("BRAIN_PROJECT")
+    if chosen and Path(chosen).expanduser().is_dir():
+        sibs = [(Path(chosen).expanduser().resolve(), classify(Path(chosen).expanduser().resolve()))]
+        named = None
+    else:
+        sibs = [(p, classify(p)) for p in c.sibling_dirs(root)]
     # Only repositories count as candidate projects; stray folders are ignored.
     sibs = [(p, k) for p, k in sibs if k == "managed" or (p / ".git").exists()]
     out: dict = {"brain": str(root), "siblings": [{"path": str(p), "kind": k} for p, k in sibs], "project": None}
@@ -74,9 +82,9 @@ MODE_HELP = {
 }
 
 
-def boot_lines(request: str | None = None, brain_root: Path | None = None, named: str | None = None) -> list[str]:
+def boot_lines(request: str | None = None, brain_root: Path | None = None, named: str | None = None, explicit: str | None = None) -> list[str]:
     root = Path(brain_root or c.BRAIN_ROOT)
-    d = detect(root, named)
+    d = detect(root, named, explicit)
     mode = d["mode"]
     lines = [f"brain: {root.name} · mode: {mode}" + (f" · {MODE_HELP[mode]}" if MODE_HELP.get(mode) else "")]
     proj = Path(d["project"]) if d.get("project") else None
@@ -206,7 +214,7 @@ def session_start_lines(root: Path, project: Path | None) -> list[str]:
 
 
 def cmd_detect(args) -> int:
-    d = detect(named=args.name)
+    d = detect(named=args.name, explicit=args.project)
     if args.json:
         import json
         print(json.dumps(d, indent=2))
@@ -218,7 +226,7 @@ def cmd_detect(args) -> int:
 
 
 def cmd_boot(args) -> int:
-    for l in boot_lines(args.request, named=args.name):
+    for l in boot_lines(args.request, named=args.name, explicit=args.project):
         print(l)
     return 0
 
@@ -226,9 +234,11 @@ def cmd_boot(args) -> int:
 def register(sub) -> None:
     p = sub.add_parser("detect", help="which project is beside the brain and in what state")
     p.add_argument("--name", help="project named by the owner, when several are attached")
+    p.add_argument("--project", help="project path (default: BRAIN_PROJECT, then the folders beside the brain)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_detect)
     p = sub.add_parser("boot", help="short orientation for the start of a session")
     p.add_argument("request", nargs="?", help="the owner's request, to size it and recall relevant memory")
     p.add_argument("--name")
+    p.add_argument("--project", help="project path (default: BRAIN_PROJECT, then the folders beside the brain)")
     p.set_defaults(func=cmd_boot)

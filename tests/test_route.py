@@ -32,6 +32,16 @@ class Classify(unittest.TestCase):
             self.assertIn(r["tier"], (0, 1, 2, 3))
             self.assertTrue(r["text"].strip())
 
+    def test_a_real_word_is_not_a_typo_for_another(self):
+        # 'tests' is one edit from Spanish 'tesis'; the slip rule must not fire
+        # on a word the vocabularies already know, or a Python CLI with tests
+        # is routed as a thesis.
+        self.assertFalse(route._close("tests", "tesis"))
+        self.assertTrue(route._close("tets", "test") or route._close("calcualtor", "calculator"))
+        got = route.classify("New project: a command-line calculator in Python with tests")
+        self.assertEqual(got["family"], "software")
+        self.assertNotIn("no task verb", got["reason"])
+
     def test_trigger_phrases_all_correct(self):
         for r in (r for r in rows() if r.get("trigger")):
             with self.subTest(text=r["text"]):

@@ -44,6 +44,8 @@ def _close(a: str, b: str) -> bool:
     neighbours) for words of five letters or more: dictation and typing slips."""
     if a == b:
         return True
+    if a in _known_words():
+        return False  # a real vocabulary word is never a slip for another ('tests' is not 'tesis')
     if min(len(a), len(b)) < 5 or abs(len(a) - len(b)) > 1:
         return False
     if len(a) == len(b):
@@ -55,6 +57,22 @@ def _close(a: str, b: str) -> bool:
     while i < len(short) and short[i] == long_[i]:
         i += 1
     return short[i:] == long_[i + 1:]
+
+
+_KNOWN: set[str] = set()
+
+
+def _known_words() -> set[str]:
+    """Every single word the vocabularies spell out, built once on first use."""
+    if not _KNOWN:
+        for name, val in list(globals().items()):
+            if name.isupper() and name != "_KNOWN":
+                vals = val.values() if isinstance(val, dict) else val if isinstance(val, (list, tuple)) else ()
+                for v in vals:
+                    for item in (v if isinstance(v, (list, tuple)) and v and isinstance(v[0], tuple) else
+                                 [v] if isinstance(v, tuple) else []):
+                        _KNOWN.update(w for w in item if isinstance(w, str))
+    return _KNOWN
 
 
 def _phrase_at(tokens: list[str], pos: int, phrase: tuple[str, ...]) -> bool:
@@ -159,7 +177,8 @@ FAMILY_WORDS = {
                        "backend, frontend, code, bug, crash, deploy, vercel, react, button, boton, css, ui, screen, "
                        "pantalla, page, component, login, game, juego, minecraft, mod, repo, repository, branch, main, "
                        "typescript, javascript, html, database, server, extension, plugin, bot, agents, feature, field, fields, campo, "
-                       "tests, dark mode, layout, font"),
+                       "tests, test, dark mode, layout, font, python, script, cli, command line, calculator, calculadora, "
+                       "program, programa, library, libreria, unit tests"),
 }
 FAMILY_ORDER = ("language", "data", "operations", "knowledge", "software")
 CLASS_WORDS = [  # (family, class, words) checked in order; first hit wins
@@ -332,6 +351,7 @@ def classify(request: str, manifest: dict | None = None) -> dict:
             inner["tier"] = 3 if inner["tier"] == 3 else 2
             if inner["task_class"] == "answer":
                 inner["task_class"] = DEFAULT_CLASS[inner["family"]]
+                inner["reason"] = "names a whole deliverable"
             inner["reason"] = "new project; " + inner["reason"]
         return inner
     return _content(raw, tokens, manifest)
