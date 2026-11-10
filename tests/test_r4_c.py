@@ -31,6 +31,28 @@ def sh(cwd, *args):
     return subprocess.run(args, cwd=str(cwd), capture_output=True, text=True)
 
 
+def running(pid: int) -> bool:
+    """True while the process runs. A zombie (dead, waiting for init to
+    collect it) is not running."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[-1].split()[0] not in ("Z", "X")
+    except OSError:
+        return True
+
+
+def stopped_within(pid: int, seconds: float) -> bool:
+    end = time.time() + seconds
+    while running(pid):
+        if time.time() > end:
+            return False
+        time.sleep(0.05)
+    return True
+
+
 def cmd(gid: str, command: str, **more) -> dict:
     return dict({"id": gid, "kind": "command", "command": command}, **more)
 
@@ -41,7 +63,7 @@ class Base(unittest.TestCase):
         self.ws = Path(self._tmp.name).resolve()
         self._env = dict(os.environ)
         self._cwd = os.getcwd()
-        for name in ("BRAIN_PROJECT", "BRAIN_NOW", "BRAIN_TRANSCRIPT"):
+        for name in ("BRAIN_PROJECT", "BRAIN_NOW", "BRAIN_TRANSCRIPT", "BRAIN_NO_NETWORK"):  # the only remotes here are local folders
             os.environ.pop(name, None)
 
     def tearDown(self):
@@ -284,6 +306,9 @@ class OwnerAndChecklistGates(Base):
             self.assertEqual(code, 1, (not_his, out))
         self.assertFalse([r for r in self.gate_rows(p) if r.get("exit") == 0])
         self.assertEqual(self.gate(p, id="confirm", target="checks", quote="publish it today please")[0], 1, "not an owner gate")
+        code, out = self.gate(p, id="confirm")
+        self.assertEqual(code, 1)
+        self.assertIn("--quote", out)
         code, out = self.gate(p, id="confirm", target="owner-approval", quote="Publish it  today please")
         self.assertEqual(code, 0, out)
         rec = self.gate_rows(p)[-1]
@@ -390,6 +415,13 @@ class DetectorsHoldARelease(Base):
                      "test -f a || test -f b", "true"):
             self.assertEqual(gate.masked_command(fine, pipefail=True), "", fine)
         self.assertTrue(gate.masked_command("pytest | tail -3", pipefail=False))
+        self.assertEqual(gate.masked_command("rm -f old.log || true; pytest", pipefail=True), "", "a clean-up step may fail; the last command decides")
+        # A gate that cannot fail is held on a first release too, when there is nothing to compare with.
+        q = self.project(gates=[cmd("checks", "test -f missing.py || true")], name="first")
+        code, out = self.release(q, push=True, run_gates=True)
+        self.assertEqual(code, 1, out)
+        self.assertIn("|| true", out)
+        self.assertEqual(self.remote_main(q), "")
 
     def test_release_refuses_changes_under_never_touch(self):
         """quality2-05: paths.never_touch was in every manifest and read by nothing."""
@@ -478,13 +510,31 @@ class ReleaseRecord(Base):
         self.assertEqual(sh(p, "git", "status", "--porcelain").stdout, "")
         fresh = self.ws / "fresh"
         sh(self.ws, "git", "clone", "-q", "-b", "main", str(self.ws / "proj.git"), str(fresh))
-        self.assertIn("gate checks exit 0", state.last_gate(fresh))
+        last = self.gate_rows(fresh)[-1]  # a new chat on main sees the gate run that released it
+        self.assertEqual((last["gate"], last["exit"], last["commit"]), ("checks", 0, self.releases(p)[0]["commit"]))
+        # A later checkpoint is bookkeeping: releasing again syncs it and records nothing new.
+        state.checkpoint(p, done="T-1 first release")
+        state.push_bookkeeping(p)
         code, out = self.release(p, push=True, run_gates=True)
         self.assertEqual(code, 0, out)
         self.assertIn("already released", out)
+        self.assertEqual(len(out.splitlines()), 1)
         self.assertEqual(len(self.releases(p)), 1)
         self.assertEqual(sh(p, "git", "status", "--porcelain").stdout, "")
         self.assertEqual(self.remote_main(p), self.head(p))
+        self.assertIn("T-1 first release", self.remote_file(p, ".brain/STATE.md"))
+
+    def test_a_project_on_its_release_branch_also_gets_its_record(self):
+        """e2e-trial-03, e2e-trial-01 (the release side): a project that sits
+        on `main` itself releases and carries the record the same way."""
+        p = self.project()
+        sh(p, "git", "checkout", "-q", "-b", "main")
+        code, out = self.release(p, push=True, run_gates=True)
+        self.assertEqual(code, 0, out)
+        self.assertIn("record is on main", out)
+        self.assertEqual(self.remote_main(p), self.head(p))
+        self.assertEqual(len(self.remote_file(p, ".brain/log/releases.jsonl").splitlines()), 1)
+        self.assertEqual(self.releases(p)[0]["commit"], sh(p, "git", "rev-parse", "HEAD~1").stdout.strip(), "the record names the gated commit")
 
     def test_release_accept_records_the_owners_acceptance(self):
         """owner-docs-14 (a), instructions-14: 'the last release he accepted'
@@ -586,32 +636,31 @@ class GateOutput(Base):
 class RunCommand(Base):
     def test_run_goes_to_the_one_detected_project(self):
         """e2e-trial-08: from the folder that holds both repositories, and from
-        the brain folder, `brain run` ran where it was typed."""
+        the brain folder, `brain run` ran where it was typed. Through the real
+        command line, on a copy of the engine placed beside the project."""
         p = self.project()
         brain = self.ws / "Claude-Brain"
-        brain.mkdir()
-        old = c.BRAIN_ROOT
-        c.BRAIN_ROOT = brain
-        try:
-            for where in (self.ws, brain):
-                os.chdir(where)
-                code, out = self.run_cmd("pwd")
-                self.assertEqual(code, 0, out)
-                self.assertIn(str(p), out)
-                self.assertTrue(out.startswith("in proj: "), out)
-            self.assertEqual(len(list((p / ".brain" / "log" / "run").glob("*.log"))), 2)
-            code, out = self.run_cmd("pwd", cwd=str(brain))
-            self.assertIn(str(brain), out)  # --cwd still decides
-            os.chdir(p)
-            code, out = self.run_cmd("pwd")
-            self.assertFalse(out.startswith("in "), out)  # already inside it: nothing to say
-            self.project(name="second")
-            os.chdir(self.ws)
-            code, out = self.run_cmd("pwd")
-            self.assertIn(str(self.ws), out)  # two projects: no guessing, it runs where typed
-            self.assertNotIn(str(p), out)
-        finally:
-            c.BRAIN_ROOT = old
+        for part in ("bin", "engine"):
+            shutil.copytree(ROOT / part, brain / part, ignore=shutil.ignore_patterns("__pycache__"))
+        env = {k: v for k, v in os.environ.items() if k != "BRAIN_PROJECT"}
+
+        def run(where: Path, *args) -> str:
+            r = subprocess.run([sys.executable, str(brain / "bin" / "brain"), "run", *args, "--", "pwd"],
+                               cwd=str(where), capture_output=True, text=True, env=env, timeout=60)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            return r.stdout
+
+        for where in (self.ws, brain):
+            out = run(where)
+            self.assertIn(str(p), out)
+            self.assertTrue(out.startswith("in proj: "), out)
+        self.assertEqual(len(list((p / ".brain" / "log" / "run").glob("*.log"))), 2)
+        self.assertIn(str(brain), run(self.ws, "--cwd", str(brain)))  # --cwd still decides
+        self.assertFalse(run(p).startswith("in "))  # typed inside the project: nothing to say
+        self.project(name="second")
+        out = run(self.ws)  # two projects: no guessing, it runs where it was typed
+        self.assertIn(str(self.ws) + "\n", out)
+        self.assertFalse(out.startswith("in "), out)
 
     def test_two_runs_in_one_second_leave_two_logs(self):
         """e2e-trial-08: same-second runs of one command overwrote each other's log."""
@@ -645,14 +694,9 @@ class RunCommand(Base):
         self.assertNotIn("the-stderr-end", log)
         self.assertIn("timed out", " ".join(r["shown"]))
         child = int((p / "child.pid").read_text())
-        try:
-            for _ in range(50):
-                os.kill(child, 0)  # raises once the child is gone
-                time.sleep(0.1)
+        if not stopped_within(child, 5):
             os.kill(child, signal.SIGKILL)
             self.fail("a child of the timed-out command was still running")
-        except ProcessLookupError:
-            pass
 
     def test_run_does_not_read_the_callers_stdin(self):
         """quality-path-05 (2): the command inherited the caller's stdin."""
@@ -681,10 +725,8 @@ class RunCommand(Base):
             self.assertTrue(rows, "the stopped run must still be on record")
             self.assertEqual(rows[-1]["exit"], 143)
             self.assertIn("checks", out)
-            time.sleep(0.3)
             for pid in pids:
-                with self.assertRaises(ProcessLookupError, msg="the gate command outlived brain"):
-                    os.kill(pid, 0)
+                self.assertTrue(stopped_within(pid, 5), "the gate command outlived brain")
         finally:
             if proc.poll() is None:
                 proc.kill()

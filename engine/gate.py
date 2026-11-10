@@ -49,7 +49,8 @@ SUSPECT_RE = re.compile(
 COUNT_RES = (re.compile(r"\bRan (\d+) tests?\b"), re.compile(r"\b(\d+) (?:passed|passing)\b"),
              re.compile(r"^# tests (\d+)\b"), re.compile(r"^1\.\.(\d+)\s*$"))
 _QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
-_MASK_OR = re.compile(r"\|\|\s*(true|:|exit\s+0|(?:echo|printf)\b[^;&|\n]*)\s*(?=$|[;)&|\n])")
+# `|| true` and the like at the very end: the exit code of the whole command is then always 0.
+_MASK_OR = re.compile(r"\|\|\s*(true|:|exit\s+0|(?:echo|printf)\b[^;&|\n]*?)[\s);]*$")
 _MASK_END = re.compile(r"[;\n]\s*(?:true|:|exit\s+0)\s*;?\s*$")
 _PIPE = re.compile(r"(?<![|>])\|(?!\|)")
 BOX_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\[([ xX])\]")
@@ -110,15 +111,32 @@ def _new_log(project: Path | None, command: str):
     raise OSError(f"no free log name in {d}")
 
 
+def _group_running(proc) -> bool:
+    """True while a process of the command's group still runs. A zombie does
+    not count: a dead child waiting for a slow init must not cost the grace."""
+    proc.poll()  # reap the shell itself
+    try:
+        os.killpg(proc.pid, 0)
+    except OSError:
+        return False
+    if not os.path.isdir("/proc/self"):
+        return True  # no /proc here: a zombie cannot be told from a runner
+    want = str(proc.pid).encode()
+    for name in os.listdir("/proc"):
+        if name.isdigit():
+            try:
+                with open(f"/proc/{name}/stat", "rb") as f:
+                    rest = f.read().rsplit(b")", 1)[-1].split()  # state, parent, group, ...
+            except OSError:
+                continue
+            if len(rest) > 2 and rest[2] == want and rest[0] not in (b"Z", b"X"):
+                return True
+    return False
+
+
 def _kill_group(proc, grace: float) -> None:
-    """Stop the command and everything it started (one process group)."""
-    def alive() -> bool:
-        proc.poll()  # reap the shell, or it keeps the group looking alive
-        try:
-            os.killpg(proc.pid, 0)
-            return True
-        except OSError:
-            return False
+    """Stop the command and everything it started (one process group): ask
+    first, then kill what is still running after ``grace`` seconds."""
     if not hasattr(os, "killpg"):
         proc.kill()
     else:
@@ -128,9 +146,9 @@ def _kill_group(proc, grace: float) -> None:
             except OSError:
                 break
             end = time.time() + grace
-            while alive() and time.time() < end:
-                time.sleep(0.02)
-            if not alive():
+            while _group_running(proc) and time.time() < end:
+                time.sleep(0.03)
+            if not _group_running(proc):
                 break
     try:
         proc.wait(timeout=5)
@@ -293,7 +311,7 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
     cfg = cfg_of()
     timeout = int(timeout) if timeout else int(cfg["run_timeout"])
     log, f = _new_log(project, command)
-    header = ("$ " + c.redact_secrets(command).replace("\n", "\\n") + "\n").encode()
+    header = ("$ " + c.redact_secrets(command).replace("\n", "\\n") + "\n").encode("utf-8", "replace")
     start, why, sig = time.time(), "", 0
     with f:
         f.write(header)
@@ -420,6 +438,8 @@ def masked_command(command: str, pipefail: bool | None = None) -> str:
         return f"`|| {c.clip(m.group(1), 30)}` hides a failure"
     if _MASK_END.search(bare):
         return "it ends in `; true` or `exit 0`, so its exit code is always 0"
+    if re.search(r"--pass-?with-?no-?tests\b", bare, re.I):
+        return "`--passWithNoTests` passes when no test runs"
     if pipefail is None:
         pipefail = shell_argv("")[1]
     if not pipefail and _PIPE.search(bare):
@@ -862,9 +882,13 @@ def cmd_gate(args) -> int:
         return confirm_gate(project, target, getattr(args, "quote", None))
     if getattr(args, "last", False):
         return show_last(project, args.id)
-    problem = gate_id_problem(c.load_manifest(project))
+    m = c.load_manifest(project)
+    problem = gate_id_problem(m)
     if problem:
         print(problem)
+        return 1
+    if args.id == "confirm" and not any(g.get("id") == "confirm" for g in gates_of(m)):
+        print('usage: brain gate confirm <owner-gate-id> --quote "<words he typed in this chat>"')
         return 1
     worst, results = run_gates(project, args.id, keep_going=bool(getattr(args, "keep_going", False)))
     if not results:
