@@ -123,3 +123,21 @@ Blocking items from the final review, all fixed: a model could label its own not
 | `brain eval audit` | 12 tasks, 12 sound |
 | `brain learn consolidate` | first real delta `d-20261110-a431e755f2`: 1 ledger row, 2 records folded into statistics, 1 inbox file consolidated |
 | `brain learn verify` | 1 delta replayed on origin/main; learned zone matches |
+
+### CB-202 End-to-end trial on a scratch project
+
+A command-line tip splitter, built in a scratch repository with a local bare remote, by the brain's own flow: `boot`, `init`, `validate`, three ledger lines, plan and tickets, `plan schedule`, `hr staff`, two helpers hired with `hr hire` (both Sonnet builders, plain briefs: no template fit), `hr settle` (both checks passed; used 4,478 of 60,000 and 4,294 of 20,000 tokens), `req verify`, `release --run-gates --push` (pushed on green), `checkpoint`, `resume`, `boot` in work mode. Ledger for the whole session at that point: $5.72, helpers 38%; the two Sonnet helpers together cost $0.09, cache read 98%.
+
+What was wrong, and the fix (each with a test):
+
+| # | Problem met in the trial | Fix |
+|---|---|---|
+| 1 | `boot` looked only at folders beside the brain and ignored `BRAIN_PROJECT`; it had no `--project` while every other command does | `boot --project` and `BRAIN_PROJECT` (engine/detect.py) |
+| 2 | "a command-line tip calculator … with tests" routed to knowledge: the typo tolerance read `tests` as `tesis` | a word any vocabulary knows exactly is never read as a slip for another, except singular/plural (engine/route.py); routing set unchanged at 107/107 size, 105/107 class |
+| 3 | `req add` refused a second line quoting the same sentence, while the plan skill says to split sentences into checkable lines | a repeat is now the same words with the same "passes when" (engine/req.py) |
+| 4 | Every ledger line stores a check command, but nothing ran them; the lead re-ran each by hand | new `brain req verify`: runs each open line's check, marks it done with the result on exit 0 (engine/req.py; skills brain-build, brain-verify, brain-plan updated) |
+| 5 | `init` always recorded `main` as the release branch; on a `master` repo `release` created a new `main` | `init` records the remote's default branch (engine/contract.py) |
+| 6 | "Helpers only when they pay" was never enforced: without `--material-tokens` every hire passed | for `--size S` the material is estimated from the input and owned files; a small job is refused with the reason (engine/hr.py) |
+| 7 | "New project:" requests said "no task verb; answer or acknowledge" | reason now names the family default |
+
+Observed, not changed: the default wage band (M, 60,000) was about 13 times what a small item used; wages calibrate from settled hires, so this should correct itself with data. No rack template fits "write a small module with tests"; noted for CB-204/CB-205.

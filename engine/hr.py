@@ -411,6 +411,19 @@ def wage(size: str, model_alias: str, tid: str | None, state: dict | None, hc: d
     return {"tokens": tokens, "band": int(band), "cost": round(tokens * out_price(model_alias, models_cfg) / 1e6, 2), "basis": basis}
 
 
+def estimate_material(base: Path, paths: list[str]) -> int:
+    """Rough tokens in the files a helper would read (missing files count 0)."""
+    total = 0
+    for rel in paths:
+        f = Path(base) / rel
+        try:
+            if f.is_file():
+                total += c.est_tokens(f.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            pass
+    return total
+
+
 def hire_or_not(material_tokens: int | None, has_check: bool, parallel: bool, hc: dict) -> tuple[bool, str]:
     """Whether a helper pays. A helper starts cold, so it is worth it only when
     it keeps bulk out of the lead's context, or runs beside other work, and
@@ -421,7 +434,8 @@ def hire_or_not(material_tokens: int | None, has_check: bool, parallel: bool, hc
     if parallel:
         return True, "it runs beside other work and has a check"
     if material_tokens is not None and material_tokens < rule["min_material_tokens"]:
-        return False, f"about {material_tokens:,} tokens of material is small enough to do yourself (a helper costs about {rule['startup_tokens']:,} just to start)"
+        return False, (f"about {material_tokens:,} tokens of material is small enough to do yourself (a helper costs about "
+                       f"{rule['startup_tokens']:,} just to start); if it is bulkier than its files, pass --material-tokens or --force")
     return True, "bulky enough to keep out of the lead's context, and it has a check"
 
 
@@ -744,7 +758,12 @@ def cmd_hire(args) -> int:
     if project is not None and not c.is_managed(project):
         project = None
     hc = cfg_of()
-    go, reason = hire_or_not(args.material_tokens, bool(args.check), args.parallel, hc)
+    material = args.material_tokens
+    if material is None and args.size == "S":
+        # A small job with no stated material: count what it must read, so
+        # "helpers only when they pay" holds without the lead estimating.
+        material = estimate_material(project or Path(args.workdir or "."), list(args.input or []) + list(args.owns or []))
+    go, reason = hire_or_not(material, bool(args.check), args.parallel, hc)
     if not go and not args.force:
         print(f"do not hire: {reason}")
         return 0

@@ -110,10 +110,13 @@ def cmd_add(args) -> int:
         return 1
     rows = load(project)
     quote = " ".join(args.quote.split())
-    if any(r.get("quote") == quote for r in rows):
-        print("already in the ledger (same words); nothing added")
+    passes = (args.passes_when or "").strip()
+    # One sentence may hold several checkable needs (the plan skill splits it),
+    # so a repeat is the same words with the same 'passes when'.
+    if any(r.get("quote") == quote and r.get("passes_when", "") == passes for r in rows):
+        print("already in the ledger (same words and same 'passes when'); nothing added")
         return 0
-    row = {"id": next_id(rows), "quote": quote, "passes_when": (args.passes_when or "").strip(),
+    row = {"id": next_id(rows), "quote": quote, "passes_when": passes,
            "check": (args.check or "").strip(), "status": "open", "evidence": [], "added": c.today()}
     if args.implied:
         # Not the owner's words: something the request needs in order to hold.
@@ -167,6 +170,43 @@ def cmd_evidence(args) -> int:
     save(project, rows)
     print(f"{r['id']}: {len(r['evidence'])} evidence item(s), status {r['status']}")
     return 0
+
+
+def cmd_verify(args) -> int:
+    """Run each open line's check in the project; a line whose check exits 0
+    gets that result as evidence and is marked done. Lines with no runnable
+    check are listed for evidence by hand (a screenshot, a source)."""
+    from . import gate
+    project = c.need_project(args)
+    if not project:
+        return 1
+    rows = load(project)
+    head = (gate.head_commit(project) or "")[:8] or "no commit"
+    failed = manual = passed = 0
+    for r in rows:
+        if r.get("status") in ("done", "dropped") or not r.get("passes_when"):
+            continue
+        cmd = (r.get("check") or "").strip()
+        if not cmd:
+            manual += 1
+            print(f"{r['id']}: no check command; attach evidence by hand")
+            continue
+        res = gate.run_filtered(cmd, project, project, timeout=args.timeout)
+        if res["exit"] == 0:
+            passed += 1
+            ev = f"check exited 0 on {head} ({c.today()}): {c.clip(cmd, 120)}"
+            if ev not in r.setdefault("evidence", []):
+                r["evidence"].append(ev)
+            r["status"], r["done"] = "done", c.today()
+            print(f"{r['id']}: done (check exited 0)")
+        else:
+            failed += 1
+            print(f"{r['id']}: check exited {res['exit']}; still open · log: {res['log']}")
+            for l in res["shown"][-3:]:
+                print(f"  {l}")
+    save(project, rows)
+    print(f"verify: {passed} done, {failed} failed, {manual} need evidence by hand")
+    return 1 if failed else 0
 
 
 def cmd_drop(args) -> int:
@@ -230,7 +270,7 @@ def cmd_check(args) -> int:
 
 
 def register(sub) -> None:
-    p = sub.add_parser("req", help="the requirements ledger: add, list, evidence, drop, check")
+    p = sub.add_parser("req", help="the requirements ledger: add, list, evidence, verify, drop, check")
     s = p.add_subparsers(dest="req_cmd")
     a = s.add_parser("add", help="add a line with the owner's exact words")
     c.add_project_arg(a)
@@ -252,6 +292,10 @@ def register(sub) -> None:
     a.add_argument("evidence", nargs="+")
     a.add_argument("--done", action="store_true")
     a.set_defaults(func=guarded(cmd_evidence))
+    a = s.add_parser("verify", help="run each open line's check; mark it done with the result when it exits 0")
+    c.add_project_arg(a)
+    a.add_argument("--timeout", type=int, default=600)
+    a.set_defaults(func=guarded(cmd_verify))
     a = s.add_parser("drop", help="drop a line with a reason")
     c.add_project_arg(a)
     a.add_argument("id")

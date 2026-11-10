@@ -6,6 +6,7 @@ this prints about fifteen lines.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from . import common as c
@@ -22,10 +23,16 @@ def classify(path: Path) -> str:
     return "unmanaged"
 
 
-def detect(brain_root: Path | None = None, named: str | None = None) -> dict:
-    """Decide the working mode from the folders beside the brain."""
+def detect(brain_root: Path | None = None, named: str | None = None, project: str | None = None) -> dict:
+    """Decide the working mode from the folders beside the brain, or from the
+    one project given by --project or BRAIN_PROJECT (as every other command
+    accepts)."""
     root = Path(brain_root or c.BRAIN_ROOT)
-    sibs = [(p, classify(p)) for p in c.sibling_dirs(root)]
+    explicit = project or os.environ.get("BRAIN_PROJECT")
+    if explicit and Path(explicit).expanduser().is_dir():
+        sibs = [(Path(explicit).expanduser().resolve(), classify(Path(explicit).expanduser().resolve()))]
+    else:
+        sibs = [(p, classify(p)) for p in c.sibling_dirs(root)]
     # Only repositories count as candidate projects; stray folders are ignored.
     sibs = [(p, k) for p, k in sibs if k == "managed" or (p / ".git").exists()]
     out: dict = {"brain": str(root), "siblings": [{"path": str(p), "kind": k} for p, k in sibs], "project": None}
@@ -74,9 +81,10 @@ MODE_HELP = {
 }
 
 
-def boot_lines(request: str | None = None, brain_root: Path | None = None, named: str | None = None) -> list[str]:
+def boot_lines(request: str | None = None, brain_root: Path | None = None, named: str | None = None,
+               project: str | None = None) -> list[str]:
     root = Path(brain_root or c.BRAIN_ROOT)
-    d = detect(root, named)
+    d = detect(root, named, project)
     mode = d["mode"]
     lines = [f"brain: {root.name} · mode: {mode}" + (f" · {MODE_HELP[mode]}" if MODE_HELP.get(mode) else "")]
     proj = Path(d["project"]) if d.get("project") else None
@@ -218,7 +226,7 @@ def cmd_detect(args) -> int:
 
 
 def cmd_boot(args) -> int:
-    for l in boot_lines(args.request, named=args.name):
+    for l in boot_lines(args.request, named=args.name, project=getattr(args, "project", None)):
         print(l)
     return 0
 
@@ -231,4 +239,5 @@ def register(sub) -> None:
     p = sub.add_parser("boot", help="short orientation for the start of a session")
     p.add_argument("request", nargs="?", help="the owner's request, to size it and recall relevant memory")
     p.add_argument("--name")
+    p.add_argument("--project", help="project path (default: BRAIN_PROJECT, else the folders beside the brain)")
     p.set_defaults(func=cmd_boot)

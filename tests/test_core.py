@@ -61,6 +61,21 @@ class Base(unittest.TestCase):
 
 
 class ContractTests(Base):
+    def test_release_branch_follows_the_remote(self):
+        # A repo whose default is master once got a new 'main' from release (CB-202 trial)
+        remote = self.ws / "remote.git"
+        sh(self.ws, "git", "init", "-q", "--bare", "-b", "master", str(remote))
+        p = git_repo(self.ws / "m")
+        (p / "a").write_text("a")
+        commit_all(p)
+        sh(p, "git", "push", "-q", str(remote), "HEAD:master")
+        sh(p, "git", "remote", "add", "origin", str(remote))
+        sh(p, "git", "fetch", "-q", "origin")
+        self.assertEqual(contract.default_branch(p), "master")
+        contract.init(p, "M", "software")
+        self.assertEqual(c.load_manifest(p)["release"]["branch"], "master")
+        self.assertEqual(contract.default_branch(git_repo(self.ws / "n")), "main")
+
     def test_init_for_each_family_validates(self):
         for fam in contract.FAMILIES:
             p = self.project(f"p-{fam}", fam)
@@ -344,6 +359,38 @@ class ReqTests(Base):
         self.run_cli("req", "add", "--quote", "must work on a phone", "--implied", "--assumption", "he reviews on his phone")
         self.assertTrue(req.load(p)[0]["implied"])
         self.assertIn("(implied) must work on a phone", (p / ".brain" / "REQUIREMENTS.md").read_text())
+
+    def test_one_sentence_may_hold_several_lines(self):
+        # The plan skill splits a sentence into checkable needs that quote it (CB-202 trial)
+        p = self.project()
+        os.environ["BRAIN_PROJECT"] = str(p)
+        self.run_cli("req", "add", "--quote", "a tip calculator, with tests", "--passes-when", "prints the share")
+        self.run_cli("req", "add", "--quote", "a tip calculator, with tests", "--passes-when", "tests pass")
+        _, out = self.run_cli("req", "add", "--quote", "a tip calculator, with tests", "--passes-when", "tests pass")
+        self.assertIn("nothing added", out)
+        self.assertEqual(len(req.load(p)), 2)
+
+    def test_verify_runs_each_check_and_records_the_result(self):
+        p = self.project()
+        os.environ["BRAIN_PROJECT"] = str(p)
+        self.run_cli("req", "add", "--quote", "it passes", "--passes-when", "true exits 0", "--check", "true")
+        self.run_cli("req", "add", "--quote", "it fails", "--passes-when", "false exits 0", "--check", "false")
+        self.run_cli("req", "add", "--quote", "it looks right", "--passes-when", "a screenshot")
+        code, out = self.run_cli("req", "verify")
+        self.assertEqual(code, 1)
+        rows = {r["quote"]: r for r in req.load(p)}
+        self.assertEqual(rows["it passes"]["status"], "done")
+        self.assertIn("check exited 0", rows["it passes"]["evidence"][0])
+        self.assertEqual(rows["it fails"]["status"], "open")
+        self.assertIn("1 done, 1 failed, 1 need evidence by hand", out)
+
+    def test_boot_takes_the_project_from_brain_project(self):
+        p, q = self.project(), self.project("other")
+        os.environ.pop("BRAIN_PROJECT", None)
+        self.assertEqual(detect.detect(self.brain)["mode"], "choose")
+        os.environ["BRAIN_PROJECT"] = str(q)
+        d = detect.detect(self.brain)
+        self.assertEqual((d["mode"], d["project"]), ("work", str(q.resolve())))
 
     def test_a_corrupt_ledger_line_stops_everything_and_is_never_deleted(self):
         p = self.project()

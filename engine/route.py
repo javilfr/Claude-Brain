@@ -57,12 +57,27 @@ def _close(a: str, b: str) -> bool:
     return short[i:] == long_[i + 1:]
 
 
+KNOWN: set[str] = set()  # every word some vocabulary lists; filled by _vocab
+
+
+def _match(token: str, word: str) -> bool:
+    """A slip matches only a word the vocabularies do not already know
+    exactly ('tests' is a software word, not a slip for 'tesis'), except
+    that a singular and its plural still match ('field', 'fields')."""
+    if token == word:
+        return True
+    return _close(token, word) and (token not in KNOWN or token.rstrip("s") == word.rstrip("s"))
+
+
 def _phrase_at(tokens: list[str], pos: int, phrase: tuple[str, ...]) -> bool:
-    return pos + len(phrase) <= len(tokens) and all(_close(tokens[pos + k], w) for k, w in enumerate(phrase))
+    return pos + len(phrase) <= len(tokens) and all(_match(tokens[pos + k], w) for k, w in enumerate(phrase))
 
 
 def _vocab(spec: str) -> list[tuple[str, ...]]:
-    return [tuple(p.split()) for p in spec.split(",") if p.strip()]
+    out = [tuple(p.split()) for p in spec.split(",") if p.strip()]
+    for phrase in out:
+        KNOWN.update(phrase)
+    return out
 
 
 def _hits(tokens: list[str], vocab: list[tuple[str, ...]]) -> list[tuple[str, ...]]:
@@ -332,7 +347,9 @@ def classify(request: str, manifest: dict | None = None) -> dict:
             inner["tier"] = 3 if inner["tier"] == 3 else 2
             if inner["task_class"] == "answer":
                 inner["task_class"] = DEFAULT_CLASS[inner["family"]]
-            inner["reason"] = "new project; " + inner["reason"]
+                inner["reason"] = f"new project; no task verb, so the {inner['family']} default"
+            else:
+                inner["reason"] = "new project; " + inner["reason"]
         return inner
     return _content(raw, tokens, manifest)
 

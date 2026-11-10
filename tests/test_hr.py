@@ -182,6 +182,15 @@ class Wage(Base):
         self.assertTrue(hr.hire_or_not(4000, True, True, hc)[0])      # runs beside other work
         self.assertTrue(hr.hire_or_not(80000, True, False, hc)[0])
 
+    def test_estimate_material_counts_existing_files(self):
+        # Without it a small job always got a helper (CB-202 trial)
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "a.py").write_text("x = 1\n" * 400)
+            n = hr.estimate_material(Path(d), ["a.py", "missing.py"])
+            self.assertGreater(n, 0)
+            self.assertLess(n, hr.DEFAULT_CFG["hire"]["min_material_tokens"])
+            self.assertFalse(hr.hire_or_not(n, True, False, hr.DEFAULT_CFG)[0])
+
 
 class Briefs(Base):
     def test_brief_has_every_part_and_stays_short(self):

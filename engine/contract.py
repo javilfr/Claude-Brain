@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import subprocess
 from pathlib import Path
 
 from . import common as c
@@ -113,6 +114,25 @@ def ensure_stub(project: Path, title: str, made: list[str]) -> None:
         made.append("CLAUDE.md (pointer block added above existing content)")
 
 
+def default_branch(project: Path) -> str:
+    """The branch releases go to: the remote's default when git knows it
+    locally, else whichever of main or master the remote has, else main. The
+    current branch is no guide: a cloud session works on its own branch."""
+    def ref(*args: str) -> str:
+        try:
+            r = subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return r.stdout.strip() if r.returncode == 0 else ""
+    head = ref("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+    if head.startswith("origin/"):
+        return head[len("origin/"):]
+    for name in ("main", "master"):
+        if ref("rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{name}"):
+            return name
+    return "main"
+
+
 def init(project: Path, title: str, family: str, manifest_overrides: dict | None = None) -> list[str]:
     """Install the contract. Returns the list of things created (empty when
     everything was already there)."""
@@ -121,6 +141,7 @@ def init(project: Path, title: str, family: str, manifest_overrides: dict | None
     b = project / ".brain"
     if not (b / "project.json").exists():
         m = default_manifest(title, family)
+        m["release"]["branch"] = default_branch(project)
         for k, v in (manifest_overrides or {}).items():
             if isinstance(v, dict) and isinstance(m.get(k), dict):
                 m[k].update(v)

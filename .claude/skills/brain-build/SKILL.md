@@ -21,7 +21,7 @@ When the helper returns, `BRAIN hr settle` runs the acceptance command itself an
 
 ## Checks and escalation
 
-Run the acceptance command yourself when the helper returns. Record evidence with `BRAIN req evidence <id> "<log path or path:line>" --done` (without `--done` the line stays open).
+Run the acceptance command yourself when the helper returns. Record evidence with `BRAIN req verify` (runs every open line's check) or, for a screenshot or source, `BRAIN req evidence <id> "<log path or path:line>" --done` (without `--done` the line stays open).
 
 If a check fails, read why, then fix it or re-run the item one step up the escalation order; escalate on a failed check, not a hunch.
 

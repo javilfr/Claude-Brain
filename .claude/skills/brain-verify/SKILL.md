@@ -26,7 +26,7 @@ One round; a second only to confirm blocking fixes; stop when only style remains
 
 ## 4. Ledger
 
-`BRAIN req check` exits non-zero while any line lacks evidence. Fix the gap, or `BRAIN req drop <id> --reason "…"`, which he sees. Never narrow the request quietly.
+`BRAIN req verify` runs each open line's check and marks it done with the result when it exits 0; lines without a runnable check need evidence by hand. `BRAIN req check` exits non-zero while any line lacks evidence. Fix the gap, or `BRAIN req drop <id> --reason "…"`, which he sees. Never narrow the request quietly.
 
 ## 5. Release
 

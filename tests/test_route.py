@@ -62,6 +62,14 @@ class Classify(unittest.TestCase):
         self.assertEqual(route.classify("contniue")["task_class"], "resume")
         self.assertEqual(route.classify("trnaslate the whole website to japanese")["family"], "language")
 
+    def test_known_word_is_not_a_slip(self):
+        # 'tests' once matched 'tesis' (thesis) and sent a CLI app to knowledge work (CB-202 trial)
+        c = route.classify("New project: a command-line tip calculator that splits a bill between people, with tests")
+        self.assertEqual((c["family"], c["task_class"]), ("software", "software.feature"))
+        self.assertFalse(route._match("tests", "tesis"))
+        self.assertTrue(route._match("fields", "field"))
+        self.assertTrue(route._match("calcualtor", "calculator") or "calculator" not in route.KNOWN)
+
 
 def outcomes(model, n, passed=True, start=0):
     return [{"kind": "outcome", "id": f"{model}{start + i}", "at": f"2026-01-01T{start + i:05d}",
