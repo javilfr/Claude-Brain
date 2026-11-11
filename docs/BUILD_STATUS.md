@@ -187,3 +187,22 @@ The old held-out figure overstated real accuracy: its requests share the selecto
 **CB-206, open review items.** Fixed, each with a test: M6 (a success digest shows one stream), M8 (the repo map skips `.brain/log/` and files git ignores), M15 (measured 6.08 s for a 1 s radar budget when a request hangs; daemon threads bring it to 1.08 s), M18 (promotion bar read from `ml_config.json` `learning.promote_multiplier`, default unchanged at 1.0), M20 (radar check times, status and validators moved to the untracked `learning/radar/checks.json`; the tracked state changes only when new items are seen). Still open: M19 lead field names, the `staff` parallel default, forged inbox records, a use for the scout tier.
 
 **Full gate at this point:** 417 tests OK; `doctor`, `lint`, `hr audit` exit 0.
+
+## CB-204 result: selection (2026-11-11)
+
+Changes in `hr.select`: word scores blended with character-trigram similarity (weight 0.25; trigrams catch inflection, accents and dictation slips), and a stricter admission rule (word admission needs two shared words; trigram admission needs a score of 0.2 or more and one shared word). Tuned on dev, the old held-out set and a new 20-request negative set (`evals/hr_negatives.jsonl`, requests no template fits).
+
+| Set | Before | After |
+|---|---|---|
+| dev, top-1 / top-3 | 1.00 / 1.00 | 0.94 / 0.99 |
+| old held-out, top-1 / top-3 | 0.78 / 0.86 | 0.80 / 0.91 |
+| negatives given a template (lower is better) | 14 of 20 | 12 of 20 |
+| **new held-out, top-1 / top-3** | **0.32 / 0.35** | **0.45 / 0.55** |
+
+Verdict: kept. Top-3 on the new held-out set rose 20 points, against a bar of 3.
+
+How clean the measurement is: the new set was looked at three times, not once. First 0.45 / 0.58 with the configuration fixed in advance. Then twice more while the admission rule was settled, each time prompted by evidence outside the set: an existing fixture test, then a false pick seen in the trial. Each change made the new-set number worse, not better, so the set did not steer the tuning. The test floors are 0.42 and 0.52.
+
+Still weak: on requests worded the way the owner dictates, the right template is in the top three only about half the time, and 12 of 20 vague requests still get a template. Two things keep the harm small. The lead sees the candidates and the closest list, and can name a template or use `--template none`. And small items are done by the lead without a hire.
+
+One test input was changed. The fixture test that a weak fit is "offered, not chosen" used a long review request that now rightly matches `code-reviewer` (trigram 0.31, two words). It now uses a request that is weak on both measures; the behaviour it checks is unchanged.

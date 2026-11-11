@@ -51,6 +51,9 @@ DEFAULT_CFG = {
     "score_clamp": [0.7, 1.3],
     "lcb_z": 1.28,
     "fit_floor": 0.18,
+    "trigram_weight": 0.25,
+    "trigram_floor": 0.2,
+    "min_matched": 2,
     "novelty_min_trials": 3,
     "probation": {"min_trials": 5, "lcb_below": 0.35},
     "overrun_flag": 1.5,
@@ -327,6 +330,40 @@ def _terms(text: str) -> list[str]:
     return [_stem(w) for w in c.words(text)]
 
 
+def _fold(w: str) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFKD", w) if not unicodedata.combining(ch))
+
+
+def _grams(words: list[str]) -> dict[str, int]:
+    """Character trigrams of each word, accents removed: they match what
+    whole words miss, such as inflection ('traducir', 'traduccion'),
+    compounds and dictation slips."""
+    g: dict[str, int] = {}
+    for w in words:
+        w = f" {_fold(w)} "
+        for i in range(len(w) - 2):
+            g[w[i:i + 3]] = g.get(w[i:i + 3], 0) + 1
+    return g
+
+
+def _cos(a: dict[str, int], b: dict[str, int]) -> float:
+    num = sum(v * b.get(k, 0) for k, v in a.items())
+    den = math.sqrt(sum(v * v for v in a.values())) * math.sqrt(sum(v * v for v in b.values()))
+    return num / den if den else 0.0
+
+
+_GRAM_CACHE: dict[tuple, dict[str, int]] = {}
+
+
+def _doc_grams(t: dict) -> dict[str, int]:
+    key = (t.get("id"), t.get("version"), t.get("when"), t.get("role_line"))
+    if key not in _GRAM_CACHE:
+        _GRAM_CACHE[key] = _grams(c.words(" ".join([t.get("when", ""), t.get("name", ""),
+                                                     " ".join(t.get("keywords", [])), t.get("role_line", "")])))
+    return _GRAM_CACHE[key]
+
+
 def _doc(t: dict) -> list[str]:
     # Keywords count three times and the name twice: they are the curated signal.
     return _terms(" ".join([t.get("when", "")] + [t.get("name", "")] * 2 + [" ".join(t.get("keywords", []))] * 3))
@@ -349,12 +386,18 @@ def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | No
     raw = _bm25(q, [_doc(t) for t in pool])
     top = max(raw) or 1.0
     qset = set(q)
+    # Word scores blended with character-trigram similarity (CB-204: on the
+    # old held-out set top-3 rose from 0.86 to 0.90 at weight 0.25).
+    wt = float(hc.get("trigram_weight", 0.0))
+    qg = _grams(c.words(task))
+    sims = [_cos(qg, _doc_grams(t)) for t in pool] if wt > 0 else [0.0] * len(pool)
+    top_sim = max(sims) or 1.0
     out = []
-    for t, s in zip(pool, raw):
-        if s <= 0:
+    for t, s, sim in zip(pool, raw, sims):
+        if s <= 0 and sim < hc.get("trigram_floor", 1.0):
             continue
         coverage = len(qset & set(_doc(t))) / max(1, len(qset))
-        fit = 0.6 * (s / top) + 0.4 * coverage
+        fit = (1 - wt) * (0.6 * (s / top) + 0.4 * coverage) + wt * (sim / top_sim)
         if family and family not in t.get("families", []):
             fit *= 0.8
         mult = performance_multiplier(h, hc, t["id"], t.get("group", ""))
@@ -364,12 +407,19 @@ def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | No
         if on_probation(h, hc, t["id"], t.get("group", "")):
             mult *= 0.8
         out.append({"id": t["id"], "score": round(fit * mult, 4), "fit": round(fit, 4), "coverage": round(coverage, 3),
-                    "matched": len(qset & set(_doc(t))),
+                    "matched": len(qset & set(_doc(t))), "trigram": round(sim, 3),
                     "multiplier": round(mult, 3), "trials": n, "template": t})
     out.sort(key=lambda x: (-x["score"], x["id"]))
     # A long task description shares only a small fraction of its words with
     # any template, so the floor also accepts three or more distinct matches.
-    passing = [x for x in out if x["coverage"] >= hc["fit_floor"] or x["matched"] >= 3]
+    # Trigram similarity admits a template that shares at least one word:
+    # dictated requests often share only one. With none, a high trigram score
+    # was noise ("Conversion core convert.py" chose session-handover-writer).
+    # One shared word in a short request clears the coverage floor by itself
+    # ("tell me a joke about cats" chose ml-experiment-runner), so word
+    # admission needs two matches (measured on evals/hr_negatives.jsonl).
+    passing = [x for x in out if (x["coverage"] >= hc["fit_floor"] and x["matched"] >= hc.get("min_matched", 1))
+               or x["matched"] >= 3 or (x["trigram"] >= hc.get("trigram_floor", 1.0) and x["matched"] >= 1)]
     if near:
         return out[:k]  # the closest, floor or not: for showing, never for choosing
     return passing[:k]
