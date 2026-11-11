@@ -1,0 +1,3 @@
+{"arm": "I1", "at": "2026-11-11T01:09:58Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-question", "tokens": 1475, "trial": 1}
+{"arm": "I2", "at": "2026-11-11T01:09:59Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-question", "tokens": 1465, "trial": 1}
+{"arm": "I1", "at": "2026-11-11T01:10:05Z", "infra_error": false, "minutes": null, "passed": 1, "task": "sw-fix-median", "tokens": 1981, "trial": 1}
