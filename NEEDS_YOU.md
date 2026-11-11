@@ -57,3 +57,12 @@ RESOLVED: 2026-11-10 — you approved it in chat and `main` was fast-forwarded t
 - **Meanwhile:** nothing on `main` was touched by this session.
 
 RESOLVED: 2026-11-11 — you said the revert was a mistake. The branch was merged with `main` keeping its content, and `main` was fast-forwarded to it.
+
+## 9. Put this session's work on `main`, then open one chat with a scratch project (10 minutes)
+
+- **Why:** the last two brain tickets (CB-212 live checks, then CB-213 lock) can only be tested from a chat that starts with the brain **and** a project attached. This chat cannot do it: it started with the brain alone.
+- **Step 1, merge:** on github.com open **javilfr/Claude-Brain** → **Pull requests** → **New pull request** → base `main`, compare `claude/keen-sagan-deq8fd` → **Create pull request** → **Merge pull request** → **Confirm merge**. Or say "merge the brain to main" in a chat with the brain.
+- **Step 2, scratch repository:** on github.com → **+** → **New repository** → name `brain-scratch` → **Private** → **Create repository** (leave it empty).
+- **Step 3, chat:** on claude.ai/code start a new chat, select both **Claude-Brain** and **brain-scratch**, and type `Continue`.
+- **What happens then:** the brain runs the live checks one by one and records pass or fail in `docs/BUILD_STATUS.md`. A few checks need a second new chat; it will tell you when.
+- **Meanwhile:** everything else is done, committed and pushed.
