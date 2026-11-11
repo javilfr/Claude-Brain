@@ -497,7 +497,7 @@
       ],
       "est": 120,
       "accept": "python3 bin/brain eval audit",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-212",

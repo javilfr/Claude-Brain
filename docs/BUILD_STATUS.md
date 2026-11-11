@@ -323,3 +323,31 @@ What this session cost (`brain ledger` at close): see the last commit's session 
 **What this says.** Wording alone separates poorly: on the dev sets, every admission setting that cuts false picks also cuts correct top-3 picks (a grid of 288 settings: 28 false picks at 272 of 300 top-3, 12 at 206). The bigger gain on held-out 2 than on held-out 3 is the size of the overfit. False picks cost little today, because `hr hire` writes a plain brief unless a template is named (CB-203). A further gain more likely needs a different signal than more word lists, for example the lead naming the template, which CB-211 tests.
 
 **Gate:** 438 tests OK; `hr audit` sound.
+
+## CB-211 result: a named matching template against a plain brief (2026-11-11)
+
+**Set-up.** Eight new dev tasks (`evals/tasks/cb211-*.json`, written by a helper who did not see the rack; `brain eval audit` 20 of 20 sound), each bulkier than the CB-203 tasks: an idempotent renamer, a deduplicating refactor, a members reconciliation, an SQLite migration with backfill, a Spanish-to-English guide with a glossary, an order-dependent bug with a regression test that must fail on the original, an API fallback with a cache, and three drafts made consistent with a facts file. Pre-registered and committed before the first trial (`d09446e`): `evals/prereg/cb211-named-template-pass.json` (pass, up), `evals/prereg/cb211-named-template-tokens.json` (tokens, down), and `evals/prereg/cb211-template-map.md` (the template the lead named for each task). Both arms ran on the same agent, model and effort, through `hr hire --eval`, each trial in a clean folder with a neutral name, two pairs at a time with the arms interleaved. Pass is the lead's own `brain eval grade` run after the helper finished; tokens come from `brain hr settle`. Run: `evals/runs/cb211.jsonl`.
+
+| Task | Template | Plain: pass, tokens | Template: pass, tokens |
+|---|---|---|---|
+| api-fallback | api-integration-builder | pass, 2,611 | pass, 3,314 |
+| es-en-guide | es-en-translator | pass, 5,539 | pass, 8,367 |
+| facts-consistency | canonical-facts-keeper | pass, 5,155 | pass, 12,701 |
+| flaky-bug | bug-reproducer | pass, 2,708 | pass, 3,256 |
+| idempotent-renamer | cli-script-builder | pass, 5,743 | pass, 6,366 |
+| reconcile-members | data-reconciler | pass, 3,066 | pass, 4,695 |
+| refactor-dedupe | refactor-engineer | pass, 3,281 | pass, 7,457 |
+| sqlite-add-column | schema-migration-engineer | pass, 3,099 | pass, 4,816 |
+| **Total** | | **8/8, 31,202** | **8/8, 50,972 (+63%)** |
+
+**Verdicts (`brain eval compare`, n = 8 pairs).** Pass: **not proven**, 8 ties; the tasks do not discriminate on pass. Tokens: **revert**, 8 of 8 worse, P(template worse) 1.00, sequential test accepts "not better". So a named, matching template does not raise the pass rate on these tasks and costs more every time. The default stays as it is: a plain brief unless the lead names a template.
+
+**What the extra tokens bought (from the helpers' reports, not graded).** The template arms did more of the work a careful engineer would add: characterisation tests before the refactor, a batched backfill with a down path and a 50,000-row timing, a built-in self-test for the renamer, a check that the regression test fails on the original code, and a reconciliation that accounts for every row and cent. None of that is visible to an outcome grader, so it could be worth paying for on real work where those risks exist; these tasks cannot show it.
+
+**Defects found along the way.**
+1. `canonical-facts-keeper`'s scope line says to leave corrections to each document's owner, which contradicts a request to fix the documents; the helper noticed and followed the task. The template's scope needs a case for "the owner asked for the fix".
+2. In trial 3 the `es-en-translator` helper did not run its check, reading "do not open /home/user/Claude-Brain" as forbidding the grade command, which lives there; the plain helper on the same task ran it. A brief whose check lives in a folder it is told not to open is contradictory; future eval briefs should say the check may be run but its files not read.
+3. Two helpers wrote a scratch file outside the folder they owned (`r12.py` beside the trial folders, `pricing.orig.py` in the parent temporary folder); both removed by the lead.
+4. Two hires with the same task text supersede each other (`hr hire` replaces this session's open contract for the same task). Paired runs must give each arm a distinct task text; the trials named their own folder for that.
+
+**Gate:** `brain eval audit` 20 of 20 sound.
