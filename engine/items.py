@@ -25,7 +25,7 @@ from . import common as c
 TYPES = ("rule", "pitfall", "fact", "preference", "standing", "playbook")
 TRUST = ("owner-stated", "observed", "derived", "seed", "external")
 STATUS = ("candidate", "probation", "active", "demoted", "retired")
-FAMILIES = ("software", "data", "knowledge", "language", "operations")
+FAMILIES = ("software", "data", "knowledge", "language", "operations", "career")
 MAX_TEXT = 400
 ID_RE = re.compile(r"^[a-z]{2,8}-[a-z0-9][a-z0-9-]{1,60}$")
 SCOPE_RE = re.compile(r"^(global|project|family:(%s))$" % "|".join(FAMILIES))

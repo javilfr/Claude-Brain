@@ -1,7 +1,7 @@
 {
   "name": "claude-brain",
   "description": "Claude Brain as a plugin for desktop use: the same skills and agents the repository provides when attached to a cloud session.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "skills": ["./.claude/skills/"],
   "agents": ["./.claude/agents/scout.md", "./.claude/agents/researcher.md", "./.claude/agents/builder.md", "./.claude/agents/writer.md", "./.claude/agents/reviewer.md", "./.claude/agents/redteam.md"]
 }

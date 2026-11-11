@@ -25,6 +25,7 @@ The engine is the set of deterministic scripts behind `bin/brain`. Design is in 
 | `learning/inbox/*.jsonl` | any session, append-only | Zone `inbox` |
 | `learning/radar/**` | `brain radar` | Zone `state`: rewritten in a working session, not part of manifest replay |
 | `learning/manifest.jsonl`, `learning/CHANGELOG.md`, `learning/deltas/`, `learning/digest/` | `learn apply`, `learn digest` | Audit trail |
+| `kits/jobsearch/` (taxonomy, benchmarks, `uses/*.jsonl`, `template/`) | kernel change | The job-search catalog (validated by `brain jobs uses`) and the project kit `brain jobs init` installs; `engine/jobfeeds.py` and `engine/mddocx.py` are standalone (no brain imports) because the kit copies them into the project's `tools/` |
 | `<project>/.brain/**` | contract, state, req, gate, ledger, recall, timebox modules | See `contract/v1.schema.json`; `.brain/log/recall.jsonl` is the injection log, `.brain/log/open-session.json` the unclosed-session marker, `.brain/log/timebox.json` the learned time budgets (outside a project: the temporary folder) |
 
 Zones (`engine/guard.py`): `inbox` (append only, see S14 below), `state` (`learning/radar/`, rewrites allowed, ignored by `learn verify`), `learned` (the five directories, `learn apply` only), `kernel` (everything else, plus the hand-written files named above and `learning/PROMOTION_RULES.md`). `zone_of` normalises the path first (`posixpath.normpath`); a path that escapes the brain root is `kernel`.

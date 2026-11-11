@@ -49,6 +49,17 @@ When Claude needs an API key, it either shows a secure form or adds a NEEDS_YOU.
 
 STATUS.md shows tokens used and their list-price equivalent, for the latest chat and the project so far. On your subscription you are not charged those dollars; the real limit is your plan's usage window, and the figures show how fast work uses it. Fable 5.2 and fast mode may draw on usage credits rather than plan limits, so both are kept for when they are worth it. Claude runs at most four helpers at once unless you ask for more; wide fan-out has used up usage windows before.
 
+## Job search
+
+The brain is an expert job-search team. In a chat with your job-search repository attached, say what you want: "sweep for jobs", "tailor my resume for <link>", "write the outreach for <company>", "I applied to <company>", "what should I do this week?".
+
+- `MATCHES.md`: open postings from every target employer's job system, scored 0-100 for you, with the reasons; new ones marked NEW. A GitHub Action refreshes it every morning (Actions → Job sweep → Run workflow to run it now).
+- `RANKED_USES.md`: over 1,000 ways Claude can help, ranked for you by evidence, fit and time.
+- `TRACKER.md`: your applications, the funnel, and the step that leaks.
+- `out/`: your resume and letters as Word files.
+
+Postings come only from feeds employers publish; nothing logs in for you, and nothing is sent or submitted without you.
+
 ## The HR department
 
 When a piece of work is worth giving to a helper, the brain does not improvise one. Its HR department keeps a rack of 100 agent templates, one for each kind of work (a phone-screen builder, a Spanish–English translator, a code reviewer, a deploy doctor and so on). For each task it picks the model and effort level that have worked for that kind of task and a token wage, which is a budget for that helper, and writes the helper's instructions. It suggests the closest templates, and Claude uses one only when it is clearly the same kind of work: in the first fair test, briefs built on automatically chosen templates did worse than plain ones, mostly because the wrong kind of template was picked. Two helpers hired from the same template still differ, because the task details differ.

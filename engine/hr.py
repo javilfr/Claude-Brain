@@ -550,7 +550,14 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
         lines.append(f"Work in {workdir}; paths below are relative to it.")
     if t:
         lines += ["", t["role_line"].rstrip(".") + "."]
-    scope = (t or {}).get("scope_rule") or ("Read-only: change nothing." if base_agent not in WRITES else "Change only the files you own; at the edge, report instead of fixing.")
+    if base_agent in WRITES:
+        default_scope = "Change only the files you own; at the edge, report instead of fixing."
+    elif owns:
+        # A researcher or reviewer that owns its memo writes that file and nothing else.
+        default_scope = "Write only the files you own; change nothing else."
+    else:
+        default_scope = "Read-only: change nothing."
+    scope = (t or {}).get("scope_rule") or default_scope
     owned = ("Owns: " + ", ".join(owns) + ". ") if owns else ""
     lines += ["", f"<scope>{owned}{scope}</scope>"]
     if inputs:
@@ -1107,7 +1114,7 @@ def register(sub) -> None:
     h.add_argument("--input", action="append", help="a file to read first (repeatable)")
     h.add_argument("--check", help="the acceptance command")
     h.add_argument("--also", action="append", help="an extra constraint with its reason (repeatable)")
-    h.add_argument("--family", choices=("software", "data", "knowledge", "language", "operations"))
+    h.add_argument("--family", choices=("software", "data", "knowledge", "language", "operations", "career"))
     h.add_argument("--class", dest="task_class")
     h.add_argument("--risk", choices=("trivial", "standard", "high", "one-way-door"), default="standard")
     h.add_argument("--tier", type=int, choices=(1, 2, 3), default=2)

@@ -1,0 +1,16 @@
+{
+  "_help": "Copy to profile.json and fill in. tags: see the brain's kits/jobsearch/taxonomy.json. targets: role families with title keywords and a weight (1 = most wanted).",
+  "name": "",
+  "headline": "",
+  "tags": ["early_career", "employed"],
+  "hours_per_week": 8,
+  "min_salary": 60000,
+  "max_years_required": 3,
+  "remote": true,
+  "locations": ["City", "Nearby city"],
+  "targets": [{"name": "Example family", "weight": 1.0, "keywords": ["account manager", "customer success"]}],
+  "avoid_roles": ["intern"],
+  "avoid_keywords": ["commission only"],
+  "bonus_keywords": ["hybrid"],
+  "funnel": {"applied": 0, "responded": 0, "interviewed": 0, "offered": 0}
+}

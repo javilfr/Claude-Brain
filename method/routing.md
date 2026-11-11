@@ -27,4 +27,4 @@ The skill descriptions carry the trigger phrases ("Stop after this" goes to brai
 
 ## Families
 
-Software, data, knowledge, language, operations. Each has a playbook (`playbooks/<family>.md`) that says how work in that family is built, checked and delivered. A request that fits none uses the nearest and records the gap; a sixth family is added only after two projects fit badly.
+Software, data, knowledge, language, operations, and career (a job search: targets, postings, documents, outreach, interviews, offers; its method is the `brain-career` skill and `kits/jobsearch/`). Each has a playbook (`playbooks/<family>.md`) that says how work in that family is built, checked and delivered. A request that fits none uses the nearest and records the gap; a further family is added only after two projects fit badly. Career was added on the owner's request (D-17); a job-search project's manifest says family `knowledge` with `"kit": "jobsearch"`, because the released manifest schema is frozen, and routing reads the kit.

@@ -106,7 +106,7 @@ CREATE = _vocab(
     "construye, construir, crea, crear, creame, haz, hazme, hacer, disena, disenar, desarrolla, escribe, escribir, "
     "redacta, traduce, traducir, investiga, implementa, genera, prepara, monta, programa, automatiza, despliega, "
     "publica, lanza, analiza, audita, resumir, migra, convierte, planifica, planea, organiza, quiero, necesito, "
-    "me gustaria")
+    "me gustaria, tailor, adapta, find me, busca, buscame, encuentra, apply, aplica, track, negotiate, negocia")
 EDIT = _vocab(
     "add, fix, change, update, rename, rewrite, remove, delete, move, replace, tweak, adjust, bump, edit, correct, "
     "swap, shorten, increase, decrease, polish, reword, tidy, clean, debug, align, center, centre, hide, "
@@ -163,8 +163,18 @@ FAMILY_WORDS = {
                        "codigo, library, package, function, unit tests, flask, django, fastapi, node, rust, golang, "
                        "java, kotlin, swift, service, microservice, endpoint, compiler, converter"),
 }
-FAMILY_ORDER = ("language", "data", "operations", "knowledge", "software")
+FAMILY_WORDS["career"] = _vocab(
+    "job, jobs, job search, job hunt, career, careers, resume, resumes, cv, cover letter, interview, interviews, recruiter, "
+    "recruiters, hiring, hire me, linkedin, salary, offer letter, job offer, negotiate my offer, referral, networking, "
+    "applications, apply to, job posting, postings, empleo, trabajo, busqueda de empleo, entrevista, entrevistas, curriculum, "
+    "carta de presentacion, reclutador, oferta de trabajo, sueldo, salario")
+FAMILY_ORDER = ("career", "language", "data", "operations", "knowledge", "software")
 CLASS_WORDS = [  # (family, class, words) checked in order; first hit wins
+    ("career", "career.document", _vocab("resume, cv, cover letter, curriculum, carta de presentacion")),
+    ("career", "career.interview", _vocab("interview, interviews, entrevista, entrevistas, mock interview")),
+    ("career", "career.offer", _vocab("negotiate my offer, job offer, offer letter, salary, sueldo, salario")),
+    ("career", "career.search", _vocab("job search, job hunt, find jobs, find a job, postings, job posting, apply to, applications, "
+                                         "busqueda de empleo, buscar trabajo, recruiter, linkedin, networking, referral")),
     ("data", "data.analysis", _vocab("chart, graph, plot, grafico, analyse, analyze, analysis, analisis, analiza, stats, statistics")),
     ("operations", "operations.local", _vocab("my computer, mi ordenador, ordenador, mac, laptop, pc, windows, install, instala, instalar, terminal")),
     ("knowledge", "knowledge.research", _vocab("research, investiga, investigacion, compare, compara, sources, fuentes, find out, legal, law, ley")),
@@ -187,8 +197,9 @@ OBJECT_FAMILY = [(p, fam) for fam, spec in (
                   "course, curso, guide, guia, handbook, manual, knowledge base, base de conocimiento, thesis, "
                   "strategy, estrategia, study, estudio, newsletter, dossier, assignment, rubric, tarea, letter, carta"),
     ("data", "pipeline, dashboard, database, dataset, spreadsheet"),
+    ("career", "resume, cv, cover letter, curriculum, job search, jobs, job, interview, carta de presentacion, empleo, trabajo"),
 ) for p in _vocab(spec)]
-DEFAULT_CLASS = {"software": "software.feature", "data": "data.pipeline", "knowledge": "knowledge.longform",
+DEFAULT_CLASS = {"career": "career.search", "software": "software.feature", "data": "data.pipeline", "knowledge": "knowledge.longform",
                  "language": "language.translate", "operations": "operations.routine"}
 
 
@@ -220,6 +231,8 @@ def _family_score(tokens: list[str], vocab: list[tuple[str, ...]]) -> float:
 
 def _family(tokens: list[str], manifest: dict) -> str:
     scores = {f: _family_score(tokens, FAMILY_WORDS[f]) for f in FAMILY_ORDER}
+    if manifest.get("kit") == "jobsearch":
+        scores["career"] += 1.5  # in a job-search project, ambiguous requests are about the search
     if _hits(tokens, _vocab("translate, traduce, traducir")):
         scores["language"] += 2
     obj = _first_object_family(tokens)
@@ -228,6 +241,8 @@ def _family(tokens: list[str], manifest: dict) -> str:
     best = max(FAMILY_ORDER, key=lambda f: (scores[f], f == manifest.get("family"), -FAMILY_ORDER.index(f)))
     if scores[best] > 0:
         return best
+    if manifest.get("kit") == "jobsearch":
+        return "career"
     return manifest.get("family") if manifest.get("family") in FAMILY_ORDER else "software"
 
 

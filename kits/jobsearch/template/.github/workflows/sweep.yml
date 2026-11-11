@@ -1,0 +1,32 @@
+name: Job sweep
+on:
+  schedule:
+    - cron: "17 11 * * *"   # every day at about 7 am Miami time
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Find new boards (Mondays, or when run by hand)
+        run: |
+          if [ "$(date -u +%u)" = 1 ] || [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            python3 tools/jobfeeds.py discover --pages 2 || true
+          fi
+      - name: Sweep
+        run: python3 tools/jobfeeds.py sweep --max-minutes 30
+      - name: Check and build documents
+        run: python3 tools/check.py
+      - name: Commit results
+        run: |
+          git config user.name "job-sweep"
+          git config user.email "job-sweep@users.noreply.github.com"
+          git add MATCHES.md UNREADABLE.md data out || true
+          git diff --cached --quiet || git commit -m "Job sweep $(date -u +%F)"
+          git push

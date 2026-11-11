@@ -320,3 +320,23 @@ Owner request: apply Parkinson's law (work expands to fill the time available) w
 Left fixed on purpose: eval graders (a tight limit could fail a valid trial) and the 120-minute checkpoint lease (a safety guard, not effort).
 
 **Gate:** `python3 -m unittest discover -s tests -t .` 453 tests OK (436 before; 17 new). `brain doctor`, `lint`, `hr audit`, `items check`, `eval audit`, `learn verify` exit 0. `CLAUDE.md` 5988 bytes (limit 6000).
+
+## CB-215: job-search expertise (2026-11-11, brain 0.11.0)
+
+Owner request: make the brain a complete expert in using Claude for a job search. Decision D-17.
+
+| Piece | Where | Evidence |
+|---|---|---|
+| Career family and routing (resume, interview, offer, search classes; a job-search project routes ambiguous requests to career) | `engine/route.py` | `tests/test_jobs.py` Routing, Kit |
+| `brain-career` skill and definition of done for job-search documents | `.claude/skills/brain-career/`, `method/dod/job-application.md` | `brain lint` 0 errors; budget within caps |
+| 1,145 uses of Claude across 23 categories and 9 stages, schema-validated, no duplicate or near-duplicate titles | `kits/jobsearch/uses/`, `taxonomy.json` | `brain jobs uses --min 1000 --strict` exit 0 |
+| Ranking per person: (1.6^impact x evidence grade x lever effect x audience fit x funnel-stage weight)^0.8 / hours^0.2, with a category-diversity pass; lever effects and funnel benchmarks set from the evidence memo; stage weights move to the funnel step that leaks (Beta-shrunk) | `engine/jobs.py`, `kits/jobsearch/benchmarks.json` | Ranking tests |
+| Evidence memo: funnel rates by channel, hidden market, ATS myths, AI in applications, negotiation, ghost jobs; graded A-D; 25 ranked levers | `docs/research/job-search-evidence.md` | 73 source links; gaps listed in its section 12 |
+| Job discovery from public feeds only: Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Workday, BambooHR, Breezy, Personio; schema.org JobPosting on robots-allowed pages; company probe by name; Workday tenants and sites from robots.txt sitemaps; every board per system from the Common Crawl index (falls back to older crawls) | `engine/jobfeeds.py` (standalone, vendored into projects) | Feed tests with a fake fetch; live: 13,208 postings read on 73 boards in 8.5 minutes |
+| Posting fit 0-100 with reasons: target titles, avoided roles, place by segment (foreign remote rejected), seniority, years asked, pay floor, senior-pay signal, pluses, staleness | `engine/jobfeeds.py` `fit` | Fit tests |
+| Markdown to ATS-friendly Word | `engine/mddocx.py` | Rendered through LibreOffice and inspected |
+| Project kit with daily GitHub Action, gate, tracker and funnel | `kits/jobsearch/template/`, `brain jobs init`, `brain jobs track` | Kit test |
+
+Not proven: `discover` against the live Common Crawl index (it returned 504 Gateway Time-out all session); the Action has not run on GitHub (Actions do not start on this account yet, NEEDS_YOU item 7). Four playbook notes that named file paths were refused by `learn note` by design; those lines live in the skill instead.
+
+**Gate:** 474 tests OK (453 before; 21 new). doctor, lint, hr audit, items check, eval audit, learn verify, `jobs uses --strict` exit 0.

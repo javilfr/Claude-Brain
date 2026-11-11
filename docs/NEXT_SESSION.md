@@ -4,6 +4,7 @@
 
 - The improvement programme CB-200 to CB-209 is done and on `main`. The owner confirmed the 01:09 UTC reverts were a mistake, so `main` was fast-forwarded to the work. Evidence is in `docs/BUILD_STATUS.md`, its last sections first.
 - The learning inbox is consolidated; `learn verify` matches.
+- CB-215 (job-search expertise, brain 0.11.0) is done: `brain-career` skill, `brain jobs` (uses, rank, init, track), `engine/jobfeeds.py`, `engine/mddocx.py`, `kits/jobsearch/`. Common Crawl's index was timing out on 2026-11-11, so `jobfeeds discover` is untested live; re-run it once (`python3 tools/jobfeeds.py discover --pages 1` in a job-search project).
 - CB-214 (Parkinson's law for time, brain 0.10.0) is done: learned timeboxes for commands, checks, deploy waits, radar requests, sessions, tickets and helpers. See `method/efficiency.md` and D-16.
 - Owner instruction, standing (D-14): keep building until everything is done, without stopping to ask or report. Steps that cannot be undone wait for his yes in `NEEDS_YOU.md`.
 

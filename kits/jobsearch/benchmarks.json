@@ -1,0 +1,11 @@
+{
+  "_help": "Funnel benchmarks for brain jobs rank (stage weights). Sources in docs/research/job-search-evidence.md section 1: inbound application-to-interview about 3% (Ashby Talent Trends), referred 40%; interview-to-offer about 6% inbound and 16% referred. 'respond' blends inbound with some outreach; 'interview' is first response to a real interview; 'offer' is interview to offer.",
+  "funnel": {
+    "respond": 0.04,
+    "interview": 0.5,
+    "offer": 0.1
+  },
+  "sources": [
+    "https://www.ashbyhq.com/talent-trends-report/reports/referrals"
+  ]
+}

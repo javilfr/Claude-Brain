@@ -552,6 +552,27 @@
       "est": 120,
       "accept": "python3 -m unittest tests.test_timebox && python3 bin/brain doctor && python3 bin/brain lint",
       "status": "done"
+    },
+    {
+      "id": "CB-215",
+      "title": "Job-search expertise: career family, ranked uses, public-feed job discovery, documents, project kit",
+      "reason": "Owner request 2026-11-11: make the brain a complete expert in using Claude for a job search, with over 1,000 uses ranked per person by a precise algorithm, evidence-backed pathways, discovery of every company's postings, and repos that run the search.",
+      "goal": "Career family and brain-career skill; kits/jobsearch catalog of 1,145 validated uses ranked by brain jobs rank (evidence x lever x fit x funnel stage per hour, diversity pass); engine/jobfeeds.py reading ten ATS feeds, schema.org data, Workday tenants via robots.txt and Common Crawl board enumeration, with profile fit scoring; engine/mddocx.py; brain jobs init/track; evidence memo; playbook notes; DoD.",
+      "deps": [],
+      "files": [
+        "engine/jobs.py",
+        "engine/jobfeeds.py",
+        "engine/mddocx.py",
+        "engine/route.py",
+        "kits/jobsearch/",
+        "tests/test_jobs.py",
+        ".claude/skills/brain-career/SKILL.md",
+        "method/dod/job-application.md",
+        "docs/research/job-search-evidence.md"
+      ],
+      "est": 240,
+      "accept": "python3 bin/brain jobs uses --min 1000 --strict && python3 -m unittest tests.test_jobs && python3 bin/brain doctor && python3 bin/brain lint",
+      "status": "done"
     }
   ],
   "live_checks": [

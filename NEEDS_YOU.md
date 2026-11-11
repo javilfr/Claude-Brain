@@ -57,3 +57,10 @@ RESOLVED: 2026-11-10 — you approved it in chat and `main` was fast-forwarded t
 - **Meanwhile:** nothing on `main` was touched by this session.
 
 RESOLVED: 2026-11-11 — you said the revert was a mistake. The branch was merged with `main` keeping its content, and `main` was fast-forwarded to it.
+
+## 9. Create the job-search repository (1 minute)
+
+- **Why:** your job search (profile, matches, tracker, resume) is personal, so it lives in its own private repository, never in the brain. I cannot create repositories from a chat.
+- **How:** github.com → **+** → **New repository** → name `job-search` → **Private** → leave everything else unticked → **Create repository**. Then reply "repo created" in the chat where the job search was built: it pushes everything there (profile, ranked list, matches, resume, research, the daily sweep). In a new chat instead, attach **javilfr/Claude-Brain** and **javilfr/job-search** and say "Set up my job search": the kit installs in one step, and the files that chat sent you can be dropped in.
+- **Meanwhile:** the brain's job-search capabilities are on `main` and work in any chat.
+
