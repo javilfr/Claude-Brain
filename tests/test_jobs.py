@@ -196,6 +196,9 @@ class Documents(unittest.TestCase):
                 self.assertIn("word/document.xml", z.namelist())
                 xml = z.read("word/document.xml").decode()
         self.assertNotIn("two lines", xml)
+        with tempfile.TemporaryDirectory() as d:
+            a, b = mddocx.convert(md, Path(d) / "a.docx"), mddocx.convert(md, Path(d) / "b.docx")
+            self.assertEqual(a.read_bytes(), b.read_bytes())  # reproducible: no spurious git changes
         for want in ("Ana Ruiz", "Heading1", "Heading2", "<w:tab/>", "errors", "by 40%", "w:jc w:val=\"center\""):
             self.assertIn(want, xml)
 

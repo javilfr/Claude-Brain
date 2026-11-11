@@ -130,6 +130,14 @@ def body_xml(md: str) -> str:
             + "".join(parts) + sect + "</w:body></w:document>")
 
 
+def _entry(name: str) -> zipfile.ZipInfo:
+    """A zip entry with a fixed date, so the same Markdown always builds the
+    same bytes: an unchanged document never shows up as a change in git."""
+    info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+    info.compress_type = zipfile.ZIP_DEFLATED
+    return info
+
+
 def convert(md: str, out: Path, title: str = "") -> Path:
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -137,12 +145,12 @@ def convert(md: str, out: Path, title: str = "") -> Path:
             'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
             'xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>' + escape(title) + "</dc:title></cp:coreProperties>")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("[Content_Types].xml", CONTENT_TYPES)
-        z.writestr("_rels/.rels", RELS)
-        z.writestr("word/_rels/document.xml.rels", DOC_RELS)
-        z.writestr("word/styles.xml", STYLES)
-        z.writestr("word/document.xml", body_xml(md))
-        z.writestr("docProps/core.xml", core)
+        z.writestr(_entry("[Content_Types].xml"), CONTENT_TYPES)
+        z.writestr(_entry("_rels/.rels"), RELS)
+        z.writestr(_entry("word/_rels/document.xml.rels"), DOC_RELS)
+        z.writestr(_entry("word/styles.xml"), STYLES)
+        z.writestr(_entry("word/document.xml"), body_xml(md))
+        z.writestr(_entry("docProps/core.xml"), core)
     return out
 
 
