@@ -18,7 +18,7 @@ You only read files, click in a browser, or type in the chat. If a step ever has
 | You type | What happens |
 |---|---|
 | **New project:** one sentence | The project is set up. You get at most three questions in one message, each with the answer used if you do not reply. Work starts straight away. |
-| **Start running** / **Continue** / **set up** | Claude picks up exactly where the last chat stopped, without asking. |
+| **Start running** / **Continue** / **set up** | Claude picks up exactly where the last chat stopped and keeps going until everything open is done, without asking. It stops only when you say so, when everything left needs you, or before a step that cannot be undone (deleting data, spending money, publishing), which waits for your yes in NEEDS_YOU.md. |
 | **Quick:** a question or small change | A direct answer or a small fix, with no planning. |
 | **Go deep:** a question | A researched answer with sources, saved as a memo. |
 | **Status** | Where things stand, what is next, and what it has cost, in a few lines. |
@@ -51,13 +51,13 @@ STATUS.md shows tokens used and their list-price equivalent, for the latest chat
 
 ## The HR department
 
-When a piece of work is worth giving to a helper, the brain does not improvise one. Its HR department keeps a rack of 100 agent templates, one for each kind of work (a phone-screen builder, a Spanish–English translator, a code reviewer, a deploy doctor and so on). For each task it picks the best-fitting template, the model and effort level that have worked for that kind of task, and a token wage, which is a budget for that helper. It then writes the helper's instructions from the template and the task. Two helpers hired from the same template still differ, because the task details differ.
+When a piece of work is worth giving to a helper, the brain does not improvise one. Its HR department keeps a rack of 100 agent templates, one for each kind of work (a phone-screen builder, a Spanish–English translator, a code reviewer, a deploy doctor and so on). For each task it picks the model and effort level that have worked for that kind of task and a token wage, which is a budget for that helper, and writes the helper's instructions. It suggests the closest templates, and Claude uses one only when it is clearly the same kind of work: in the first fair test, briefs built on automatically chosen templates did worse than plain ones, mostly because the wrong kind of template was picked. Two helpers hired from the same template still differ, because the task details differ.
 
 When the helper finishes, the brain runs the task's check itself, compares what the helper really used with its wage, and records the result. Over time that record changes which template gets picked and how large the wages are. Wages are shown as list-price equivalents; on a subscription they are not charges. Ask "HR report" to see which templates are used, how often they pass first time, and how accurate the wages have been.
 
 ## Undoing something the brain learned
 
-Claude opens each learning change as one pull request on the Claude-Brain repository on GitHub, described in plain words. Merge it to keep it. To undo a merged one, open that pull request and press **Revert**, then merge the revert.
+Ordinary chats only record what happened. The learning itself is folded in by one chat at a time, with only the brain attached (the weekly run, or when you type **Consolidate**), so two chats never change the brain's memory in conflicting ways. Claude opens each learning change as one pull request on the Claude-Brain repository on GitHub, described in plain words. Merge it to keep it. To undo a merged one, open that pull request and press **Revert**, then merge the revert.
 
 ## If something seems broken
 

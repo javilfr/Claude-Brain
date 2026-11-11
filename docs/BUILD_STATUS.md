@@ -279,3 +279,24 @@ All items on the list are handled:
 | D10, D12, D13 | Left: no project ids exist yet to list; a weak acceptance check in this session's own hire (noted); `mlearn.sizing_hint` is exposed but unused (the sizing model runs in shadow, as designed) |
 
 Remaining hole, stated plainly: someone with write access to the repository can still commit a hand-made delta together with the manifest and learned files. `learn verify` replays deltas through the engine, which refuses unauthorised owner changes, but not every hand-written op. Only branch protection with the check running (`NEEDS_YOU.md` items 2 and 7) closes this.
+
+## State at close of the improvement session (2026-11-11, CB-209)
+
+**Full gate at close:** `python3 -m unittest discover -s tests -t .` gives 436 tests, OK (407 at the start). `brain doctor`, `brain lint`, `brain hr audit`, `brain items check`, `brain eval audit` and `brain learn verify` all exit 0. All ten tickets CB-200 to CB-209 are done.
+
+What is true now, each line backed by a section above:
+- Boot finds the project the same way every other command does. Routing no longer mistakes "tests" for "thesis", or a question followed by work for a plain question.
+- `brain req verify` runs each requirement's check and records the evidence.
+- HR writes a plain brief by default and suggests templates (D-15). Selection on a fresh held-out set is 0.45 first and 0.55 in the top three (it was 0.32 and 0.35). Read-only templates are demoted for making requests. Evaluation hires do not train wages.
+- The learning pipeline protects owner items. By hand it may only curate. It has a single writer, and the radar no longer dirties the tree or holds up exit.
+- Work runs to completion unless the owner says stop, with a yes required before any step that cannot be undone (D-14).
+- 22 facts, re-verified against official pages.
+
+Still unproven, or waiting on the owner:
+- Everything that needs a two-repository chat: the live checks CB-101 to CB-104, CB-106, CB-108, CB-110 and CB-111, each with exact steps in `docs/plan/tickets.json`.
+- Whether a correctly named template beats a plain brief. That needs a paired run on bulkier tasks where the lead names a matching template.
+- GitHub enforcement: checks do not start on this account and `main` is unprotected (`NEEDS_YOU.md` items 2 and 7). Until then, someone with write access can commit a hand-made delta.
+- Wages for medium hires read low until 30 real medium hires replace the evaluation trials folded before `--eval` existed.
+- `main` was reverted by another session at 01:09 UTC (`NEEDS_YOU.md` item 8). This session's branch has not been merged, and its inbox has not been consolidated, because the single-writer rule refuses while the branch is behind `origin/main`.
+
+What this session cost (`brain ledger` at close): see the last commit's session record; about 40 helpers, most of them the 35 small evaluation trials on Sonnet.
