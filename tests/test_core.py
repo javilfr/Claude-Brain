@@ -236,6 +236,14 @@ class DetectTests(Base):
         finally:
             os.chdir(old)
 
+    def test_brain_project_none_means_no_project_even_beside_a_managed_one(self):
+        # Final review 2026-11-11, D2: tests found the owner's real project beside the brain.
+        self.project("real")
+        self.assertIsNotNone(c.resolve_project(None, self.brain))
+        os.environ["BRAIN_PROJECT"] = "none"
+        self.assertIsNone(c.resolve_project(None, self.brain))
+        self.assertEqual(detect.detect(self.brain)["mode"], "brain-only")
+
     def test_boot_is_short_and_shows_position(self):
         p = self.project()
         state.checkpoint(p, item="T-7 build the list view", nxt=["T-8", "T-9"], stage="build", note="x" * 5000)

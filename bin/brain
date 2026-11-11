@@ -29,7 +29,21 @@ def main(argv=None) -> int:
         return 1
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
-        parser.print_help()
+        # A group named without its action ("brain eval") shows that group's
+        # short usage, not the 60-line top-level help (output cap, I-04).
+        p, words = parser, [w for w in (argv if argv is not None else sys.argv[1:]) if not w.startswith("-")]
+        for w in words:
+            acts = [a for a in p._actions if isinstance(a, argparse._SubParsersAction)]
+            if not acts or w not in acts[0].choices:
+                break
+            p = acts[0].choices[w]
+        if p is parser:
+            parser.print_help()
+        else:
+            print(p.format_usage().rstrip())
+            acts = [a for a in p._actions if isinstance(a, argparse._SubParsersAction)]
+            if acts:
+                print("actions: " + ", ".join(acts[0].choices))
         return 2
     if broken and args.command == "doctor":
         print("modules that failed to load: " + "; ".join(broken))

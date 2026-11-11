@@ -253,10 +253,15 @@ def sibling_dirs(brain_root: Path | None = None) -> list[Path]:
     return out
 
 
+NO_PROJECT = ("none", "-")
+
+
 def resolve_project(explicit: str | None = None, brain_root: Path | None = None) -> Path | None:
     """The project to act on: --project, then BRAIN_PROJECT, then the current
     directory (or a parent) if managed, then the single managed sibling."""
     for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
+        if cand in NO_PROJECT:
+            return None  # said outright: act on no project (tests, brain-only work)
         if cand:
             return Path(cand).expanduser().resolve()
     cur = Path.cwd().resolve()

@@ -61,7 +61,9 @@ class Base(unittest.TestCase):
         ]
         c.write_jsonl(self.b / "hr" / "rack" / "all.jsonl", self.rack)
         self._env = dict(os.environ)
-        os.environ.pop("BRAIN_PROJECT", None)
+        # Never the real project beside the brain: a CLI test once wrote eight
+        # contracts into it (final review 2026-11-11, D2).
+        os.environ["BRAIN_PROJECT"] = "none"
         os.environ["BRAIN_SESSION_ID"] = "sess-hr"
         os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
 
@@ -203,7 +205,6 @@ class Briefs(Base):
             self.assertEqual(hr.lint_brief(text, strong), [])
 
     def test_no_wage_or_token_number_reaches_the_brief(self):
-        os.environ["BRAIN_PROJECT"] = ""
         con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=self.project(), check="npm test")
         text = Path(con["brief"]).read_text()
         self.assertNotRegex(text, r"\d[\d,]*\s*k?\s*tokens")

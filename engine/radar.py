@@ -646,13 +646,19 @@ def cmd_radar(args) -> int:
     if args.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
         return 0
-    for ln in res["lines"]:
+    # Everything printed fits in --max lines, the summary and errors included
+    # (final review 2026-11-11: 12 items + summary + 3 errors made 16).
+    errs = res["errors"][:3]
+    room = max(1, int(args.max) - 1 - len(errs))
+    shown = res["lines"][:room]
+    for ln in shown:
         print(ln)
     if not res["lines"]:
         print("radar: nothing new")
-    print(f"radar: {res['checked']} checked, {res['skipped']} skipped, {len(res['new'])} new, "
-          f"{res['seconds']}s, {len(res['errors'])} errors")
-    for e in res["errors"][:3]:
+    more = len(res["lines"]) - len(shown)
+    print(f"radar: {res['checked']} checked, {res['skipped']} skipped, {len(res['new'])} new"
+          + (f" ({more} not shown)" if more else "") + f", {res['seconds']}s, {len(res['errors'])} errors")
+    for e in errs:
         print(f"  {e}")
     return 0
 

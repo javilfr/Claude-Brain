@@ -587,6 +587,17 @@ class Cli(unittest.TestCase):
         self.assertEqual(out.getvalue().splitlines(),
                          ["radar: nothing new", "radar: 3 checked, 6 skipped, 0 new, 0.5s, 0 errors"])
 
+    def test_everything_printed_fits_in_max_lines(self):
+        # Final review 2026-11-11: 12 items, a summary and 3 errors made 16 lines.
+        res = {"lines": [f"item {i}" for i in range(12)], "new": [{}] * 12, "checked": 9, "skipped": 0,
+               "errors": ["e1", "e2", "e3", "e4"], "seconds": 0.3}
+        with mock.patch.object(radar, "run", return_value=res), redirect_stdout(io.StringIO()) as out:
+            args = self.parse()
+            args.func(args)
+        lines = out.getvalue().splitlines()
+        self.assertEqual(len(lines), 12)
+        self.assertIn("(4 not shown)", lines[8])
+
     def test_lines_then_summary_and_json(self):
         res = {"lines": ["a · b · c · d · why: e"], "new": [{"source": "a"}], "checked": 1, "skipped": 0,
                "errors": ["x: http 500"], "seconds": 0.2}

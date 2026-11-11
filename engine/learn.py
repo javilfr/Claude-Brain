@@ -85,6 +85,7 @@ ITEM_FILE_RE = re.compile(r"^(?:memory/(?:items|facts)\.jsonl|owner/(?:standing|
 INBOX_FILE_RE = re.compile(r"^learning/inbox/[A-Za-z0-9][A-Za-z0-9_.-]{0,120}\.jsonl$")
 # Owner evidence is written only by the script that found the owner's words in
 # a turn he typed: the turn's timestamp and a hash of the normalised quote.
+MANUAL_OPS = ("EDIT_TEXT", "SET_STATUS", "SUPERSEDE", "MOVE_SCOPE", "LINK")
 # Deltas stamped before this moment were applied before the owner-item guard
 # existed; they replay as recorded (the manifest pins their content).
 OWNER_GUARD_FROM = "2026-11-11T01:15:00Z"
@@ -1605,6 +1606,25 @@ def cmd_apply(args) -> int:
     if not isinstance(delta, dict):
         print(f"cannot read a delta from {args.delta}")
         return 1
+    # A hand-written delta may only curate (final review 2026-11-11, D1):
+    # adding items, giving credit and folding statistics come only from
+    # consolidating recorded, verified evidence, and promotion is earned.
+    for i, op in enumerate(delta.get("ops") or []):
+        if not isinstance(op, dict):
+            continue
+        kind = op.get("op")
+        if kind not in MANUAL_OPS:
+            print(f"refused, nothing changed: op {i + 1} is {kind}; by hand a delta may only {', '.join(sorted(MANUAL_OPS))} "
+                  "(new items, credit and statistics come from `brain learn consolidate`)")
+            return 1
+        if kind == "SET_STATUS" and op.get("status") not in ("demoted", "retired"):
+            print(f"refused, nothing changed: op {i + 1} sets {op.get('id')} to {op.get('status')}; promotion is earned from evidence, never set by hand")
+            return 1
+        if any(OWNER_EV_RE.match(str(e)) for e in op.get("evidence") or []):
+            print(f"refused, nothing changed: op {i + 1} carries owner evidence; give the owner's words as `quote` so they are checked now")
+            return 1
+    # The time is now: a hand-written delta cannot be stamped into the past.
+    delta = dict(delta, at=c.now_iso())
     # An op may carry the owner's words as `quote`; they are checked against
     # the turns he typed in this session and stored only as evidence.
     for op in delta.get("ops") or []:

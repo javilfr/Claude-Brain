@@ -6,6 +6,7 @@ this prints about fifteen lines.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from . import common as c
@@ -28,6 +29,8 @@ def pointed_project(root: Path, explicit: str | None = None) -> Path | None:
     other command, so boot and the commands that follow agree on the project."""
     import os
     for cand in (explicit, os.environ.get("BRAIN_PROJECT")):
+        if cand in c.NO_PROJECT:
+            return None
         if cand:
             return Path(cand).expanduser().resolve()
     cur = Path.cwd().resolve()
@@ -45,7 +48,9 @@ def detect(brain_root: Path | None = None, named: str | None = None, explicit: s
     folders beside the brain."""
     root = Path(brain_root or c.BRAIN_ROOT)
     pointed = pointed_project(root, explicit)
-    if pointed is not None and pointed.is_dir():
+    if (explicit or os.environ.get("BRAIN_PROJECT")) in c.NO_PROJECT:
+        sibs = []
+    elif pointed is not None and pointed.is_dir():
         sibs = [(pointed, classify(pointed))]
     else:
         sibs = [(p, classify(p)) for p in c.sibling_dirs(root)]
@@ -188,8 +193,10 @@ RADAR_EVERY_HOURS = 24
 
 def radar_due(root: Path) -> bool:
     """True when no source has been checked in the last day."""
-    state = c.read_json(root / "learning" / "radar" / "state.json", {}) or {}
-    sources = state.get("sources", state) if isinstance(state, dict) else {}
+    # Check times live in the untracked checks file since M20; read them the
+    # way the radar writes them (final review 2026-11-11, D4).
+    from . import radar
+    sources = radar.load_state(root)
     stamps = [v.get("last_checked", "") for v in sources.values() if isinstance(v, dict)]
     if not stamps:
         return True

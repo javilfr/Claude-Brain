@@ -157,7 +157,8 @@ class HygieneTests(unittest.TestCase):
         os.environ["BRAIN_NO_NETWORK"] = "1"
         self.assertIsInstance(detect.session_start_lines(brain, self.p), list)
         self.assertTrue(detect.radar_due(brain))
-        c.write_json(brain / "learning" / "radar" / "state.json", {"sources": {"a": {"last_checked": c.now_iso()}}})
+        from engine import radar
+        radar.save_state(brain, {"a": {"last_checked": c.now_iso(), "seen": []}})  # the radar's own writer
         self.assertFalse(detect.radar_due(brain))
 
     def test_brain_only_boot_shows_the_brains_own_open_work(self):
@@ -186,3 +187,17 @@ class HygieneTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BareGroupTest(unittest.TestCase):
+    def test_a_group_without_its_action_prints_a_short_usage(self):
+        # Final review 2026-11-11, I-04: `brain eval` printed the 60-line top-level help.
+        import subprocess, sys
+        root = Path(__file__).resolve().parents[1]
+        for argv in (["eval"], ["guard"], ["eval", "defects"]):
+            r = subprocess.run([sys.executable, str(root / "bin" / "brain"), *argv], capture_output=True, text=True,
+                               env={**os.environ, "BRAIN_NO_NETWORK": "1", "BRAIN_PROJECT": "none"})
+            with self.subTest(argv=argv):
+                self.assertEqual(r.returncode, 2)
+                self.assertLessEqual(len(r.stdout.splitlines()), 15)
+                self.assertIn("usage: brain " + " ".join(argv), r.stdout)

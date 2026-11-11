@@ -397,6 +397,42 @@ class RealMlearnTest(BrainCase):
         self.assertEqual(json.loads((self.root / learn.ML_STATE).read_text())["n"], json.loads(text)["n"])
 
 
+class ManualApplyTest(unittest.TestCase):
+    """Final review 2026-11-11, D1: a hand-written delta may only curate.
+    Every case is refused before anything is written."""
+    def run_apply(self, ops, at="2026-11-01T00:00:00Z"):
+        import argparse, io, tempfile
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "delta.json"
+            f.write_text(json.dumps({"id": "d-hand-test", "at": at, "ops": ops}))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = learn.cmd_apply(argparse.Namespace(delta=str(f), budget=learn.DEFAULT_BUDGET))
+        return code, buf.getvalue()
+
+    def test_credit_promotion_additions_and_pasted_owner_evidence_are_refused(self):
+        cases = [
+            ([{"op": "ADD", "file": "memory/items.jsonl", "item": {"id": "x"}}], "is ADD"),
+            ([{"op": "INC_HELPFUL", "id": "own-decide-and-record", "n": 500, "session": "made-up"}], "is INC_HELPFUL"),
+            ([{"op": "ML_FOLD", "records": []}], "is ML_FOLD"),
+            ([{"op": "SET_STATUS", "id": "pb-gate-live", "status": "active"}], "promotion is earned"),
+            ([{"op": "SET_STATUS", "id": "own-decide-and-record", "status": "demoted",
+               "evidence": ["owner:turn@2026-11-01T10:00:00Z#0123456789ab"]}], "carries owner evidence"),
+        ]
+        for ops, needle in cases:
+            with self.subTest(needle=needle):
+                code, out = self.run_apply(ops)
+                self.assertEqual(code, 1)
+                self.assertIn(needle, out)
+
+    def test_a_hand_delta_cannot_be_stamped_into_the_past(self):
+        code, out = self.run_apply([{"op": "SET_STATUS", "id": "own-decide-and-record", "status": "demoted"}],
+                                   at="2020-01-01T00:00:00Z")
+        self.assertEqual(code, 1)
+        self.assertIn("owner-stated", out)  # the guard applies: the old stamp was replaced by now
+
+
 class SingleWriterTest(unittest.TestCase):
     def test_consolidation_needs_the_latest_main_and_no_project(self):
         # Red team 2026-11-11, finding 1, simulated: two consolidating branches conflict three ways.
@@ -749,7 +785,7 @@ class NoteCommandCase(BrainCase):
         self.env = {"BRAIN_SESSION_ID": "sess-n", "BRAIN_TRANSCRIPT": str(self.transcript), "HOME": str(self.work)}
         self._old = {k: os.environ.get(k) for k in (*self.env, "BRAIN_PROJECT", "CLAUDE_CODE_SESSION_ID")}
         os.environ.update(self.env)
-        os.environ.pop("BRAIN_PROJECT", None)
+        os.environ["BRAIN_PROJECT"] = "none"  # never the real project beside the brain (final review D2)
         os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
         self.addCleanup(self._restore)
         self.loose = self.work / "not-managed"

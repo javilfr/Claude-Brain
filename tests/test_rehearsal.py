@@ -55,6 +55,7 @@ class Rehearsal(unittest.TestCase):
         self.env = dict(os.environ, BRAIN_SESSION_ID="sess-1", BRAIN_TRANSCRIPT=str(transcript), BRAIN_NOW="2026-11-10T10:30:00Z")
         self.env.pop("CLAUDE_CODE_SESSION_ID", None)
         self.env.pop("BRAIN_PROJECT", None)
+        self.env["BRAIN_NO_NETWORK"] = "1"  # the rehearsal never touches the network (final review D3)
 
     def tearDown(self):
         self._tmp.cleanup()
