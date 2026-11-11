@@ -1,0 +1,120 @@
+{"task": "start me a brand new little app for tracking my runs, just the bare bones, but make sure it actually goes online before we add anything", "expect": ["web-app-scaffolder"], "split": "heldout3", "lang": "en"}
+{"task": "I wrote down what the settings page should look like, build it so it looks right on my iphone", "expect": ["phone-first-ui-builder"], "split": "heldout3", "lang": "en"}
+{"task": "quiero poder poner la app en la pantalla de inicio y que funcione en el metro sin cobertura", "expect": ["pwa-offline-engineer"], "split": "heldout3", "lang": "es"}
+{"task": "hook the recipe app up to that weather service thing, and if it goes down the app shouldn't just break", "expect": ["api-integration-builder"], "split": "heldout3", "lang": "en"}
+{"task": "hazme un jueguito de memoria con cartas para mi hija, poco a poco, que lo pueda probar en el móvil cada vez", "expect": ["game-builder"], "split": "heldout3", "lang": "es"}
+{"task": "I've got my pharmacology notes as a pdf, make me a quiz thing I can drill on, and every answer should point back to the page it came from", "expect": ["learning-app-builder"], "split": "heldout3", "lang": "en"}
+{"task": "need a quick thing I run in the terminal that renames all my photo files by date, and running it again shouldn't mess anything up", "expect": ["cli-script-builder"], "split": "heldout3", "lang": "en"}
+{"task": "tengo una carpeta de documentos en markdown, conviértela en una web sencilla sin enlaces rotos", "expect": ["content-site-builder"], "split": "heldout3", "lang": "es"}
+{"task": "my son wants a castle he can load in his minecraft world on the switch, can you make it", "expect": ["minecraft-structure-builder"], "split": "heldout3", "lang": "en"}
+{"task": "el código del carrito es un lío, ordénalo por dentro pero que todo siga funcionando igual que ahora", "expect": ["refactor-engineer"], "split": "heldout3", "lang": "es"}
+{"task": "pull all my strava activities every night and clean them up into a table, without getting us blocked for too many requests", "expect": ["data-pipeline-builder"], "split": "heldout3", "lang": "en"}
+{"task": "te paso el csv de ventas del año, dime qué cosas interesantes ves ahí", "expect": ["exploratory-analyst"], "split": "heldout3", "lang": "es"}
+{"task": "my coworker swears the new checkout button got more sales, can you check if that's actually true or just noise", "expect": ["statistical-tester"], "split": "heldout3", "lang": "en"}
+{"task": "make me a couple of graphs of my monthly spending that I can actually read on my phone", "expect": ["chart-maker"], "split": "heldout3", "lang": "en"}
+{"task": "necesito un excel para el presupuesto de la boda, que se recalcule solo cuando cambie números y me avise si algo no cuadra", "expect": ["spreadsheet-engineer"], "split": "heldout3", "lang": "es"}
+{"task": "the bank export and my accounting app don't match, figure out which transactions are missing from which side", "expect": ["data-reconciler"], "split": "heldout3", "lang": "en"}
+{"task": "hay que cambiar cómo guardamos las direcciones en la base de datos, pruébalo primero con una copia antes de tocar la de verdad", "expect": ["schema-migration-engineer"], "split": "heldout3", "lang": "es"}
+{"task": "combine my bird sightings with the gbif and inaturalist records for the valley, without mangling the latin names", "expect": ["biodiversity-data-integrator"], "split": "heldout3", "lang": "en"}
+{"task": "try a few models to predict which customers will cancel, and tell me if any of them beat just guessing", "expect": ["ml-experiment-runner"], "split": "heldout3", "lang": "en"}
+{"task": "quiero poder hacerle preguntas a todos los manuales de la empresa, y demuéstrame que encuentra las respuestas buenas", "expect": ["rag-index-builder"], "split": "heldout3", "lang": "es"}
+{"task": "antes de que nadie diseñe nada, escribe en una página qué queremos que transmita la app de reservas", "expect": ["design-brief-author"], "split": "heldout3", "lang": "es"}
+{"task": "show me three really different looks for the homepage as pictures and I'll pick one", "expect": ["visual-option-generator"], "split": "heldout3", "lang": "en"}
+{"task": "the logo is sitting like two pixels too low next to the menu, fix it and prove it's lined up now", "expect": ["visual-polish-measurer"], "split": "heldout3", "lang": "en"}
+{"task": "mira las pantallas nuevas con ojos frescos y puntúalas según lo que acordamos en el documento de diseño", "expect": ["design-critic"], "split": "heldout3", "lang": "es"}
+{"task": "every page uses slightly different blues and paddings, set up one shared set of colours and spacing and stop people sneaking in random values", "expect": ["design-system-builder"], "split": "heldout3", "lang": "en"}
+{"task": "people upload photos sideways and huge, store them properly and make small versions for the gallery but keep the full ones", "expect": ["image-pipeline-engineer"], "split": "heldout3", "lang": "en"}
+{"task": "quiero que el menú se abra deslizando como en la app de Apple, y que no vaya a tirones en el móvil", "expect": ["motion-builder"], "split": "heldout3", "lang": "es"}
+{"task": "turn my spanish vocab lessons into mp3s I can listen to in the car, let me hear one first though", "expect": ["audio-lesson-producer"], "split": "heldout3", "lang": "en"}
+{"task": "draw me a picture of how the login flow works so I can look at it on my phone", "expect": ["diagram-maker"], "split": "heldout3", "lang": "en"}
+{"task": "dame varias ideas de nombre para la panadería, numeradas, y yo elijo", "expect": ["name-and-copy-options"], "split": "heldout3", "lang": "es"}
+{"task": "I just inherited this codebase from a contractor, give me a quick lay of the land and which commands actually work", "expect": ["repo-cartographer"], "split": "heldout3", "lang": "en"}
+{"task": "usamos la versión 4 de esa librería, mira en la web de los autores cómo se llaman exactamente las funciones y qué trampas tiene esa versión", "expect": ["docs-snapshotter"], "split": "heldout3", "lang": "es"}
+{"task": "there are like four map apis we could use, actually try each one and tell me which ones work for us", "expect": ["api-live-prober"], "split": "heldout3", "lang": "en"}
+{"task": "help me decide between supabase, firebase and just a plain postgres box, decide what matters first and then score them", "expect": ["option-comparer"], "split": "heldout3", "lang": "en"}
+{"task": "investiga a fondo si las bombas de calor salen rentables en Galicia, con fuentes y fechas", "expect": ["deep-researcher"], "split": "heldout3", "lang": "es"}
+{"task": "look at the other habit tracker apps out there, what they all do and what people moan about in reviews", "expect": ["competitor-teardown"], "split": "heldout3", "lang": "en"}
+{"task": "hace unos meses hicimos algo con un mapa de restaurantes, encuéntrame dónde quedó eso y cuándo fue", "expect": ["history-digger"], "split": "heldout3", "lang": "es"}
+{"task": "can claude code run on a schedule by itself? check the current anthropic pages, don't guess", "expect": ["claude-product-answerer"], "split": "heldout3", "lang": "en"}
+{"task": "where could I get decent data on bike accidents in spain, find a few places and actually look at what they have", "expect": ["dataset-source-finder"], "split": "heldout3", "lang": "en"}
+{"task": "te paso diez enlaces, léelos todos y hazme una nota de cada uno con las frases exactas que importan", "expect": ["source-harvester"], "split": "heldout3", "lang": "es"}
+{"task": "translate this email from my landlord into english, I'm a brit so make it sound natural to me", "expect": ["es-en-translator"], "split": "heldout3", "lang": "en"}
+{"task": "escribe desde cero un texto de bienvenida para la web, en español de España y con tono cercano", "expect": ["es-original-writer"], "split": "heldout3", "lang": "es"}
+{"task": "tidy up my cover letter, fix the grammar and make it read better but it still has to sound like me", "expect": ["copy-editor"], "split": "heldout3", "lang": "en"}
+{"task": "haz una lista de términos técnicos en inglés y español para el proyecto, de dónde sale cada uno, y algo que avise si alguien usa otro", "expect": ["glossary-builder"], "split": "heldout3", "lang": "es"}
+{"task": "someone translated our brochure into spanish, I can't read it, how do I know it's any good", "expect": ["back-translation-checker"], "split": "heldout3", "lang": "en"}
+{"task": "all the button text is hardcoded in english, pull it out so we can add french and spanish and nothing's left untranslated", "expect": ["ui-string-localiser"], "split": "heldout3", "lang": "en"}
+{"task": "quiero la web en inglés y en castellano, y que si cambio una página la otra no se quede atrás", "expect": ["bilingual-site-publisher"], "split": "heldout3", "lang": "es"}
+{"task": "translate this spanish rental contract into english but don't smooth over the legal bits that are unclear", "expect": ["legal-terms-translator"], "split": "heldout3", "lang": "en"}
+{"task": "escribe las felicitaciones de navidad como si fueran mías, te paso cartas viejas que he escrito", "expect": ["voice-matcher"], "split": "heldout3", "lang": "es"}
+{"task": "I rambled into my phone for ten minutes about the trip, make it into proper paragraphs but don't change what I said", "expect": ["transcript-cleaner"], "split": "heldout3", "lang": "en"}
+{"task": "here's my long voice note about the app, break down every single thing I asked for so nothing slips through", "expect": ["requirements-extractor"], "split": "heldout3", "lang": "en"}
+{"task": "para cada cosa que pedí, dime cómo vamos a saber que de verdad está hecha, algo que se pueda ver", "expect": ["acceptance-test-designer"], "split": "heldout3", "lang": "es"}
+{"task": "I haven't decided loads of stuff yet, just pick sensible choices for me and only ask about the ones that really matter", "expect": ["ambiguity-resolver"], "split": "heldout3", "lang": "en"}
+{"task": "should we keep everything in one server or split it up? write it down properly with what we'd lose either way", "expect": ["architecture-decider"], "split": "heldout3", "lang": "en"}
+{"task": "el plan está claro, ahora pártelo en tareas pequeñas que puedan hacer varios a la vez sin pisarse", "expect": ["ticket-slicer"], "split": "heldout3", "lang": "es"}
+{"task": "the uni gave me a marking scheme for the project, show me where in my work each point is covered", "expect": ["rubric-mapper"], "split": "heldout3", "lang": "en"}
+{"task": "the dog walking site came out great, turn it into something reusable so I can spin up a cat sitting one the same way", "expect": ["blueprint-extractor"], "split": "heldout3", "lang": "en"}
+{"task": "queremos pasar de wordpress a otra cosa, planéalo paso a paso y que en cada paso se pueda volver atrás", "expect": ["migration-planner"], "split": "heldout3", "lang": "es"}
+{"task": "I've got about forty ideas in my list, tell me which five to do first and why", "expect": ["backlog-prioritiser"], "split": "heldout3", "lang": "en"}
+{"task": "quiero que la app lea la mente del usuario, ¿se puede hacer aquí? si no, ¿qué sería lo más parecido?", "expect": ["feasibility-reframer"], "split": "heldout3", "lang": "es"}
+{"task": "the build went red again and the log is a mile long, find what actually broke and sort it", "expect": ["build-failure-diagnoser"], "split": "heldout3", "lang": "en"}
+{"task": "en la dirección de la web sigue saliendo la versión de la semana pasada, ¿por qué?", "expect": ["deploy-doctor"], "split": "heldout3", "lang": "es"}
+{"task": "everything's passing on the branch, ship it and check the website is actually showing the new version", "expect": ["release-to-main-engineer"], "split": "heldout3", "lang": "en"}
+{"task": "yesterday's update wrecked the booking page, put it back how it was on monday without erasing history", "expect": ["rollback-restorer"], "split": "heldout3", "lang": "en"}
+{"task": "escribe pruebas que abran el navegador en tamaño móvil y comprueben que el registro funciona", "expect": ["e2e-test-author"], "split": "heldout3", "lang": "es"}
+{"task": "how much of our code do the tests actually touch, and which untested bits scare you most", "expect": ["coverage-analyst"], "split": "heldout3", "lang": "en"}
+{"task": "la página tarda una eternidad en cargar, mide cuánto tarda y que cada arreglo muestre el antes y el después", "expect": ["performance-profiler"], "split": "heldout3", "lang": "es"}
+{"task": "could a blind person or someone using only a keyboard use our site? just tell me the problems, don't change anything", "expect": ["accessibility-auditor"], "split": "heldout3", "lang": "en"}
+{"task": "tenemos las librerías viejísimas, ponlas al día pero de una en una para que no se rompa todo", "expect": ["dependency-upgrader"], "split": "heldout3", "lang": "es"}
+{"task": "my mum says the app sometimes forgets her password, no idea when, can you pin it down and fix it", "expect": ["bug-reproducer"], "split": "heldout3", "lang": "en"}
+{"task": "repasa la lista de lo que pedí y comprueba tú mismo, de nuevo, si cada cosa está hecha de verdad", "expect": ["requirement-verifier"], "split": "heldout3", "lang": "es"}
+{"task": "before I publish this blog post about coffee and health, check every claim in it is actually right", "expect": ["fact-checker"], "split": "heldout3", "lang": "en"}
+{"task": "look over the changes in this pull request, it's supposed to add dark mode, tell me what's wrong with it", "expect": ["code-reviewer"], "split": "heldout3", "lang": "en"}
+{"task": "me preocupa que alguien pueda colarse en la app por el formulario de subida o el login, revísalo", "expect": ["security-reviewer"], "split": "heldout3", "lang": "es"}
+{"task": "I think I pasted my stripe key somewhere in the repo months ago, find where without showing it to me", "expect": ["secret-scanner"], "split": "heldout3", "lang": "en"}
+{"task": "imagine it's six months from now and the launch flopped, what went wrong and how can we spot it early", "expect": ["premortem-redteam"], "split": "heldout3", "lang": "en"}
+{"task": "el bot lee correos de clientes y luego usa herramientas, ¿podría alguien colarle órdenes escondidas en un email?", "expect": ["injection-auditor"], "split": "heldout3", "lang": "es"}
+{"task": "my lawyer's letter quotes a bunch of articles from the civil code, check they actually say that", "expect": ["legal-citation-verifier"], "split": "heldout3", "lang": "en"}
+{"task": "antes de lanzar, ¿qué datos de usuarios guardamos y podemos usar todas esas fotos y fuentes que metimos?", "expect": ["privacy-licence-reviewer"], "split": "heldout3", "lang": "es"}
+{"task": "pretend you're a new developer and follow our readme from scratch, tell me where it falls over", "expect": ["clean-clone-verifier"], "split": "heldout3", "lang": "en"}
+{"task": "I'm stopping for today, write down where we are and give me something to paste tomorrow to pick up", "expect": ["session-handover-writer"], "split": "heldout3", "lang": "en"}
+{"task": "hay algo que tengo que hacer yo en la web de github, explícamelo paso a paso para el móvil mientras tú sigues", "expect": ["needs-you-composer"], "split": "heldout3", "lang": "es"}
+{"task": "I need to install something on my laptop and I'm useless at terminals, walk me through it one bit at a time", "expect": ["owner-computer-guide"], "split": "heldout3", "lang": "en"}
+{"task": "there are loads of old branches lying around, tidy the repo up without losing anything and tell me what's left", "expect": ["git-repo-operator"], "split": "heldout3", "lang": "en"}
+{"task": "quiero que cada lunes a las ocho se mande solo un resumen de las ventas, y que sea fácil pararlo", "expect": ["routine-builder"], "split": "heldout3", "lang": "es"}
+{"task": "claude keeps ignoring my custom commands since yesterday, figure out what's broken in my setup and fix it", "expect": ["setup-repairer"], "split": "heldout3", "lang": "en"}
+{"task": "my bill went up a lot this month, which of the helpers is eating the most and where can we save", "expect": ["token-cost-auditor"], "split": "heldout3", "lang": "en"}
+{"task": "antes de cambiar el selector, pasa las pruebas de siempre, cámbialo, pásalas otra vez y no dejes que empeore", "expect": ["eval-regression-runner"], "split": "heldout3", "lang": "es"}
+{"task": "we kept tripping over the same deploy mess on the last three projects, write down what we learned so it doesn't happen again", "expect": ["lesson-distiller"], "split": "heldout3", "lang": "en"}
+{"task": "tengo un repositorio nuevo, conéctalo con el cerebro y comprueba que quedó bien enganchado", "expect": ["project-bootstrapper"], "split": "heldout3", "lang": "es"}
+{"task": "I need a 12,000 word report on the town's water history, plan it out and write it chapter by chapter", "expect": ["long-form-drafter"], "split": "heldout3", "lang": "en"}
+{"task": "tengo cien recetas en el blog, cambia todas a sistema métrico y dime cómo quedó cada una", "expect": ["batch-article-rewriter"], "split": "heldout3", "lang": "es"}
+{"task": "dump of all my notes about sourdough here, organise it into topics I can look things up in, with where each bit came from", "expect": ["knowledge-base-compiler"], "split": "heldout3", "lang": "en"}
+{"task": "the prices and dates keep being different across our brochure, website and emails, keep one master list and check everything against it", "expect": ["canonical-facts-keeper"], "split": "heldout3", "lang": "en"}
+{"task": "convierte estos datos del inventario en un pdf bonito para descargar y revisa que cada página salga bien", "expect": ["document-producer"], "split": "heldout3", "lang": "es"}
+{"task": "make me slides for the investor meeting thursday, one main point per slide, and look at each one", "expect": ["deck-builder"], "split": "heldout3", "lang": "en"}
+{"task": "write up whether we should open a second shop, so I can make up my mind just from the top of the first page", "expect": ["strategy-memo-writer"], "split": "heldout3", "lang": "en"}
+{"task": "¿puede mi casero subirme el alquiler a mitad de contrato? búscalo en la ley y dime hasta dónde llega la respuesta", "expect": ["legal-research-analyst"], "split": "heldout3", "lang": "es"}
+{"task": "put together a timeline of everything that happened with the builder dispute, with where each date comes from", "expect": ["case-chronology-builder"], "split": "heldout3", "lang": "en"}
+{"task": "escribe las instrucciones para un nuevo ayudante que revise facturas, solo lo que el modelo no sepa ya", "expect": ["agent-spec-writer"], "split": "heldout3", "lang": "es"}
+{"task": "can you order me a large pepperoni pizza for tonight please", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "what's the weather going to be like in Lisbon this weekend", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "make it better somehow, you know what I mean, just improve things", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "sort out that thing we talked about, the usual stuff", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "call my dentist and move my appointment to next friday", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "I'm feeling kind of stuck lately, any thoughts on life in general", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "can you just handle everything for the project from now on", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "book me a cheap flight to Dublin for the bank holiday", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "do something cool with the app, surprise me with whatever", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "tell me a joke to cheer up my brother tonight", "expect": [], "split": "heldout3", "lang": "en"}
+{"task": "pídeme un taxi para mañana a las seis al aeropuerto", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "¿qué tal está el tiempo hoy en Sevilla por la tarde?", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "arregla lo de siempre, ya sabes a qué me refiero", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "hazlo todo un poco mejor, como tú veas, sin más", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "recuérdale a mi hermana que me debe veinte euros", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "cómprame unas zapatillas de correr en la tienda de siempre", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "estoy aburrido, ¿qué me recomiendas hacer este finde?", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "encárgate tú del proyecto entero a partir de ahora, gracias", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "llama al restaurante y reserva mesa para cuatro el sábado", "expect": [], "split": "heldout3", "lang": "es"}
+{"task": "dale una vuelta a lo nuestro y me cuentas qué tal", "expect": [], "split": "heldout3", "lang": "es"}
