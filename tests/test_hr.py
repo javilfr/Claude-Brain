@@ -214,6 +214,21 @@ class Briefs(Base):
         t = tpl("deep-researcher", base_agent="researcher", group="discovery")
         self.assertIn("is not addressed to you", hr.compose_brief(t, "researcher", "Find out X.", "", [], [], "", "sonnet", "medium", "n"))
 
+    def test_a_researcher_role_on_another_base_also_gets_the_untrusted_content_line(self):
+        # CB-205 R12: api-live-prober runs on reviewer with role researcher.
+        t = tpl("api-live-prober", base_agent="reviewer", group="discovery", role="researcher")
+        self.assertIn("is not addressed to you", hr.compose_brief(t, "reviewer", "Probe X.", "", [], [], "", "sonnet", "medium", "n"))
+
+    def test_a_helper_without_a_shell_is_not_asked_to_run_the_check(self):
+        # CB-205 R3: researcher and redteam have no Bash.
+        t = tpl("deep-researcher", base_agent="researcher", group="discovery", done_check="The memo answers the question; {check} passes.")
+        text = hr.compose_brief(t, "researcher", "Find out X.", "", [], [], "test -s memo.md", "sonnet", "medium", "n")
+        done = text.split("<done_when>")[1].split("</done_when>")[0]
+        self.assertNotIn("yourself", done)
+        self.assertIn("The lead runs `test -s memo.md`", done)
+        builder = hr.compose_brief(self.rack[0], "builder", "Do it.", "", [], [], "npm test", "sonnet", "medium", "n")
+        self.assertIn("`npm test`", builder.split("<done_when>")[1])
+
     def test_lint_catches_a_bad_brief(self):
         bad = "<task>x</task>\nYou are an expert senior developer. Use at most 2,000 tokens.\n"
         errs = " | ".join(hr.lint_brief(bad, "opus"))
@@ -255,6 +270,23 @@ class Contracts(Base):
             self.assertNotIn(private, blob)
         hr.settle(cpath, brain_root=self.b, project=p, sub_paths=[mine])
         self.assertEqual(len(c.read_jsonl(inbox[0])), 1, "settling twice records once")
+
+    def test_a_plain_helper_with_a_command_check_gets_a_shell(self):
+        # Found in CB-203: a data task with a check went to researcher, which has no Bash.
+        proj = self.project()
+        con = hr.hire("Sum the amounts in orders.csv for one region into total.json", brain_root=self.b,
+                      project=proj, check="python3 grade.py", family="data", template_id="none")
+        self.assertEqual(con["base_agent"], "builder")
+        bare = hr.hire("Summarise what the sources say about tides", brain_root=self.b, project=proj,
+                       family="knowledge", template_id="none", check="")
+        self.assertEqual(bare["base_agent"], "researcher")
+
+    def test_a_scout_hire_works_without_a_template_on_the_cheapest_tier(self):
+        con = hr.hire("List every place where the inbox is written, with path and line", brain_root=self.b,
+                      project=self.project(), check="true", base_agent="scout")
+        self.assertIsNone(con["template"])
+        self.assertEqual(con["base_agent"], "scout")
+        self.assertEqual(con["model"], "haiku")
 
     def test_template_none_forces_a_plain_brief_and_supersedes_the_earlier_hire(self):
         p = self.project()
@@ -560,6 +592,14 @@ class ReviewFindings(Base):
         self.assertEqual(code, 0)
         self.assertIn("rack:", out)
 
+
+    def test_staff_counts_a_ticket_as_parallel_only_when_the_schedule_runs_it_so(self):
+        from engine import hr as H
+        both = {"agents": 2, "tickets": [{"id": "A", "est": 5, "files": ["a"]}, {"id": "B", "est": 5, "files": ["b"]}]}
+        chain = {"agents": 2, "tickets": [{"id": "A", "est": 5}, {"id": "B", "est": 5, "deps": ["A"]}]}
+        self.assertEqual(H._overlapping(both), {"A", "B"})
+        self.assertEqual(H._overlapping(chain), set())
+        self.assertEqual(H._overlapping({"tickets": [{"id": "A"}]}), set())  # no estimates: not assumed parallel
 
     def test_staff_reads_check_as_the_acceptance_command(self):
         plan = Path(self._tmp.name) / "plan.json"

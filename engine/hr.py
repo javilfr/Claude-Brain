@@ -36,7 +36,8 @@ RISKS = ("trivial", "standard", "high", "one-way-door")
 CONTRACT_ID = re.compile(r"^h-\d{8}-[0-9a-f]{6}(-\d+)?$")
 BRIEF_WARN, BRIEF_MAX = 350, 500  # words: above the first a note, above the second an error
 WRITES = {"builder", "writer"}                 # base agents that change files
-READS_OUTSIDE = {"researcher"}                 # base agents that read untrusted content
+READS_OUTSIDE = {"researcher"}                 # base agents or roles that read untrusted content
+NO_SHELL = {"researcher", "redteam", "scout"}   # base agents without Bash (.claude/agents/*.md tools)
 STABLE_FIELDS = ("role_line", "method", "drift", "scope_rule", "done_check", "return_contract")
 
 DEFAULT_CFG = {
@@ -69,6 +70,13 @@ BANNED = [
 ABSOLUTE = re.compile(r"\b(never|always|must not|under no circumstances)\b", re.I)
 # A reason is a clause that explains, not a condition: "when" and "if" do not count.
 REASON = re.compile(r"\b(because|so that|so |since|unless|except|otherwise)\b|[:;—]", re.I)
+# A method line states its reason (hr/GUIDELINES.md, method): a cause or a
+# purpose clause. Stricter than REASON, which a colon satisfies (CB-205 R1, R5).
+METHOD_REASON = re.compile(
+    r"\b(because|since|so that|so|otherwise|or else|"
+    r"which (means|keeps|catches|lets|makes|stops|avoids|shows|prevents|protects|leaves|gives)|"
+    r"as (it|they|this|that|each)|"
+    r"to (avoid|keep|catch|stop|prevent|make sure|let|show|protect|spot|surface|find|confirm|prove|guard))\b", re.I)
 
 VERIFY_BLOCK = ("When you change something that can be run, built or checked, run a real check that exercises the change before reporting it done. "
                 "A check that failed to start does not count. If no real check can run here, name the one you did not run and why.")
@@ -176,6 +184,9 @@ def validate_template(t: dict, schema: dict) -> list[str]:
         hit = pat.search(body + " " + str(t.get("when", "")))
         if hit:
             errs.append(f"{tid}: contains {label} wording ({hit.group(0)!r}); see hr/GUIDELINES.md")
+    for m in t.get("method", []) if isinstance(t.get("method"), list) else []:
+        if isinstance(m, str) and not METHOD_REASON.search(m):
+            errs.append(f"{tid}: a method line gives no reason (because, so that, to avoid …): {c.clip(m, 70)}")
     for sentence in re.split(r"(?<=[.!?])\s+", body):
         if ABSOLUTE.search(sentence) and not REASON.search(sentence):
             errs.append(f"{tid}: an absolute rule has no reason in the same sentence: {c.clip(sentence, 70)}")
@@ -510,7 +521,12 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
         lines += ["", "How:"] + [f"- {x}" for x in constraints]
     if (t or {}).get("pitfalls"):
         lines.append("Watch for: " + " ".join(p.rstrip(".") + "." for p in t["pitfalls"][:2]))
-    if check:
+    if check and base_agent in NO_SHELL:
+        # This helper cannot run a command (CB-205 R3): the lead runs the
+        # check on settle, so the brief asks for work that will pass it.
+        done = (t or {}).get("done_check", "").replace("{check}", "the lead's check").strip()
+        done = (done + " " if done else "") + f"The lead runs `{check}` when you return; leave the work so that it passes."
+    elif check:
         done = (t or {}).get("done_check", "{check} exits 0.").replace("{check}", f"`{check}`")
         if check not in done:
             done += f" Run `{check}` yourself and report its last line."
@@ -521,7 +537,8 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
     block = tier_block(model_alias, effort, base_agent)
     if block:
         lines += ["", block]
-    if base_agent in READS_OUTSIDE:
+    if base_agent in READS_OUTSIDE or (t or {}).get("role") in READS_OUTSIDE:
+        # Keyed on the role too: a reviewer doing research reads outside pages (CB-205 R12).
         lines += ["", HYGIENE]
     ret = (t or {}).get("return_contract") or "At most 200 words: what you did, the check's result, anything you assumed."
     lines += ["", f"<return>{ret} Longer notes go in {notes_path}. {HONESTY}</return>"]
@@ -601,7 +618,9 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     else:
         chosen = select(task, rack, state, hc, family, risk, base_agent)
     t = chosen[0]["template"] if chosen else None
-    agent = (t or {}).get("base_agent") or base_agent or ("builder" if family == "software" else "researcher")
+    # A plain helper given a command check needs a shell to run it: builder.
+    # Researcher (no Bash) is the default only for checkless non-software work.
+    agent = (t or {}).get("base_agent") or base_agent or ("builder" if family == "software" or check else "researcher")
     role = (t or {}).get("role") or ROLE_OF[agent]
     # The riskier of what the lead said and what this kind of work usually is.
     if t and t.get("risk") in RISKS and RISKS.index(t["risk"]) > RISKS.index(risk):
@@ -928,6 +947,23 @@ def cmd_report(args) -> int:
 PLAIN_IDS = ("none", "plain")
 
 
+def _overlapping(data: dict) -> set[str]:
+    """Ids of tickets the schedule runs beside another one. A ticket counts as
+    parallel only when the plan really runs it so, not by default (review
+    item: staff treated every ticket as parallel)."""
+    from . import schedule
+    try:
+        tl = schedule.schedule(data, anneal=False)["timeline"]
+    except Exception:  # no estimates or a bad plan: nothing is known to overlap
+        return set()
+    out = set()
+    for a in tl:
+        for b in tl:
+            if a is not b and a["start"] < b["end"] and b["start"] < a["end"]:
+                out.add(a["id"])
+    return out
+
+
 def cmd_staff(args) -> int:
     """Plan the helpers for every open ticket in a plan file and total the payroll."""
     data = c.read_json(args.plan, None)
@@ -944,6 +980,7 @@ def cmd_staff(args) -> int:
         state = {}
     total, rows = 0, []
     from .schedule import normalise_ticket
+    side_by_side = _overlapping(data)
     for t in data["tickets"]:
         if not isinstance(t, dict) or t.get("status") == "done":
             continue
@@ -954,7 +991,8 @@ def cmd_staff(args) -> int:
         agent = (tpl or {}).get("base_agent", "builder")
         model = ((models_cfg.get("roles") or {}).get(ROLE_OF[agent]) or {}).get("model", "sonnet")
         pay = wage(t.get("size") or (tpl or {}).get("size") or "M", model, (tpl or {}).get("id"), state, hc, models_cfg)
-        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), bool(t.get("parallel", True)), hc)
+        par = t["parallel"] if isinstance(t.get("parallel"), bool) else str(t.get("id")) in side_by_side
+        go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), par, hc)
         rows.append((str(t.get("id")), (tpl or {}).get("id") or "plain", agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
         total += pay["tokens"] if go else 0
     if not rows:

@@ -31,7 +31,7 @@ Plus three to five `method` lines: concrete, checkable practices, each with its 
 | `scope_rule` | owns / does not touch / at the edge | 40 words |
 | `done_check` | what proves it; may contain `{check}` for the task's own command | 40 words |
 | `return_contract` | order, word cap, overflow file, verified versus unverified | 60 words |
-| `pitfalls` | the failure modes of agents in this work | 1 to 3, 22 words each |
+| `pitfalls` | the failure modes of agents in this work, most damaging first | 1 or 2 (a brief renders two), 22 words each |
 | `needs` | what the lead must supply for the brief to be complete | up to 5 |
 | `size` | S, M, L or XL: the starting wage band | |
 | `risk` | trivial, standard, high, one-way-door | |

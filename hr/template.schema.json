@@ -16,7 +16,7 @@
     "scope_rule": {"type": "string", "max_words": 40},
     "done_check": {"type": "string", "max_words": 40},
     "return_contract": {"type": "string", "max_words": 60},
-    "pitfalls": {"type": "list", "min": 1, "max": 3, "item_max_words": 22},
+    "pitfalls": {"type": "list", "min": 1, "max": 2, "item_max_words": 22},
     "needs": {"type": "list", "max": 5, "optional": true},
     "size": {"type": "string", "enum": ["S", "M", "L", "XL"]},
     "risk": {"type": "string", "enum": ["trivial", "standard", "high", "one-way-door"]},
