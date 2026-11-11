@@ -479,7 +479,7 @@
       ],
       "est": 90,
       "accept": "python3 -m unittest tests.test_hr",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-211",

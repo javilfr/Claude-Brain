@@ -18,3 +18,33 @@
 {"task": "pon la fecha de hoy arriba del todo", "expect": [], "split": "dev"}
 {"task": "tell me a joke about cats", "expect": [], "split": "dev"}
 {"task": "finish up the rest and push it", "expect": [], "split": "dev"}
+{"task": "Book me a table for two on Friday somewhere nice and not too expensive", "expect": [], "split": "dev"}
+{"task": "Is it going to rain tomorrow in Madrid", "expect": [], "split": "dev"}
+{"task": "What should I get my mother for her birthday, she likes gardening", "expect": [], "split": "dev"}
+{"task": "Remind me what the capital of Australia is", "expect": [], "split": "dev"}
+{"task": "I'm feeling slow today, any tips to wake up", "expect": [], "split": "dev"}
+{"task": "Is there anything free to do with kids this weekend", "expect": [], "split": "dev"}
+{"task": "Tell me a story about a dragon who loves books", "expect": [], "split": "dev"}
+{"task": "How long should I boil an egg for a soft yolk", "expect": [], "split": "dev"}
+{"task": "Can you give a talk at my sister's wedding, just kidding, what do people usually say", "expect": [], "split": "dev"}
+{"task": "Write me a haiku about the sea", "expect": [], "split": "dev"}
+{"task": "Which is better for a cold, honey or lemon", "expect": [], "split": "dev"}
+{"task": "My neighbour's dog keeps barking at night, what can I do", "expect": [], "split": "dev"}
+{"task": "Pick up where we left off with the chat about holidays", "expect": [], "split": "dev"}
+{"task": "What happened in the news today", "expect": [], "split": "dev"}
+{"task": "I lost my keys again, where do people usually find them", "expect": [], "split": "dev"}
+{"task": "¿Qué tiempo va a hacer mañana en Sevilla?", "expect": [], "split": "dev"}
+{"task": "Recomiéndame una película para ver esta noche con mi pareja", "expect": [], "split": "dev"}
+{"task": "¿Cuánto cuesta un billete de tren a Barcelona más o menos?", "expect": [], "split": "dev"}
+{"task": "Cuéntame un chiste de gatos", "expect": [], "split": "dev"}
+{"task": "¿Qué le regalo a mi padre por su cumpleaños?", "expect": [], "split": "dev"}
+{"task": "Estoy cansado, ¿qué ceno hoy que sea rápido?", "expect": [], "split": "dev"}
+{"task": "¿Cuál es mejor, el té verde o el negro?", "expect": [], "split": "dev"}
+{"task": "Mañana seguimos hablando de las vacaciones", "expect": [], "split": "dev"}
+{"task": "Dime algo bonito para empezar el día", "expect": [], "split": "dev"}
+{"task": "¿Qué pasó ayer en el partido del Madrid?", "expect": [], "split": "dev"}
+{"task": "Hazme una lista de la compra para la semana", "expect": [], "split": "dev"}
+{"task": "¿Cómo se dice mariposa en francés?", "expect": [], "split": "dev"}
+{"task": "Mi vecino pone la música muy alta, ¿qué hago?", "expect": [], "split": "dev"}
+{"task": "¿Me recomiendas un libro para el verano?", "expect": [], "split": "dev"}
+{"task": "Ayúdame a pensar un plan para el sábado", "expect": [], "split": "dev"}

@@ -670,12 +670,14 @@ class RealRack(unittest.TestCase):
         self.assertEqual(review[0]["id"], "back-translation-checker")
 
     def test_vague_requests_rarely_get_a_template(self):
-        """evals/hr_negatives.jsonl: 20 requests no template fits (dev, used
-        for tuning). Before CB-204 the selector chose a template for 14."""
+        """evals/hr_negatives.jsonl: requests no template fits (dev, used for
+        tuning). The first 20: before CB-204 the selector chose a template for
+        14, after it 12. CB-210 added 30 errands and small talk (24 of 50)."""
         rack = hr.load_rack(ROOT)
         rows = c.read_jsonl(ROOT / "evals" / "hr_negatives.jsonl")
-        picked = sum(bool(hr.select(r["task"], rack)) for r in rows)
-        self.assertLessEqual(picked, 12)
+        self.assertEqual(len(rows), 50)
+        self.assertLessEqual(sum(bool(hr.select(r["task"], rack)) for r in rows[:20]), 12)
+        self.assertLessEqual(sum(bool(hr.select(r["task"], rack)) for r in rows), 24)
 
     def test_selection_on_the_second_held_out_set_does_not_get_worse(self):
         """evals/hr_golden_2.jsonl: 100 requests written from role lines only
@@ -693,6 +695,36 @@ class RealRack(unittest.TestCase):
             top3 += any(i in r["expect"] for i in ids[:3])
         self.assertGreaterEqual(top1 / len(rows), 0.42, f"top-1 {top1}")
         self.assertGreaterEqual(top3 / len(rows), 0.52, f"top-3 {top3}")
+
+    def test_selection_on_the_third_held_out_set_does_not_get_worse(self):
+        """evals/hr_golden_3.jsonl (CB-210): 100 requests from role lines only
+        plus 20 negatives, never used for tuning. Measured at the default:
+        top-1 0.47, top-3 0.58, 9 of 20 negatives given a template. Looked at
+        twice with the expansion on (docs/BUILD_STATUS.md, CB-210)."""
+        rack = hr.load_rack(ROOT)
+        rows = c.read_jsonl(ROOT / "evals" / "hr_golden_3.jsonl")
+        pos = [r for r in rows if r["expect"]]
+        self.assertEqual((len(pos), len(rows) - len(pos)), (100, 20))
+        top1 = top3 = 0
+        for r in pos:
+            ids = [h["id"] for h in hr.select(r["task"], rack)]
+            top1 += bool(ids[:1] and ids[0] in r["expect"])
+            top3 += any(i in r["expect"] for i in ids[:3])
+        self.assertGreaterEqual(top1 / 100, 0.44, f"top-1 {top1}")
+        self.assertGreaterEqual(top3 / 100, 0.55, f"top-3 {top3}")
+        self.assertLessEqual(sum(bool(hr.select(r["task"], rack)) for r in rows if not r["expect"]), 9)
+
+    def test_expansion_maps_everyday_words_and_never_admits_on_one_hit(self):
+        self.assertIn("alignment", hr.expand("The logo sits too low, nudge it up"))
+        self.assertIn("conciliar", hr.expand("La lista del banco y la mía no cuadran"))
+        self.assertEqual(hr.expand("Tell me a joke"), "")
+        rack = hr.load_rack(ROOT)
+        on = {**hr.DEFAULT_CFG, "expand": True}
+        self.assertEqual(hr.select("Is it going to rain tomorrow in Madrid", rack, hc=on), [])
+        self.assertFalse(hr.DEFAULT_CFG["expand"])  # CB-210: did not clear its bar
+        task = "The logo sits a tiny bit too low next to the menu, nudge it up so they line up"
+        self.assertEqual(hr.select(task, rack, hc={**on, "expand": False}), hr.select(task, rack))
+        self.assertIn("visual-polish-measurer", [h["id"] for h in hr.select(task, rack, hc=on)][:3])
 
     def test_owner_style_requests_find_a_sensible_template(self):
         rack = hr.load_rack(ROOT)

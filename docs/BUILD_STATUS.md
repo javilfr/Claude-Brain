@@ -300,3 +300,26 @@ Still unproven, or waiting on the owner:
 - `main` was reverted by another session at 01:09 UTC (`NEEDS_YOU.md` item 8). This session's branch has not been merged, and its inbox has not been consolidated, because the single-writer rule refuses while the branch is behind `origin/main`.
 
 What this session cost (`brain ledger` at close): see the last commit's session record; about 40 helpers, most of them the 35 small evaluation trials on Sonnet.
+
+## CB-210 result: third held-out set and selection (2026-11-11)
+
+**Set.** `evals/hr_golden_3.jsonl`: 100 requests (60 English, 40 Spanish, 10 per group) and 20 negatives (10 + 10), written by a helper who saw only each template's id, group, name and role line and was told not to reuse the role line's distinctive words (hire `h-20261111-0345ce`, check passed, 17,370 of 24,000 tokens). Committed alone in `c9e27a7` before any change. Each row has one expected id; the helper flagged three close calls (back-translation-checker or translator, legal-terms-translator or translator, data-reconciler or exploratory-analyst).
+
+**Pre-set rule** (from the ticket): keep a change only if top-3 on the new set rises by 3 points or more without more false picks.
+
+**Change tried.** A query expansion (`hr.CONCEPTS`, `hr.expand`): about 250 everyday English and Spanish words and phrases mapped to the rack's own vocabulary ("nudge it up" to alignment, "no cuadran" to conciliar), built from misses on dev, the first two held-out sets and general phrasing per kind of work. Tuned on those sets plus `evals/hr_negatives.jsonl`, which grew from 20 to 50 dev negatives (30 errands and small talk, written by the lead).
+
+| Set | Baseline | Look 1: expansion on | Look 2: expansion on, admission on own words |
+|---|---|---|---|
+| dev, top-1 / top-3 | 0.94 / 0.98 | 0.92 / 0.98 | 0.95 / 0.98 |
+| held-out 1 | 0.81 / 0.92 | 0.80 / 0.92 | 0.81 / 0.92 |
+| held-out 2 (now tuned on) | 0.45 / 0.57 | 0.66 / 0.82 | 0.61 / 0.73 |
+| dev negatives given a template | 24 of 50 | 28 of 50 | 24 of 50 |
+| **held-out 3, top-1 / top-3** | **0.47 / 0.58** | **0.52 / 0.65** | **0.50 / 0.60** |
+| **held-out 3 negatives given a template** | **9 of 20** | **10 of 20** | **9 of 20** |
+
+**Verdict: not kept.** Look 1 cleared the 3-point bar (+7) but gave one more false pick; look 2 kept the false picks level but rose only 2 points. The new set has now been looked at twice. The expansion stays in the code switched off (`hr.expand`, default false; `ml_config.json` `hr.expand: true` turns it on), so the default selector is identical to the baseline on every set. Admission now counts the request's own words, which changes nothing while expansion is off.
+
+**What this says.** Wording alone separates poorly: on the dev sets, every admission setting that cuts false picks also cuts correct top-3 picks (a grid of 288 settings: 28 false picks at 272 of 300 top-3, 12 at 206). The bigger gain on held-out 2 than on held-out 3 is the size of the overfit. False picks cost little today, because `hr hire` writes a plain brief unless a template is named (CB-203). A further gain more likely needs a different signal than more word lists, for example the lead naming the template, which CB-211 tests.
+
+**Gate:** 438 tests OK; `hr audit` sound.
