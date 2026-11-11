@@ -1,0 +1,61 @@
+{
+  "id": "cb211-api-fallback",
+  "title": "Price client: fall back to a second service, with a cache",
+  "family": "software",
+  "task_class": "feature",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "client.py reads prices from services/primary.py only. Make get_price(sku) fall back to services/backup.py when the primary raises any error or times out (the fakes raise TimeoutError), passing timeout=2 to every service call. Cache each successful price per sku in memory so repeat calls make no service call, but never cache a failure. If neither service gives a price, raise PriceUnavailable (already defined in client.py). clear_cache() must empty the cache. Do not change the services/ modules; I test with my own failing fakes in their place. `python3 -m unittest test_client` is a quick check.",
+  "setup": [
+    {
+      "path": "client.py",
+      "content": "\"\"\"Price lookups for the shop front end.\"\"\"\nfrom services import primary\n\n\nclass PriceUnavailable(Exception):\n    \"\"\"No service could give a price for the sku.\"\"\"\n\n\ndef get_price(sku):\n    return primary.get_price(sku, timeout=2)\n\n\ndef clear_cache():\n    pass\n"
+    },
+    {
+      "path": "test_client.py",
+      "content": "import unittest\n\nimport client\n\n\nclass ClientTests(unittest.TestCase):\n    def setUp(self):\n        client.clear_cache()\n\n    def test_known_sku(self):\n        self.assertEqual(client.get_price(\"A1\"), 10.0)\n\n    def test_second_call_same_answer(self):\n        self.assertEqual(client.get_price(\"B2\"), client.get_price(\"B2\"))\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    {
+      "path": "services/__init__.py",
+      "content": ""
+    },
+    {
+      "path": "services/primary.py",
+      "content": "\"\"\"Fake primary price service (the real one is a slow HTTP API).\"\"\"\n\nPRICES = {\"A1\": 10.0, \"B2\": 24.5, \"C3\": 3.2}\n\n\nclass ServiceError(Exception):\n    pass\n\n\ndef get_price(sku, timeout):\n    \"\"\"Price for a sku. Raises KeyError for an unknown sku, TimeoutError when too slow.\"\"\"\n    return PRICES[sku]\n"
+    },
+    {
+      "path": "services/backup.py",
+      "content": "\"\"\"Fake backup price service; same interface as primary, slightly stale data.\"\"\"\n\nPRICES = {\"A1\": 9.5, \"B2\": 24.5, \"C3\": 3.2, \"D4\": 7.0}\n\n\nclass ServiceError(Exception):\n    pass\n\n\ndef get_price(sku, timeout):\n    \"\"\"Price for a sku. Raises KeyError for an unknown sku, TimeoutError when too slow.\"\"\"\n    return PRICES[sku]\n"
+    }
+  ],
+  "grader": {
+    "type": "command",
+    "command": "{python} check_client.py",
+    "files": [
+      {
+        "path": "check_client.py",
+        "content": "\"\"\"Grader: client.py against fake services the grader controls.\"\"\"\nimport sys\nimport unittest\n\nimport client\nfrom services import backup, primary\n\n\ndef setup_fakes(p_mode=\"ok\", b_mode=\"ok\"):\n    primary.MODE, backup.MODE = p_mode, b_mode\n    primary.PRICES.clear()\n    backup.PRICES.clear()\n    primary.PRICES.update({\"A1\": 10.0, \"B2\": 24.5, \"ZZ\": 1.0})\n    backup.PRICES.update({\"A1\": 9.5, \"B2\": 24.0, \"C3\": 3.2})\n    primary.CALLS.clear()\n    backup.CALLS.clear()\n    client.clear_cache()\n\n\nclass FallbackTests(unittest.TestCase):\n    def setUp(self):\n        setup_fakes()\n\n    def test_primary_first(self):\n        self.assertEqual(client.get_price(\"A1\"), 10.0)\n        self.assertEqual(backup.CALLS, [])\n        self.assertEqual(primary.CALLS, [(\"A1\", 2)])\n\n    def test_cache_hit(self):\n        client.get_price(\"A1\")\n        self.assertEqual(client.get_price(\"A1\"), 10.0)\n        self.assertEqual(len(primary.CALLS), 1)\n        self.assertEqual(client.get_price(\"B2\"), 24.5)\n        self.assertEqual(len(primary.CALLS), 2)\n\n    def test_error_falls_back(self):\n        primary.MODE = \"error\"\n        self.assertEqual(client.get_price(\"A1\"), 9.5)\n        self.assertEqual(backup.CALLS, [(\"A1\", 2)])\n\n    def test_timeout_falls_back(self):\n        primary.MODE = \"timeout\"\n        self.assertEqual(client.get_price(\"B2\"), 24.0)\n\n    def test_other_exception_falls_back(self):\n        primary.MODE = \"weird\"\n        self.assertEqual(client.get_price(\"C3\"), 3.2)\n\n    def test_unknown_in_primary_uses_backup(self):\n        self.assertEqual(client.get_price(\"C3\"), 3.2)\n\n    def test_backup_result_is_cached(self):\n        primary.MODE = \"error\"\n        client.get_price(\"A1\")\n        self.assertEqual(client.get_price(\"A1\"), 9.5)\n        self.assertEqual(len(primary.CALLS), 1)\n        self.assertEqual(len(backup.CALLS), 1)\n\n    def test_both_fail(self):\n        primary.MODE, backup.MODE = \"error\", \"timeout\"\n        with self.assertRaises(client.PriceUnavailable):\n            client.get_price(\"A1\")\n        self.assertEqual((len(primary.CALLS), len(backup.CALLS)), (1, 1))\n\n    def test_unknown_everywhere(self):\n        with self.assertRaises(client.PriceUnavailable):\n            client.get_price(\"NOPE\")\n\n    def test_failure_is_not_cached(self):\n        primary.MODE, backup.MODE = \"error\", \"error\"\n        with self.assertRaises(client.PriceUnavailable):\n            client.get_price(\"A1\")\n        primary.MODE = \"ok\"\n        self.assertEqual(client.get_price(\"A1\"), 10.0)\n\n    def test_cache_survives_outage(self):\n        client.get_price(\"B2\")\n        primary.MODE, backup.MODE = \"error\", \"error\"\n        self.assertEqual(client.get_price(\"B2\"), 24.5)\n\n    def test_clear_cache(self):\n        client.get_price(\"A1\")\n        client.clear_cache()\n        primary.PRICES[\"A1\"] = 11.0\n        self.assertEqual(client.get_price(\"A1\"), 11.0)\n\n    def test_skus_cached_separately(self):\n        primary.MODE = \"error\"\n        self.assertEqual(client.get_price(\"A1\"), 9.5)\n        primary.MODE = \"ok\"\n        self.assertEqual(client.get_price(\"B2\"), 24.5)\n\n    def test_zero_price_is_a_price(self):\n        primary.PRICES[\"FREE\"] = 0\n        client.get_price(\"FREE\")\n        self.assertEqual(client.get_price(\"FREE\"), 0)\n        self.assertEqual(len(primary.CALLS), 1)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      {
+        "path": "services/__init__.py",
+        "content": ""
+      },
+      {
+        "path": "services/primary.py",
+        "content": "\"\"\"Grader fake: behaviour is set by the grader through MODE and PRICES.\"\"\"\nMODE = \"ok\"\nPRICES = {}\nCALLS = []\n\n\nclass ServiceError(Exception):\n    pass\n\n\ndef get_price(sku, timeout):\n    CALLS.append((sku, timeout))\n    if MODE == \"error\":\n        raise ServiceError(\"primary down\")\n    if MODE == \"timeout\":\n        raise TimeoutError(\"primary slow\")\n    if MODE == \"weird\":\n        raise RuntimeError(\"unexpected\")\n    return PRICES[sku]\n"
+      },
+      {
+        "path": "services/backup.py",
+        "content": "\"\"\"Grader fake: behaviour is set by the grader through MODE and PRICES.\"\"\"\nMODE = \"ok\"\nPRICES = {}\nCALLS = []\n\n\nclass ServiceError(Exception):\n    pass\n\n\ndef get_price(sku, timeout):\n    CALLS.append((sku, timeout))\n    if MODE == \"error\":\n        raise ServiceError(\"backup down\")\n    if MODE == \"timeout\":\n        raise TimeoutError(\"backup slow\")\n    if MODE == \"weird\":\n        raise RuntimeError(\"unexpected\")\n    return PRICES[sku]\n"
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "client.py",
+      "content": "\"\"\"Price lookups for the shop front end.\"\"\"\nfrom services import backup, primary\n\n\nclass PriceUnavailable(Exception):\n    \"\"\"No service could give a price for the sku.\"\"\"\n\n\n_cache = {}\n\n\ndef get_price(sku):\n    if sku in _cache:\n        return _cache[sku]\n    last = None\n    for service in (primary, backup):\n        try:\n            price = service.get_price(sku, timeout=2)\n        except Exception as e:  # service error, timeout, unknown sku: try the next one\n            last = e\n            continue\n        _cache[sku] = price\n        return price\n    raise PriceUnavailable(sku) from last\n\n\ndef clear_cache():\n    _cache.clear()\n"
+    }
+  ],
+  "null": [],
+  "notes": "Grader replaces services/primary.py and backup.py with counting fakes whose mode it sets at run time: error, timeout, unexpected exception, unknown sku, both failing, recovery after failure, cache hits, backup results cached, a zero price. Null is the untouched client, which has no fallback or cache."
+}

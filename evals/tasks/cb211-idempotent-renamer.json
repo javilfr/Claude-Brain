@@ -1,0 +1,53 @@
+{
+  "id": "cb211-idempotent-renamer",
+  "title": "Date-based photo renamer, dry-run, safe to run twice",
+  "family": "operations",
+  "task_class": "script",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "I have a folder of phone photos named like IMG_20230415_120301.jpg or scan 2021_12_31.jpg. Write rename_photos.py (standard library only), run as `python3 rename_photos.py FOLDER [--dry-run]`, that renames each photo to the date in its name, YYYY-MM-DD plus the extension in lower case. When several photos share a date, the later ones in name order get -2, -3 and so on, and nothing is ever overwritten; a file already named that way is left alone. Files with no valid date, and sub-folders, stay untouched. --dry-run prints what it would do and changes nothing. It runs from cron, so a second run must be harmless. photos/ has a few samples to try it on.",
+  "setup": [
+    {
+      "path": "photos/IMG_20230415_120301.jpg",
+      "content": ""
+    },
+    {
+      "path": "photos/IMG_20230415_180000.JPG",
+      "content": ""
+    },
+    {
+      "path": "photos/scan 2021_12_31.jpg",
+      "content": ""
+    },
+    {
+      "path": "photos/holiday-2022-07-04-beach.png",
+      "content": ""
+    },
+    {
+      "path": "photos/IMG_20231345.jpg",
+      "content": ""
+    },
+    {
+      "path": "photos/notes.txt",
+      "content": ""
+    }
+  ],
+  "grader": {
+    "type": "command",
+    "command": "{python} check_rename.py",
+    "files": [
+      {
+        "path": "check_rename.py",
+        "content": "\"\"\"Grader: run rename_photos.py on a fixture folder, dry then real then again.\"\"\"\nimport subprocess\nimport sys\nimport tempfile\nfrom pathlib import Path\n\nSCRIPT = Path(\"rename_photos.py\").resolve()\nFILES = [\n    \"IMG_20230415_120301.jpg\", \"IMG_20230415_180000.JPG\", \"2023-04-15.jpg\",\n    \"holiday-2022-07-04-beach.png\", \"scan 2021_12_31.jpg\", \"VID_20200229_1.mp4\",\n    \"IMG_20231345.jpg\", \"notes.txt\", \"IMG_20190101_a.jpeg\", \"IMG_20190101_b.jpeg\",\n]\nWANT = sorted([\n    \"2023-04-15.jpg\", \"2023-04-15-2.jpg\", \"2023-04-15-3.jpg\", \"2022-07-04.png\",\n    \"2021-12-31.jpg\", \"2020-02-29.mp4\", \"IMG_20231345.jpg\", \"notes.txt\",\n    \"2019-01-01.jpeg\", \"2019-01-01-2.jpeg\",\n])\n\n\ndef snap(root):\n    return sorted((str(p.relative_to(root)), p.read_bytes() if p.is_file() else b\"<dir>\")\n                  for p in root.rglob(\"*\"))\n\n\ndef run(*args):\n    r = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, timeout=30)\n    if r.returncode:\n        sys.exit(f\"exit {r.returncode} for {args}: {r.stderr.strip()[-100:]}\")\n    return r\n\n\nwith tempfile.TemporaryDirectory() as tmp:\n    root = Path(tmp) / \"pics\"\n    (root / \"sub\").mkdir(parents=True)\n    for name in FILES:\n        (root / name).write_text(\"content of \" + name)\n    (root / \"sub\" / \"IMG_20230101.jpg\").write_text(\"nested\")\n    before = snap(root)\n    run(str(root), \"--dry-run\")\n    if snap(root) != before:\n        sys.exit(\"--dry-run changed the folder\")\n    run(str(root))\n    got = sorted(p.name for p in root.iterdir() if p.is_file())\n    if got != WANT:\n        sys.exit(f\"wrong names: {sorted(set(got) ^ set(WANT))}\")\n    if (root / \"2023-04-15.jpg\").read_text() != \"content of 2023-04-15.jpg\":\n        sys.exit(\"an existing dated file was overwritten\")\n    if (root / \"2023-04-15-2.jpg\").read_text() != \"content of IMG_20230415_120301.jpg\":\n        sys.exit(\"collision order is not by original name\")\n    if (root / \"sub\" / \"IMG_20230101.jpg\").read_text() != \"nested\" or len(list(root.glob(\"sub/*\"))) != 1:\n        sys.exit(\"sub-folder was touched\")\n    once = snap(root)\n    run(str(root))\n    if snap(root) != once:\n        sys.exit(\"second run changed the folder\")\n    run(str(root), \"--dry-run\")\n    if snap(root) != once:\n        sys.exit(\"dry-run after rename changed the folder\")\nprint(\"renamer ok\")\n"
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "rename_photos.py",
+      "content": "#!/usr/bin/env python3\n\"\"\"Rename photos to YYYY-MM-DD[-N].ext using the date found in their name.\"\"\"\nimport argparse\nimport datetime\nimport re\nimport sys\nfrom pathlib import Path\n\nDATE = re.compile(r\"(?<!\\d)((?:19|20)\\d{2})[-_ ]?(\\d{2})[-_ ]?(\\d{2})(?!\\d)\")\nDONE = re.compile(r\"^\\d{4}-\\d{2}-\\d{2}(-\\d+)?\\.[a-z0-9]+$\")\n\n\ndef find_date(name):\n    for m in DATE.finditer(name):\n        try:\n            return datetime.date(int(m[1]), int(m[2]), int(m[3]))\n        except ValueError:\n            continue\n    return None\n\n\ndef plan(folder):\n    names = sorted(p.name for p in folder.iterdir() if p.is_file())\n    taken = set(names)\n    moves = []\n    for name in names:\n        if DONE.match(name):\n            continue\n        day = find_date(name)\n        if day is None:\n            continue\n        ext = Path(name).suffix.lower()\n        n, new = 1, day.isoformat() + ext\n        while new in taken:\n            n += 1\n            new = f\"{day.isoformat()}-{n}{ext}\"\n        taken.add(new)\n        moves.append((name, new))\n    return moves\n\n\ndef main(argv=None):\n    ap = argparse.ArgumentParser(description=__doc__)\n    ap.add_argument(\"folder\")\n    ap.add_argument(\"--dry-run\", action=\"store_true\")\n    args = ap.parse_args(argv)\n    folder = Path(args.folder)\n    if not folder.is_dir():\n        print(f\"not a folder: {folder}\", file=sys.stderr)\n        return 2\n    for old, new in plan(folder):\n        print(f\"{old} -> {new}\")\n        if not args.dry_run:\n            (folder / old).rename(folder / new)\n    return 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
+    }
+  ],
+  "null": [],
+  "notes": "Grader builds its own fixture (collisions with an existing dated file, upper-case extension, leap day, invalid date, nested folder), runs dry-run, real run, a second run and checks every outcome. Null is the untouched setup: no script."
+}

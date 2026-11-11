@@ -1,0 +1,49 @@
+{
+  "id": "cb211-flaky-bug",
+  "title": "Order-dependent test failure: fix it and add a regression test",
+  "family": "software",
+  "task_class": "bugfix",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "Running `python3 -m unittest test_report` fails on one test, yet that test passes when I run it alone, and I suspect the code, not the tests. Find the cause in report.py and fix it there; do not edit test_report.py. Then add test_report_regression.py with a unittest that fails on the original report.py and passes on your fixed one; I will run it against both.",
+  "setup": [
+    {
+      "path": "report.py",
+      "content": "\"\"\"Small helpers for summarising sensor readings.\"\"\"\n\n\ndef summarise(readings, flags=[]):\n    \"\"\"Return count, mean and the readings above 100 (flags) for a list of numbers.\"\"\"\n    for value in readings:\n        if value > 100:\n            flags.append(value)\n    mean = sum(readings) / len(readings) if readings else 0\n    return {\"count\": len(readings), \"mean\": mean, \"flags\": flags}\n\n\nclass Tally:\n    \"\"\"Running record of the values seen by one sensor.\"\"\"\n\n    def __init__(self, name, history=[]):\n        self.name = name\n        self.history = history\n\n    def record(self, value):\n        self.history.append(value)\n\n    def total(self):\n        return sum(self.history)\n\n    def latest(self):\n        return self.history[-1] if self.history else None\n"
+    },
+    {
+      "path": "test_report.py",
+      "content": "import unittest\n\nfrom report import Tally, summarise\n\n\nclass SummariseTests(unittest.TestCase):\n    def test_a_flags_high_readings(self):\n        self.assertEqual(summarise([50, 120])[\"flags\"], [120])\n\n    def test_b_other_batch(self):\n        self.assertEqual(summarise([130, 10])[\"flags\"], [130])\n\n    def test_mean(self):\n        self.assertEqual(summarise([2, 4])[\"mean\"], 3)\n\n\nclass TallyTests(unittest.TestCase):\n    def test_total(self):\n        t = Tally(\"north\")\n        t.record(2)\n        t.record(5)\n        self.assertEqual(t.total(), 7)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    }
+  ],
+  "grader": {
+    "type": "command",
+    "command": "{python} check_flaky.py",
+    "files": [
+      {
+        "path": "check_flaky.py",
+        "content": "\"\"\"Grader: the code is order-independent, and the helper's regression test fails on the original code.\"\"\"\nimport re\nimport shutil\nimport subprocess\nimport sys\nimport tempfile\nimport unittest\nfrom pathlib import Path\n\nHERE = Path.cwd()\nREG = \"test_report_regression.py\"\n\n\nclass Behaviour(unittest.TestCase):\n    def setUp(self):\n        import report\n        self.report = report\n\n    def test_flags_do_not_leak(self):\n        r = self.report\n        self.assertEqual(r.summarise([120])[\"flags\"], [120])\n        self.assertEqual(r.summarise([130, 5])[\"flags\"], [130])\n        self.assertEqual(r.summarise([1])[\"flags\"], [])\n\n    def test_history_does_not_leak(self):\n        r = self.report\n        a = r.Tally(\"a\")\n        a.record(4)\n        b = r.Tally(\"b\")\n        self.assertEqual(b.total(), 0)\n        self.assertIsNone(b.latest())\n        self.assertEqual(a.history, [4])\n\n    def test_caller_lists_still_used(self):\n        r = self.report\n        mine = []\n        out = r.summarise([101, 5], mine)\n        self.assertEqual(mine, [101])\n        self.assertEqual(out[\"flags\"], [101])\n        hist = [1, 2]\n        t = r.Tally(\"c\", hist)\n        t.record(3)\n        self.assertEqual(hist, [1, 2, 3])\n\n    def test_unchanged_results(self):\n        r = self.report\n        self.assertEqual(r.summarise([]), {\"count\": 0, \"mean\": 0, \"flags\": []})\n        self.assertEqual(r.summarise([2, 4])[\"mean\"], 3)\n\n\ndef run_regression(report_source):\n    \"\"\"Run the helper's regression test against a given report.py; return (exit code, output).\"\"\"\n    with tempfile.TemporaryDirectory() as tmp:\n        work = Path(tmp)\n        shutil.copy(HERE / REG, work / REG)\n        (work / \"report.py\").write_text(report_source, encoding=\"utf-8\")\n        p = subprocess.run([sys.executable, \"-m\", \"unittest\", \"-v\", \"test_report_regression\"],\n                           cwd=work, capture_output=True, text=True, timeout=60)\n        return p.returncode, p.stdout + p.stderr\n\n\ndef main():\n    result = unittest.main(module=__name__, exit=False, argv=[\"x\"]).result\n    if not result.wasSuccessful():\n        sys.exit(\"behaviour tests fail on the produced report.py\")\n    # order independence of the existing tests, run in reverse and twice over\n    for names in ([\"TallyTests\", \"SummariseTests\"],):\n        for order in (names, names[::-1]):\n            p = subprocess.run([sys.executable, \"-c\",\n                                \"import unittest,test_report as t;s=unittest.TestSuite();\"\n                                f\"[s.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(getattr(t,n))) for n in {order}];\"\n                                \"s.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(t.SummariseTests));\"\n                                \"r=unittest.TextTestRunner(verbosity=0).run(s);raise SystemExit(not r.wasSuccessful())\"],\n                               capture_output=True, text=True, timeout=60)\n            if p.returncode:\n                sys.exit(\"existing tests fail when run in another order\")\n    if not (HERE / REG).is_file():\n        sys.exit(f\"{REG} does not exist\")\n    fixed = (HERE / \"report.py\").read_text(encoding=\"utf-8\")\n    code, text = run_regression(fixed)\n    m = re.search(r\"Ran (\\d+) test\", text)\n    if code or not m or int(m.group(1)) < 1:\n        sys.exit(\"the regression test does not pass (or has no tests) on the fixed report.py: \" + text.strip()[-120:])\n    code, text = run_regression(ORIGINAL)\n    if code == 0:\n        sys.exit(\"the regression test passes on the original report.py, so it does not catch the bug\")\n    if \"Error\" in text and \"ImportError\" in text:\n        sys.exit(\"the regression test fails on the original only because of an import problem\")\n    print(\"flaky bug fixed and regression test catches it\")\n\n\nORIGINAL = Path(\"report_original.py\").read_text(encoding=\"utf-8\")\n\nif __name__ == \"__main__\":\n    main()\n"
+      },
+      {
+        "path": "test_report.py",
+        "content": "import unittest\n\nfrom report import Tally, summarise\n\n\nclass SummariseTests(unittest.TestCase):\n    def test_a_flags_high_readings(self):\n        self.assertEqual(summarise([50, 120])[\"flags\"], [120])\n\n    def test_b_other_batch(self):\n        self.assertEqual(summarise([130, 10])[\"flags\"], [130])\n\n    def test_mean(self):\n        self.assertEqual(summarise([2, 4])[\"mean\"], 3)\n\n\nclass TallyTests(unittest.TestCase):\n    def test_total(self):\n        t = Tally(\"north\")\n        t.record(2)\n        t.record(5)\n        self.assertEqual(t.total(), 7)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      {
+        "path": "report_original.py",
+        "content": "\"\"\"Small helpers for summarising sensor readings.\"\"\"\n\n\ndef summarise(readings, flags=[]):\n    \"\"\"Return count, mean and the readings above 100 (flags) for a list of numbers.\"\"\"\n    for value in readings:\n        if value > 100:\n            flags.append(value)\n    mean = sum(readings) / len(readings) if readings else 0\n    return {\"count\": len(readings), \"mean\": mean, \"flags\": flags}\n\n\nclass Tally:\n    \"\"\"Running record of the values seen by one sensor.\"\"\"\n\n    def __init__(self, name, history=[]):\n        self.name = name\n        self.history = history\n\n    def record(self, value):\n        self.history.append(value)\n\n    def total(self):\n        return sum(self.history)\n\n    def latest(self):\n        return self.history[-1] if self.history else None\n"
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "report.py",
+      "content": "\"\"\"Small helpers for summarising sensor readings.\"\"\"\n\n\ndef summarise(readings, flags=None):\n    \"\"\"Return count, mean and the readings above 100 (flags) for a list of numbers.\"\"\"\n    if flags is None:\n        flags = []\n    for value in readings:\n        if value > 100:\n            flags.append(value)\n    mean = sum(readings) / len(readings) if readings else 0\n    return {\"count\": len(readings), \"mean\": mean, \"flags\": flags}\n\n\nclass Tally:\n    \"\"\"Running record of the values seen by one sensor.\"\"\"\n\n    def __init__(self, name, history=None):\n        self.name = name\n        self.history = [] if history is None else history\n\n    def record(self, value):\n        self.history.append(value)\n\n    def total(self):\n        return sum(self.history)\n\n    def latest(self):\n        return self.history[-1] if self.history else None\n"
+    },
+    {
+      "path": "test_report_regression.py",
+      "content": "import unittest\n\nfrom report import Tally, summarise\n\n\nclass Regression(unittest.TestCase):\n    def test_summarise_flags_independent(self):\n        summarise([150])\n        self.assertEqual(summarise([5])[\"flags\"], [])\n\n    def test_tally_history_independent(self):\n        Tally(\"a\").record(1)\n        self.assertEqual(Tally(\"b\").total(), 0)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    }
+  ],
+  "null": [],
+  "notes": "Bug: shared mutable default arguments in two places (summarise and Tally). Grader: behaviour tests on the produced report.py (both sites, caller-supplied lists still used), existing tests in another order, then runs the helper's regression test in a scratch folder against the produced file (must pass, at least one test) and a hidden copy of the original (must fail). Null is the untouched code, which fails the behaviour tests."
+}

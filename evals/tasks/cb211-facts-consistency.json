@@ -1,0 +1,185 @@
+{
+  "id": "cb211-facts-consistency",
+  "title": "Make three draft pages agree with facts.md",
+  "family": "knowledge",
+  "task_class": "consistency",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "facts.md is the confirmed set of facts for Harbour Studio. The three draft pages visit.md, groups.md and access.md contradict it in several places (hours, prices, numbers, contact details, accessibility). Change each draft so everything it says agrees with facts.md, and change nothing else: keep the wording, order and any statement facts.md does not cover. Do not edit facts.md. Before finishing, go through facts.md line by line against each page and list what you changed.",
+  "setup": [
+    {
+      "path": "facts.md",
+      "content": "# Harbour Studio: facts\n\nThese are the confirmed facts. Every public page must agree with them.\n\n- Address: 14 Mill Lane, Porthaven.\n- Phone: 01632 960 123.\n- Email: hello@harbourstudio.example\n- Opening hours: Tuesday to Saturday, 10:00 to 18:00. Closed on Sunday and Monday.\n- Adult ticket: 12 euros. Child ticket (under 12): 6 euros. Family ticket: 30 euros.\n- Annual pass: 40 euros.\n- Free entry on the first Saturday of every month.\n- Workshop capacity: 18 people.\n- Groups of 10 or more must book at least 7 days ahead.\n- Accessibility: a lift serves the first floor; the second floor is reached by stairs only.\n- Founded in 1998.\n"
+    },
+    {
+      "path": "visit.md",
+      "content": "# Visit Harbour Studio\n\nHarbour Studio is a community art space that was founded in 1989 and sits right by the quay. Come and see the current exhibition, join a workshop, or just have a coffee in the courtyard.\n\nWe are open Monday to Saturday, 9:00 to 17:00, and closed on Sunday. The last entry is thirty minutes before closing.\n\nAn adult ticket costs 10 euros. Children under 12 pay 6 euros, and a family ticket is 30 euros. Parking in the Quay Street car park costs 10 euros for the whole day, so we suggest arriving on foot or by bus.\n\nYou can find us at 14 Mill Lane, Porthaven. If you get lost, ring us on 01632 960 132 and someone will point you the right way.\n\nThe courtyard cafe serves soup and sandwiches until 15:00 every open day.\n"
+    },
+    {
+      "path": "groups.md",
+      "content": "# Groups and workshops\n\nSchools, clubs and companies are very welcome at Harbour Studio. Our workshop room holds up to 20 people, and every group gets a guide for the first half hour.\n\nGroups of 10 or more must book at least 14 days ahead, so that we can staff the room. Write to hello@harbourstudios.example with your dates and the size of your party.\n\nPrices for groups are the same as for individuals: 12 euros for adults and 6 euros for children under 12. A family ticket is 35 euros. If you plan to come often, ask about the annual pass at 40 euros.\n\nTea and coffee for a group can be arranged for 2 euros a head. We can open for a private evening workshop by arrangement, subject to staff availability.\n"
+    },
+    {
+      "path": "access.md",
+      "content": "# Access and planning your day\n\nWe want everyone to enjoy Harbour Studio. A lift serves the first and second floors, and wheelchairs can be borrowed at the desk free of charge.\n\nThe studio is at 41 Mill Lane, Porthaven, a flat five-minute walk from the bus station. Assistance dogs are welcome throughout the building.\n\nEntry is free on the last Saturday of every month. The rest of the time, an annual pass costs 45 euros and pays for itself in four visits. Children under 14 pay 5 euros.\n\nThe quietest time to visit is Tuesday morning. For questions about access, phone 01632 960 123 or ask at the front desk. Seating is available on every floor.\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "contains_all",
+        "path": "facts.md",
+        "items": [
+          "14 Mill Lane",
+          "01632 960 123",
+          "hello@harbourstudio.example",
+          "founded in 1998",
+          "first Saturday",
+          "18 people",
+          "7 days ahead",
+          "12 euros",
+          "40 euros"
+        ]
+      },
+      {
+        "type": "file_exists",
+        "path": "visit.md"
+      },
+      {
+        "type": "contains_all",
+        "path": "visit.md",
+        "items": [
+          "founded in 1998",
+          "Tuesday to Saturday, 10:00 to 18:00",
+          "adult ticket costs 12 euros",
+          "960 123",
+          "Parking in the Quay Street car park costs 10 euros for the whole day",
+          "courtyard cafe serves soup and sandwiches until 15:00",
+          "last entry is thirty minutes before closing",
+          "6 euros",
+          "family ticket is 30 euros",
+          "14 Mill Lane, Porthaven"
+        ]
+      },
+      {
+        "type": "contains_none",
+        "path": "visit.md",
+        "items": [
+          "founded in 1989",
+          "9:00 to 17:00",
+          "monday to saturday",
+          "adult ticket costs 10 euros",
+          "960 132"
+        ]
+      },
+      {
+        "type": "file_exists",
+        "path": "groups.md"
+      },
+      {
+        "type": "contains_all",
+        "path": "groups.md",
+        "items": [
+          "holds up to 18 people",
+          "at least 7 days ahead",
+          "hello@harbourstudio.example",
+          "family ticket is 30 euros",
+          "Tea and coffee for a group can be arranged for 2 euros a head",
+          "12 euros for adults and 6 euros for children under 12",
+          "annual pass at 40 euros",
+          "private evening workshop by arrangement"
+        ]
+      },
+      {
+        "type": "contains_none",
+        "path": "groups.md",
+        "items": [
+          "holds up to 20",
+          "14 days",
+          "harbourstudios.example",
+          "ticket is 35 euros"
+        ]
+      },
+      {
+        "type": "file_exists",
+        "path": "access.md"
+      },
+      {
+        "type": "contains_all",
+        "path": "access.md",
+        "items": [
+          "14 Mill Lane, Porthaven",
+          "first Saturday of every month",
+          "annual pass costs 40 euros",
+          "under 12 pay 6 euros",
+          "wheelchairs can be borrowed at the desk free of charge",
+          "Assistance dogs are welcome throughout the building",
+          "The quietest time to visit is Tuesday morning",
+          "Seating is available on every floor",
+          "01632 960 123"
+        ]
+      },
+      {
+        "type": "contains_none",
+        "path": "access.md",
+        "items": [
+          "lift serves the first and second",
+          "41 mill lane",
+          "last saturday",
+          "costs 45 euros",
+          "under 14"
+        ]
+      },
+      {
+        "type": "regex",
+        "path": "visit.md",
+        "pattern": "closed on (sunday and monday|monday and sunday)",
+        "ignore_case": true
+      },
+      {
+        "type": "regex",
+        "path": "access.md",
+        "pattern": "(second floor[^.]*stairs|stairs[^.]*second floor)",
+        "ignore_case": true
+      },
+      {
+        "type": "regex",
+        "path": "access.md",
+        "pattern": "lift[^.]*first floor",
+        "ignore_case": true
+      },
+      {
+        "type": "max_words",
+        "path": "visit.md",
+        "n": 160
+      },
+      {
+        "type": "max_words",
+        "path": "groups.md",
+        "n": 140
+      },
+      {
+        "type": "max_words",
+        "path": "access.md",
+        "n": 150
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "visit.md",
+      "content": "# Visit Harbour Studio\n\nHarbour Studio is a community art space that was founded in 1998 and sits right by the quay. Come and see the current exhibition, join a workshop, or just have a coffee in the courtyard.\n\nWe are open Tuesday to Saturday, 10:00 to 18:00, and closed on Sunday and Monday. The last entry is thirty minutes before closing.\n\nAn adult ticket costs 12 euros. Children under 12 pay 6 euros, and a family ticket is 30 euros. Parking in the Quay Street car park costs 10 euros for the whole day, so we suggest arriving on foot or by bus.\n\nYou can find us at 14 Mill Lane, Porthaven. If you get lost, ring us on 01632 960 123 and someone will point you the right way.\n\nThe courtyard cafe serves soup and sandwiches until 15:00 every open day.\n"
+    },
+    {
+      "path": "groups.md",
+      "content": "# Groups and workshops\n\nSchools, clubs and companies are very welcome at Harbour Studio. Our workshop room holds up to 18 people, and every group gets a guide for the first half hour.\n\nGroups of 10 or more must book at least 7 days ahead, so that we can staff the room. Write to hello@harbourstudio.example with your dates and the size of your party.\n\nPrices for groups are the same as for individuals: 12 euros for adults and 6 euros for children under 12. A family ticket is 30 euros. If you plan to come often, ask about the annual pass at 40 euros.\n\nTea and coffee for a group can be arranged for 2 euros a head. We can open for a private evening workshop by arrangement, subject to staff availability.\n"
+    },
+    {
+      "path": "access.md",
+      "content": "# Access and planning your day\n\nWe want everyone to enjoy Harbour Studio. A lift serves the first floor (the second floor is reached by stairs only), and wheelchairs can be borrowed at the desk free of charge.\n\nThe studio is at 14 Mill Lane, Porthaven, a flat five-minute walk from the bus station. Assistance dogs are welcome throughout the building.\n\nEntry is free on the first Saturday of every month. The rest of the time, an annual pass costs 40 euros and pays for itself in four visits. Children under 12 pay 6 euros.\n\nThe quietest time to visit is Tuesday morning. For questions about access, phone 01632 960 123 or ask at the front desk. Seating is available on every floor.\n"
+    }
+  ],
+  "null": [],
+  "notes": "Each page carries 3-4 planted contradictions (one wrong value per line, some on a shared line). Decoys: a 10-euro parking charge and a 2-euro tea price that must survive; the word counts cap bloat; untouched sentences must still be present. Null is the untouched drafts."
+}

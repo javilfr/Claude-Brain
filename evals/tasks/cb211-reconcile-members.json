@@ -1,0 +1,63 @@
+{
+  "id": "cb211-reconcile-members",
+  "title": "Reconcile a roster against bank payments",
+  "family": "data",
+  "task_class": "reconciliation",
+  "tier": 1,
+  "split": "dev",
+  "prompt": "members.csv (id, name, annual_fee) is our roster and payments.csv (member_id, paid_by, amount_paid, date) is the bank export; they should cover the same members at the same amounts but do not. Write report.json with three sorted lists of member ids: only_in_members (on the roster, no payment row), only_in_payments (paid but not on the roster) and amount_mismatch (in both, amounts differing by a cent or more). The bank export is messy: ids vary in case and spacing, and amounts may carry a $ sign or thousands commas. Match ids ignoring case and surrounding spaces, compare amounts as numbers, and write ids upper-case like M-007. Leave both CSVs as they are.",
+  "setup": [
+    {
+      "path": "members.csv",
+      "content": "id,name,annual_fee\nM-001,Dev Lind,120.50\nM-002,Pia Quinn,120.25\nM-003,Pia Okafor,20.25\nM-004,Noa Okafor,1200.50\nM-005,Ana Quinn,1200.00\nM-006,Dev Tanaka,25.00\nM-007,Raj Tanaka,1250.50\nM-008,Dev Okafor,25.00\nM-009,Noa Stone,120.50\nM-010,Pia Quinn,60.00\nM-011,Pia Haas,20.00\nM-012,Lia Quinn,45.25\nM-013,Zed Quinn,20.50\nM-014,Yui Quinn,20.50\nM-015,Sam Okafor,1200.50\nM-016,Ben Park,120.50\nM-017,Tia Quinn,20.50\nM-018,Sam Haas,40.50\nM-019,Ben Ford,20.00\nM-020,Jon Silva,40.00\nM-021,Hal Quinn,75.25\nM-022,Uma Park,120.00\nM-023,Raj Novak,1250.00\nM-024,Raj Stone,120.25\nM-025,Lia Ford,60.00\nM-026,Noa Moreau,60.00\nM-027,Oli Okafor,20.00\nM-028,Pia Ford,25.25\nM-029,Kai Tanaka,75.00\nM-030,Eli Stone,40.50\nM-031,Noa Moreau,1200.25\nM-032,Tia Haas,25.25\nM-033,Cleo Novak,45.25\nM-034,Hal Ford,75.50\nM-035,Hal Stone,120.25\nM-036,Noa Park,75.25\nM-037,Oli Park,1200.00\nM-038,Fay Stone,25.00\nM-039,Wes Lind,25.00\nM-040,Gus Haas,60.25\nM-041,Oli Stone,20.25\nM-042,Jon Quinn,40.00\nM-043,Raj Lind,45.25\nM-044,Dev Park,60.00\nM-045,Xan Silva,25.25\nM-046,Kai Quinn,1250.25\nM-047,Lia Lind,45.00\nM-048,Cleo Moreau,1200.00\nM-049,Val Silva,1250.25\nM-050,Tia Stone,60.25\nM-051,Kai Reyes,75.25\nM-052,Gus Reyes,120.50\nM-053,Dev Haas,75.25\nM-054,Xan Moreau,20.00\nM-055,Cleo Stone,25.25\nM-056,Kai Park,1200.50\nM-057,Xan Stone,1250.00\nM-058,Kai Tanaka,1200.00\nM-059,Raj Haas,40.50\nM-060,Ivy Park,20.00\n"
+    },
+    {
+      "path": "payments.csv",
+      "content": "member_id,paid_by,amount_paid,date\nm-018,Sam Haas,\"40.50\",2026-09-17\nM-046,Kai Quinn,1250.25,2026-05-10\nm-057,Xan Stone,\"$1,250.00\",2026-07-11\nM-042,Jon Quinn,$40.00,2026-01-16\nm-004,Noa Okafor,1200.5,2026-04-13\nM-017,Tia Quinn,$23.50,2026-08-16\nm-024,Raj Stone,120.25,2026-06-13\nm-043,Raj Lind,\"45.25\",2026-02-17\nm-034,Hal Ford,$75.50,2026-05-11\n M-011 ,Pia Haas,20.00,2026-02-10\nm-049,Val Silva,1250.25,2026-08-13\n M-044 ,Dev Park,60,2026-03-18\nm-059,Raj Haas,40.5,2026-09-13\nM-050,Tia Stone,60.25,2026-09-14\nm-008,Dev Okafor,\"25.00\",2026-08-17\nM-001,Dev Lind,123.50,2026-01-10\nm-006,Dev Tanaka,25.00,2026-06-15\nm-016,Ben Park,120.50,2026-07-15\n M-060 ,Ivy Park,20.00,2026-01-14\n M-023 ,Raj Novak,\"1,250.00\",2026-05-12\nm-012,Lia Quinn,$45.25,2026-03-11\nM-025,Lia Ford,60.00,2026-07-14\nm-047,Lia Lind,$44.99,2026-06-11\nM-072,Fay Haas,$45.00,2026-03-16\nM-037,Oli Park,\"1,203.00\",2026-06-12\nm-051,Kai Reyes,75.25,2026-01-15\nm-010,Pia Quinn,60.00,2026-01-19\nm-041,Oli Stone,20.25,2026-09-15\nm-028,Pia Ford,\"25.25\",2026-01-17\nm-055,Cleo Stone,25.24,2026-05-19\nM-013,Zed Quinn,\"20.50\",2026-04-12\n M-019 ,Ben Ford,20,2026-01-18\nm-045,Xan Silva,25.25,2026-04-19\n M-003 ,Pia Okafor,\"20.25\",2026-03-12\n M-052 ,Gus Reyes,$120.50,2026-02-16\nm-031,Noa Moreau,1200.25,2026-03-19\nM-030,Eli Stone,40.5,2026-02-18\n M-074 ,Max Ford,45,2026-05-18\n M-027 ,Oli Okafor,$20.00,2026-09-16\n M-048 ,Cleo Moreau,\"1,203.00\",2026-07-12\nM-009,Noa Stone,120.5,2026-09-18\nm-039,Wes Lind,25,2026-07-13\nm-002,Pia Quinn,$120.25,2026-02-11\nM-005,Ana Quinn,1200.00,2026-05-14\nM-021,Hal Quinn,75.25,2026-03-10\n M-007 ,Raj Tanaka,\"$1,250.50\",2026-07-16\n M-015 ,Sam Okafor,1200.50,2026-06-14\n M-033 ,Cleo Novak,45.25,2026-04-10\nM-054,Xan Moreau,20,2026-04-18\nm-026,Noa Moreau,60.00,2026-08-15\nm-020,Jon Silva,40.00,2026-02-19\n M-056 ,Kai Park,1200.50,2026-06-10\nm-022,Uma Park,$120.00,2026-04-11\nm-014,Yui Quinn,20.5,2026-05-13\nm-071,Ben Novak,45.00,2026-02-15\nm-053,Dev Haas,\"75.25\",2026-03-17\n M-040 ,Gus Haas,60.25,2026-08-14\nm-073,Lia Park,\"45.00\",2026-04-17\nM-058,Kai Tanaka,\"1,200.00\",2026-08-12\n"
+    }
+  ],
+  "grader": {
+    "type": "checks",
+    "checks": [
+      {
+        "type": "file_exists",
+        "path": "report.json"
+      },
+      {
+        "type": "json_equals",
+        "path": "report.json",
+        "fields": {
+          "only_in_members": [
+            "M-029",
+            "M-032",
+            "M-035",
+            "M-036",
+            "M-038"
+          ],
+          "only_in_payments": [
+            "M-071",
+            "M-072",
+            "M-073",
+            "M-074"
+          ],
+          "amount_mismatch": [
+            "M-001",
+            "M-017",
+            "M-037",
+            "M-047",
+            "M-048",
+            "M-055"
+          ]
+        }
+      }
+    ]
+  },
+  "reference": [
+    {
+      "path": "report.json",
+      "content": "{\n \"only_in_members\": [\n  \"M-029\",\n  \"M-032\",\n  \"M-035\",\n  \"M-036\",\n  \"M-038\"\n ],\n \"only_in_payments\": [\n  \"M-071\",\n  \"M-072\",\n  \"M-073\",\n  \"M-074\"\n ],\n \"amount_mismatch\": [\n  \"M-001\",\n  \"M-017\",\n  \"M-037\",\n  \"M-047\",\n  \"M-048\",\n  \"M-055\"\n ]\n}\n"
+    }
+  ],
+  "null": [],
+  "notes": "60 roster rows, 59 payment rows (5 roster-only, 4 payment-only, 6 mismatches, two of them off by exactly a cent). Expected lists computed independently from the generated data. Null is the untouched setup: no report."
+}
