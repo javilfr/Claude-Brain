@@ -151,6 +151,8 @@ def posting(source: str, company: str, title: str, location: str, url: str, post
     loc = plain(location, 200)
     if remote is None:
         remote = bool(re.search(r"\bremote\b", f"{loc} {title}", re.I))
+    if remote and loc and "remote" not in loc.lower():
+        loc += " (remote allowed)"  # the employer flags it remote though the text names a hub
     pid = hashlib.sha256(f"{source}|{company}|{ext_id or url}".encode()).hexdigest()[:14]
     return {"id": pid, "source": source, "company": company, "title": plain(title, 200), "location": loc, "remote": remote,
             "url": url, "posted": _date(posted), "salary_min": lo, "salary_max": hi, "description": desc}
@@ -564,7 +566,7 @@ def discover(systems: list[str] | None = None, pages: int = 3, fetch: Fetch = ht
 
 
 # ---------------------------------------------------------------- fit
-SENIOR_RE = re.compile(r"\b(senior|sr\.?|staff|principal|lead|head of|director|vp|vice president|chief|architect|manager,? (?:sales|engineering) ii)\b", re.I)
+SENIOR_RE = re.compile(r"\b(senior|sr\.?|staff|principal|lead|head of|director|associate director|ad|vp|avp|svp|vice president|chief|architect|manager,? (?:sales|engineering) ii)\b", re.I)
 YEARS_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:-|–|to)?\s*(?:\d{1,2}\s*)?(?:years|yrs)(?:'|’)?\s+(?:of\s+)?(?:\w+\s+){0,4}?(?:experience|exp)", re.I)
 
 
@@ -769,8 +771,8 @@ def sweep(profile: dict, boards: list[dict], fetch: Fetch = http_fetch, min_scor
     return out, stats
 
 
-def render_matches(rows: list[dict], stats: dict, new_ids: set[str]) -> str:
-    lines = ["# Job matches", "",
+def render_matches(rows: list[dict], stats: dict, new_ids: set[str], header: str = "") -> str:
+    lines = ["# Job matches", "", header or
              f"{stats['kept']} postings kept from {stats['postings']} read on {stats['boards_read']} of {stats['boards']} boards"
              + (" (stopped at the time limit)" if stats.get("stopped_early") else "") + f". {len(new_ids)} new since the last sweep (marked NEW).", "",
              "| Fit | Company | Role | Where | Pay | Posted | Why |", "|---|---|---|---|---|---|---|"]
@@ -804,6 +806,11 @@ def main(argv=None) -> int:
     sw.add_argument("--min-score", type=float, default=40.0)
     sw.add_argument("--max-minutes", type=float, default=30.0)
     sw.add_argument("--limit-boards", type=int, default=0, help="read at most this many discovered boards (0 = all, -1 = none: only the company list)")
+    rs = sub.add_parser("rescore", help="score the kept matches again after a profile change (no network)")
+    rs.add_argument("--profile", default="profile.json")
+    rs.add_argument("--out", default="data/matches.jsonl")
+    rs.add_argument("--md", default="MATCHES.md")
+    rs.add_argument("--min-score", type=float, default=40.0)
     pr = sub.add_parser("probe", help="find a company's boards by its name")
     pr.add_argument("name")
     pr.add_argument("--boards", default="data/boards.jsonl")
@@ -823,6 +830,21 @@ def main(argv=None) -> int:
             print(f"{p['title']} · {p['location']} · {p['url']}")
         print(f"{len(rows)} posting(s)")
         return 0 if rows else 1
+    if a.cmd == "rescore":
+        profile = json.loads(Path(a.profile).read_text(encoding="utf-8"))
+        rows = []
+        for p in _read_jsonl(Path(a.out)):
+            if p.get("remote") and p.get("location") and "remote" not in p["location"].lower():
+                p["location"] += " (remote allowed)"
+            sc, why = fit(p, profile)
+            if sc >= a.min_score:
+                rows.append(dict(p, score=sc, why=why))
+        rows.sort(key=lambda x: (-x["score"], x["company"].lower(), x["title"]))
+        stats = {"kept": len(rows), "postings": len(rows), "boards_read": 0, "boards": 0}
+        _write_jsonl(Path(a.out), rows)
+        Path(a.md).write_text(render_matches(rows, stats, set(), f"{len(rows)} postings kept after re-scoring the last sweep's matches against the current profile ({dt.date.today().isoformat()})."), encoding="utf-8")
+        print(f"{len(rows)} matches kept after rescoring")
+        return 0
     if a.cmd == "probe":
         hits = probe(a.name, known_boards=_read_jsonl(Path(a.boards)))
         for h in hits:
