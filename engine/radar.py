@@ -16,7 +16,7 @@ another host is refused. Every failure degrades to silence (invariant I-14).
 
 Files: ``memory/radar_sources.json`` (kernel, read-only here),
 ``learning/radar/state.json`` (rewritten only by this module) and the inbox
-file ``learning/inbox/<date>-radar.jsonl`` (append-only ``lead`` records).
+file ``learning/inbox/<date>-radar-<session>.jsonl`` (append-only ``lead`` records).
 """
 from __future__ import annotations
 
@@ -457,7 +457,10 @@ def _write_leads(root: Path, items: list[dict], when: dt.datetime) -> None:
     already in today's file so a forced re-run cannot duplicate them."""
     if not items:
         return
-    path = root / "learning" / "inbox" / f"{when.strftime('%Y-%m-%d')}-radar.jsonl"
+    # One file per session: two sessions on one day each write their own, so
+    # their branches merge without a conflict (red team 2026-11-11, finding 1).
+    sid = re.sub(r"[^A-Za-z0-9_-]", "_", c.session_id())[:40]
+    path = root / "learning" / "inbox" / f"{when.strftime('%Y-%m-%d')}-radar-{sid}.jsonl"
     have = {r.get("id") for r in c.read_jsonl(path)}
     at = when.strftime("%Y-%m-%dT%H:%M:%SZ")
     for it in items:

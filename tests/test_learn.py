@@ -397,7 +397,53 @@ class RealMlearnTest(BrainCase):
         self.assertEqual(json.loads((self.root / learn.ML_STATE).read_text())["n"], json.loads(text)["n"])
 
 
+class SingleWriterTest(unittest.TestCase):
+    def test_consolidation_needs_the_latest_main_and_no_project(self):
+        # Red team 2026-11-11, finding 1, simulated: two consolidating branches conflict three ways.
+        import subprocess, tempfile
+        def g(cwd, *a):
+            return subprocess.run(["git", "-C", str(cwd), *a], capture_output=True, text=True, check=True)
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            g(d, "init", "-q", "--bare", "-b", "main", str(d / "remote.git"))
+            for name in ("brain", "other"):
+                subprocess.run(["git", "clone", "-q", str(d / "remote.git"), str(d / name)], capture_output=True, check=True)
+                g(d / name, "config", "user.email", "t@example.invalid"); g(d / name, "config", "user.name", "t")
+                g(d / name, "checkout", "-q", "-B", "main")
+            (d / "brain" / "a.txt").write_text("a\n"); g(d / "brain", "add", "-A"); g(d / "brain", "commit", "-qm", "a")
+            g(d / "brain", "push", "-q", "origin", "main")
+            self.assertEqual(learn.writer_problem(d / "brain"), "")
+            g(d / "other", "pull", "-q", "origin", "main")
+            (d / "other" / "b.txt").write_text("b\n"); g(d / "other", "add", "-A"); g(d / "other", "commit", "-qm", "b")
+            g(d / "other", "push", "-q", "origin", "main")
+            g(d / "brain", "fetch", "-q", "origin")
+            self.assertIn("latest origin/main", learn.writer_problem(d / "brain"))
+            (d / "proj" / ".brain").mkdir(parents=True)
+            (d / "proj" / ".brain" / "project.json").write_text('{"contract": 1}')
+            self.assertIn("a project is attached", learn.writer_problem(d / "brain"))
+
+
 class ApplyTest(BrainCase):
+    def test_owner_stated_items_change_only_with_owner_evidence(self):
+        # Red team 2026-11-11, finding 2 (I-08): EDIT_TEXT and retire had no guard.
+        own = item("own-rule", "Ask at most three questions, each with its default, before building anything", trust="owner-stated",
+                   evidence=["owner:turn@2026-11-01T10:00:00Z#0123456789ab"])
+        c.write_jsonl(self.root / "memory/items.jsonl", [own] + [item(f"pb-item-{i:02d}") for i in range(12)])
+        before = self.snapshot()
+        at = "2026-11-12T10:00:00Z"
+        for op in ({"op": "EDIT_TEXT", "id": "own-rule", "text": "Ask at most three questions, each with its default, then build"},
+                   {"op": "SET_STATUS", "id": "own-rule", "status": "retired"},
+                   {"op": "SET_STATUS", "id": "own-rule", "status": "demoted"}):
+            ok, lines = learn.apply_delta(learn.make_delta([op], at=at), self.root)
+            self.assertFalse(ok, op)
+            self.assertIn("owner-stated", lines[0])
+        self.assertEqual(self.snapshot(), before)
+        signed = {"op": "SET_STATUS", "id": "own-rule", "status": "demoted",
+                  "evidence": ["owner:turn@2026-11-12T09:59:00Z#abcdef012345"]}
+        self.assertTrue(learn.apply_delta(learn.make_delta([signed], at=at), self.root)[0])
+        old = learn.make_delta([{"op": "SET_STATUS", "id": "pb-item-00", "status": "demoted"}], at="2026-11-10T10:00:00Z")
+        self.assertTrue(learn.apply_delta(old, self.root)[0])  # observed items are not guarded
+
     def test_oversized_retirement_is_refused_and_nothing_changes(self):
         c.write_jsonl(self.root / "memory/items.jsonl", [item(f"pb-item-{i:02d}") for i in range(12)])
         before = self.snapshot()

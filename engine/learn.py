@@ -85,6 +85,9 @@ ITEM_FILE_RE = re.compile(r"^(?:memory/(?:items|facts)\.jsonl|owner/(?:standing|
 INBOX_FILE_RE = re.compile(r"^learning/inbox/[A-Za-z0-9][A-Za-z0-9_.-]{0,120}\.jsonl$")
 # Owner evidence is written only by the script that found the owner's words in
 # a turn he typed: the turn's timestamp and a hash of the normalised quote.
+# Deltas stamped before this moment were applied before the owner-item guard
+# existed; they replay as recorded (the manifest pins their content).
+OWNER_GUARD_FROM = "2026-11-11T01:15:00Z"
 OWNER_EV_RE = re.compile(r"^owner:turn@[0-9A-Za-z:.+-]{1,40}#[0-9a-f]{12}$")
 MIN_QUOTE = 12
 # Turns that look typed but were injected by the harness or another agent.
@@ -649,6 +652,16 @@ class Workspace:
             row["evidence"] = ev
             self._touch_item(rel, row["id"])
             return ""
+        if kind in ("EDIT_TEXT", "SET_STATUS", "MOVE_SCOPE"):
+            _rel, target = self.find(str(op.get("id", "")))
+            promote = kind == "SET_STATUS" and op.get("status") == "active"  # owner items go active by rule (I-08)
+            legacy = at < OWNER_GUARD_FROM
+            if target is not None and target.get("trust") == "owner-stated" and not promote and not legacy and not any(
+                    OWNER_EV_RE.match(str(e)) for e in op.get("evidence") or []):
+                # I-08: what the owner stated changes only on the owner's own
+                # words (red team 2026-11-11, finding 2).
+                return (f"{kind}: {target['id']} is owner-stated; the op needs owner evidence verified against "
+                        "a typed turn (give `quote` in the op and apply with `brain learn apply`)")
         if kind == "EDIT_TEXT":
             rel, row = self.find(str(op.get("id", "")))
             if row is None:
@@ -1529,7 +1542,33 @@ def cmd_review(args) -> int:
     return 0
 
 
+def writer_problem(root: Path) -> str:
+    """One line when this checkout should not consolidate, else "". Learning
+    has one writer: a brain-only session on an up-to-date main. Two branches
+    that each consolidate conflict on stats/ml.json, the manifest and the
+    changelog when both are merged (simulated 2026-11-11: three conflicts),
+    and the owner cannot resolve a conflict from his phone."""
+    import subprocess
+    import os
+    managed = [p for p in c.sibling_dirs(root) if c.is_managed(p)]
+    if os.environ.get("BRAIN_PROJECT") or managed:
+        return ("a project is attached; working sessions only add inbox files, and consolidation runs in a "
+                "brain-only session (the weekly learning run, or \"Consolidate\" in a chat with only the brain)")
+    try:
+        r = subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", "origin/main", "HEAD"],
+                           capture_output=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if r.returncode == 1:
+        return "this branch does not contain the latest origin/main: fetch and merge main first, so two consolidations never overlap"
+    return ""  # 0: up to date; anything else: no git or no origin/main, nothing to compare
+
+
 def cmd_consolidate(args) -> int:
+    problem = writer_problem(c.BRAIN_ROOT)
+    if problem and not getattr(args, "force", False):
+        print(f"consolidation not run: {problem}. Use --force only if you are sure no other branch consolidates.")
+        return 1
     leads = official_leads(c.BRAIN_ROOT)
     bad_lines, bad_files = inbox_unreadable(c.BRAIN_ROOT)
     if bad_lines:
@@ -1566,6 +1605,15 @@ def cmd_apply(args) -> int:
     if not isinstance(delta, dict):
         print(f"cannot read a delta from {args.delta}")
         return 1
+    # An op may carry the owner's words as `quote`; they are checked against
+    # the turns he typed in this session and stored only as evidence.
+    for op in delta.get("ops") or []:
+        if isinstance(op, dict) and op.get("quote"):
+            ev, err = verify_owner_quote(str(op.pop("quote")))
+            if err:
+                print(f"refused, nothing changed: {err}")
+                return 1
+            op.setdefault("evidence", []).append(ev)
     ok, lines = apply_delta(delta, budget=args.budget)
     print(("" if ok else "refused, nothing changed: ") + "\n".join(lines[:10]))
     return 0 if ok else 1
@@ -1663,6 +1711,7 @@ def register(sub) -> None:
     r.set_defaults(func=cmd_review)
 
     k = s.add_parser("consolidate", help="turn pending inbox files into one delta and apply it")
+    k.add_argument("--force", action="store_true", help="consolidate even with a project attached or behind origin/main")
     k.add_argument("--dry-run", action="store_true")
     k.add_argument("--min-sessions", type=int, default=2)
     k.set_defaults(func=cmd_consolidate)

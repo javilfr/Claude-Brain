@@ -128,7 +128,10 @@ class Rehearsal(unittest.TestCase):
         def candidates():
             return int(_re.search(r"items: (\d+) candidate", b("learn", "status").stdout).group(1))
         before = candidates()  # the copied brain may already hold candidates of its own
-        b("learn", "consolidate")
+        refused = b("learn", "consolidate", ok=False)  # single writer: a project session does not consolidate
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("a project is attached", refused.stdout)
+        b("learn", "consolidate", "--force")  # the rehearsal plays both roles in one checkout
         items = (self.brain / "memory" / "items.jsonl").read_text()
         self.assertIn("exact expected output string", items)
         self.assertFalse((self.brain / "stats" / "routing.json").exists())
@@ -141,7 +144,7 @@ class Rehearsal(unittest.TestCase):
         self.assertTrue(list((self.brain / "stats" / "ledger").glob("*.jsonl")))
         self.assertTrue((self.brain / "learning" / "manifest.jsonl").read_text().strip())
         self.assertEqual(candidates(), before + 1, "the session's lesson became exactly one new candidate")
-        second = b("learn", "consolidate").stdout
+        second = b("learn", "consolidate", "--force").stdout
         self.assertEqual((self.brain / "memory" / "items.jsonl").read_text(), items, "consolidating twice must change nothing")
         b("learn", "digest")
         b("handover", ok=False)  # the copied brain is not a git repository; the note must still be written

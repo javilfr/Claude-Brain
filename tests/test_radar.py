@@ -14,6 +14,11 @@ from unittest import mock
 from engine import common as c
 from engine import radar
 
+
+def radar_file(day="2026-11-10"):
+    import re as _re
+    return f"{day}-radar-{_re.sub(r'[^A-Za-z0-9_-]', '_', c.session_id())[:40]}.jsonl"
+
 FIX = Path(__file__).resolve().parent / "fixtures" / "radar"
 NOW = dt.datetime(2026, 11, 10, 12, 0, tzinfo=dt.timezone.utc)
 
@@ -101,7 +106,7 @@ class RadarCase(unittest.TestCase):
 
     def inbox(self):
         rows = []
-        for p in sorted((self.root / "learning" / "inbox").glob("*-radar.jsonl")):
+        for p in sorted((self.root / "learning" / "inbox").glob("*-radar-*.jsonl")):
             rows += c.read_jsonl(p)
         return rows
 
@@ -495,13 +500,13 @@ class Records(RadarCase):
             self.assertIsInstance(r["matched"], list)
             self.assertIn(r["trust"], radar.TRUST_RANK)
         self.assertEqual(len({r["id"] for r in rows}), len(rows))
-        self.assertTrue((self.root / "learning" / "inbox" / "2026-11-10-radar.jsonl").is_file())
+        self.assertTrue((self.root / "learning" / "inbox" / radar_file()).is_file())
         # a second brain sees the same item ids
         with tempfile.TemporaryDirectory() as other:
             write_config(other)
             radar.run(other, fetch=Fake("v1"), now=NOW, force=True)
             radar.run(other, fetch=Fake("v2"), now=NOW, force=True)
-            ids2 = sorted(r["id"] for r in c.read_jsonl(Path(other) / "learning" / "inbox" / "2026-11-10-radar.jsonl"))
+            ids2 = sorted(r["id"] for r in c.read_jsonl(Path(other) / "learning" / "inbox" / radar_file()))
         self.assertEqual(ids2, sorted(r["id"] for r in rows))
 
     def test_no_page_bodies_in_state_or_inbox(self):
@@ -516,7 +521,7 @@ class Records(RadarCase):
         self.baseline()
         self.go(Fake("v2"))
         written = sorted(str(p.relative_to(self.root)) for p in self.root.rglob("*") if p.is_file())
-        self.assertEqual(written, ["learning/inbox/2026-11-10-radar.jsonl", "learning/radar/checks.json",
+        self.assertEqual(written, ["learning/inbox/" + radar_file(), "learning/radar/checks.json",
                                    "learning/radar/state.json", "memory/radar_sources.json"])
 
     def test_a_routine_check_leaves_the_tracked_state_unchanged(self):

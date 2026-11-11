@@ -248,6 +248,12 @@ def fold_hire(state: dict, cfg: dict, r: dict) -> None:
     code), never a self-report. Wage ratios move whenever real usage exists.
     Deterministic: uses only the record's own fields."""
     h = hr_state(state)
+    if r.get("eval"):
+        # An evaluation trial is a measurement of the brain, not work: its tiny
+        # tasks would drag wages down and credit templates for toy results
+        # (red team 2026-11-11, finding 4).
+        h["eval_skipped"] = int(h.get("eval_skipped", 0)) + 1
+        return
     hc = DEFAULT_CFG if not isinstance(cfg.get("hr"), dict) else {**DEFAULT_CFG, **cfg["hr"]}
     tid, group = str(r.get("template") or "_plain"), str(r.get("group") or "_none")
     passed = r.get("passed")
@@ -593,7 +599,8 @@ def seal_of(contract: dict) -> str:
 def hire(task: str, brain_root: Path | None = None, project: Path | None = None, why: str = "", owns: list[str] | None = None,
          inputs: list[str] | None = None, check: str = "", family: str | None = None, task_class: str | None = None,
          risk: str = "standard", tier: int = 2, size: str | None = None, base_agent: str | None = None, template_id: str | None = None,
-         extra: list[str] | None = None, seed: int | None = None, workdir_hint: str | None = None, dry_run: bool = False) -> dict:
+         extra: list[str] | None = None, seed: int | None = None, workdir_hint: str | None = None, dry_run: bool = False,
+         eval_trial: bool = False) -> dict:
     """Decide the helper for a task and write its contract and brief."""
     root = Path(brain_root or c.BRAIN_ROOT)
     hc = cfg_of(root)
@@ -665,6 +672,7 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
     contract = {
         "id": cid, "at": c.now_iso(), "session": c.session_id(), "status": "open",
         "template": (t or {}).get("id"), "group": (t or {}).get("group"), "base_agent": agent, "size": size,
+        "eval": bool(eval_trial),
         "model": arm["model"], "effort": arm["effort"], "explored": bool(arm.get("explored")), "propensity": arm.get("propensity", 1.0),
         "task_class": task_class, "family": family, "risk": risk, "tier": tier, "check": check, "has_check": bool(check),
         "wage_tokens": pay["tokens"], "band_tokens": pay["band"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
@@ -754,7 +762,8 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
                "task_class": contract.get("task_class"), "family": contract.get("family"), "risk": contract.get("risk"),
                "has_check": contract.get("has_check"), "explored": contract.get("explored"), "propensity": contract.get("propensity"),
                "wage_tokens": contract.get("wage_tokens"), "band_tokens": contract.get("band_tokens"),
-               "actual_tokens": contract.get("actual_tokens"), "passed": contract.get("passed"), "sealed": sealed}
+               "actual_tokens": contract.get("actual_tokens"), "passed": contract.get("passed"), "sealed": sealed,
+               "eval": bool(contract.get("eval"))}
         inbox = root / "learning" / "inbox" / f"{c.today()}-{c.session_id()}.jsonl"
         have = {r.get("id") for r in c.read_jsonl(inbox)}
         if rec["id"] not in have:  # settling twice records once
@@ -842,7 +851,7 @@ def cmd_hire(args) -> int:
         con = hire(args.task, project=project, why=args.why or "", owns=args.owns, inputs=args.input, check=args.check or "",
                    family=args.family, task_class=args.task_class, risk=args.risk, tier=args.tier, size=args.size,
                    base_agent=args.agent, template_id=tid, extra=args.also, seed=args.seed, workdir_hint=args.workdir,
-                   dry_run=args.dry_run)
+                   dry_run=args.dry_run, eval_trial=getattr(args, "eval", False))
     except ValueError as e:
         print(str(e))
         return 1
@@ -1054,6 +1063,7 @@ def register(sub) -> None:
     h.add_argument("--tier", type=int, choices=(1, 2, 3), default=2)
     h.add_argument("--size", choices=("S", "M", "L", "XL"))
     h.add_argument("--agent", choices=BASE_AGENTS, help="restrict to templates for one base agent")
+    h.add_argument("--eval", action="store_true", help="an evaluation trial: settled and recorded, but never used to learn wages or template records")
     h.add_argument("--template", help="use this template; default is a plain brief ('auto' lets HR choose one, which did worse in CB-203)")
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")

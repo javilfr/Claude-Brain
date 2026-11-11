@@ -47,3 +47,11 @@ RESOLVED: 2026-11-10 — you approved it in chat and `main` was fast-forwarded t
 - **Why it matters:** until the check can run, GitHub cannot enforce anything (item 2), and a red cross will show on every push even though nothing is wrong.
 - **How:** github.com → your profile picture → **Settings** → **Billing and licensing** → look for a failed payment or a spending limit of $0 for **Actions**, and fix or raise it. Private repositories use included free minutes first.
 - **Meanwhile:** checks are run inside each session before anything is pushed, and the results are in `docs/BUILD_STATUS.md`.
+
+## 8. Another chat reverted three commits on `main` (decide: keep or undo the revert)
+
+- **What I saw:** at 01:09 today (UTC) another Claude session pushed three revert commits to `main`. They undo "brain is on main", a "learn: session records" commit, and the handover that set up this improvement programme (the ticket list, `docs/NEXT_SESSION.md`, and boot showing the brain's open work). I cannot tell from here whether you asked for it.
+- **Why it matters:** this session's work (branch `claude/amazing-albattani-204zc8`) is built on the reverted commits. Merging it puts them back, plus all of this session's fixes.
+- **If the revert was a mistake:** merge this session's branch into `main` (on github.com: **Pull requests** → **New pull request** → base `main`, compare `claude/amazing-albattani-204zc8` → **Create** → **Merge**). GitHub may report conflicts with the reverts; if it does, say "merge the brain branch to main" in a chat with the brain and I will resolve them there.
+- **If you wanted the revert:** say so, and say which part you wanted gone. The branch stays untouched until then.
+- **Meanwhile:** nothing on `main` was touched by this session.

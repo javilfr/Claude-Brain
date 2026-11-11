@@ -24,7 +24,7 @@ Apply any lines he marked `RESOLVED:` in `NEEDS_YOU.md` or `OVERTURNED` in `.bra
 
 ## Keep going
 
-Continue with brain-build and keep going until the work is finished: every line of `.brain/CHECKLIST.md` (regenerated at each checkpoint) or every open brain ticket is done. A progress report is not the end of the work, and neither is a finished item: start the next one in the same turn. Stop only when he says stop ("Stop after this" or plainer), when every remaining item is blocked on him (each then has its `NEEDS_YOU.md` entry), or when the context must be handed over (brain-handover). Do not stop to ask; decide, record the decision and continue. Checkpoint and push after each item, so stopping anywhere loses nothing. After the context is compacted, run `BRAIN resume` instead of re-reading files.
+Continue with brain-build and keep going until the work is finished: every line of `.brain/CHECKLIST.md` (regenerated at each checkpoint) or every open brain ticket is done. A progress report is not the end of the work, and neither is a finished item: start the next one in the same turn. Stop only when he says stop ("Stop after this" or plainer), when every remaining item is blocked on him (each then has its `NEEDS_YOU.md` entry), or when the context must be handed over (brain-handover). Do not stop to ask; decide, record the decision and continue. The one exception is a step that cannot be undone (deleting data, spending money, publishing to other people, rewriting shared history): it waits for his yes as a `NEEDS_YOU.md` item, and the other work goes on. Checkpoint and push after each item, so stopping anywhere loses nothing. After the context is compacted, run `BRAIN resume` instead of re-reading files.
 
 ## Tell the owner
 

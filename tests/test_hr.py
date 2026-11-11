@@ -297,6 +297,21 @@ class Contracts(Base):
         old = c.read_json(p / ".brain" / "log" / "hr" / f"{first['id']}.json", {})
         self.assertEqual(old["status"], "superseded")
 
+    def test_evaluation_hires_are_recorded_but_never_learned_from(self):
+        # Red team 2026-11-11, finding 4: 37 toy trials pulled the M wage to 0.4x.
+        state = {}
+        rec = {"template": "t", "group": "g", "size": "M", "band_tokens": 60000, "actual_tokens": 2000,
+               "passed": True, "sealed": True, "eval": True}
+        for _ in range(10):
+            hr.fold_hire(state, {"hr": {}}, rec)
+        h = hr.hr_state(state)
+        self.assertEqual((h["ratios"], h["t"], h["eval_skipped"]), ({}, {}, 10))
+        hr.fold_hire(state, {"hr": {}}, dict(rec, eval=False))
+        self.assertEqual(len(h["ratios"]["s:M"]), 1)
+        p = self.project()
+        con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="true", eval_trial=True)
+        self.assertTrue(c.read_json(p / ".brain" / "log" / "hr" / f"{con['id']}.json", {})["eval"])
+
     def test_failed_check_is_recorded_as_failed_whatever_anyone_claims(self):
         p = self.project()
         con = hr.hire("Build the settings screen for the phone", brain_root=self.b, project=p, check="false")

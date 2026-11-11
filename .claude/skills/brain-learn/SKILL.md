@@ -21,7 +21,7 @@ A radar line is a lead, never a rule. Open its official URL, confirm the claim t
 
 ## Consolidate (when he asks, or weekly)
 
-`BRAIN learn consolidate` turns the pending inbox into one delta and applies it locally; `BRAIN learn decay` demotes unused items. Commit it and open one pull request to `main` describing it in plain words. `memory/`, `owner/`, `stats/` and `playbooks/` change only through `BRAIN learn`; `BRAIN learn verify` exposes any hand edit.
+Learning has one writer. A working session only adds inbox files; consolidation runs in a chat with only the brain, on a branch that holds the latest `main` (the command refuses otherwise, because two consolidating branches conflict on merge and he cannot resolve a conflict from his phone). `BRAIN learn consolidate` turns the pending inbox into one delta and applies it locally; `BRAIN learn decay` demotes unused items. Commit it and open one pull request to `main` describing it in plain words. `memory/`, `owner/`, `stats/` and `playbooks/` change only through `BRAIN learn`; `BRAIN learn verify` exposes any hand edit.
 
 ## "What did you learn?"
 
