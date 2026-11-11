@@ -124,6 +124,10 @@ class Rehearsal(unittest.TestCase):
         status = (self.proj / "STATUS.md").read_text()
         self.assertIn("Last session", status)
 
+        import re as _re
+        def candidates():
+            return int(_re.search(r"items: (\d+) candidate", b("learn", "status").stdout).group(1))
+        before = candidates()  # the copied brain may already hold candidates of its own
         b("learn", "consolidate")
         items = (self.brain / "memory" / "items.jsonl").read_text()
         self.assertIn("exact expected output string", items)
@@ -136,8 +140,7 @@ class Rehearsal(unittest.TestCase):
                          (True, False, True, 50000))
         self.assertTrue(list((self.brain / "stats" / "ledger").glob("*.jsonl")))
         self.assertTrue((self.brain / "learning" / "manifest.jsonl").read_text().strip())
-        learned = b("learn", "status").stdout
-        self.assertIn("1 candidate", learned)
+        self.assertEqual(candidates(), before + 1, "the session's lesson became exactly one new candidate")
         second = b("learn", "consolidate").stdout
         self.assertEqual((self.brain / "memory" / "items.jsonl").read_text(), items, "consolidating twice must change nothing")
         b("learn", "digest")

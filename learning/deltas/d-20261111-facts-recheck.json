@@ -1,0 +1,36 @@
+{
+  "at": "2026-11-11T01:30:00Z",
+  "id": "d-20261111-facts-recheck",
+  "ops": [
+    {
+      "id": "fact-cache-breakers",
+      "op": "EDIT_TEXT",
+      "text": "These break the prompt cache: switching model (including a skill naming another model or a safety fallback), toggling fast mode, adding or removing MCP servers whose tools are not deferred, compaction. These keep it on the Anthropic API or a subscription: changing effort, invoking skills, spawning sub-agents, editing repo files."
+    },
+    {
+      "id": "fact-prices",
+      "op": "EDIT_TEXT",
+      "text": "List prices per million tokens, input/output: Fable 5.2 $8/$40, Opus 5.5 $4/$20, Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50 (Haiku alone costs more above a 100K-token prompt). Cache reads: $0.20, $0.20, $0.10, $0.01."
+    },
+    {
+      "id": "fact-bench-orchestrator",
+      "op": "EDIT_TEXT",
+      "text": "On defect search, an Opus 5.5 lead with Sonnet 5.5 helpers scored 0.831 at $139 against Opus alone 0.827 at $200 at medium (0.850 at $236 at high); a Fable 5.2 lead with Sonnet helpers scored 0.833 at $165, 19% more than the Opus lead."
+    },
+    {
+      "id": "fact-effort-curves",
+      "op": "EDIT_TEXT",
+      "text": "Opus 5.5 at low effort scored 34 points below medium on an internal defect-search benchmark. Sonnet 5.5 on agentic coding went from 62.7% at medium to 77.8% at high. On deep research, Fable 5.2 high over low bought 3.3 points for 3.2 times the cost."
+    },
+    {
+      "id": "fact-anthropic-defectsearch-benchmark-opus-55-236b0c",
+      "op": "SET_STATUS",
+      "status": "retired"
+    },
+    {
+      "id": "fact-deepresearch-bench-ii-fable-52-high-effo-9c1872",
+      "op": "SET_STATUS",
+      "status": "retired"
+    }
+  ]
+}

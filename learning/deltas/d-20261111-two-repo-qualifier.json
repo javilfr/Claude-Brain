@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-11T01:31:00Z",
+  "id": "d-20261111-two-repo-qualifier",
+  "ops": [
+    {
+      "id": "fact-two-repo-loading",
+      "op": "EDIT_TEXT",
+      "text": "In a cloud session with two repositories, each repo's CLAUDE.md, unscoped rules, skills, agents and commands load. Its hooks, permissions and other settings, its .mcp.json connectors and the plugins it turns on do not. Loading from both repos is observed, not documented."
+    }
+  ]
+}
