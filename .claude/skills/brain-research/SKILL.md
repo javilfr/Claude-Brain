@@ -13,7 +13,7 @@ The outcome is an answer the owner can act on, with a source for every factual c
 
 ## 2. Scope the question
 
-Write the question as one sentence, what a useful answer looks like (a recommendation, a number, a yes or no with conditions), and how current it must be. For a size-0 question answer directly; use the full method only for "Go deep" or when the answer will drive a build.
+Write the question as one sentence, what a useful answer looks like (a recommendation, a number, a yes or no with conditions), and how current it must be. Set a timebox before searching (the boot line gives one; for "Go deep", about 30 minutes, stop at 60): research expands to fill the time it is given. At the stop, write the memo with what is known and list the open questions. For a size-0 question answer directly; use the full method only for "Go deep" or when the answer will drive a build.
 
 ## 3. Search
 

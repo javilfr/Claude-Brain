@@ -43,6 +43,9 @@ STABLE_FIELDS = ("role_line", "method", "drift", "scope_rule", "done_check", "re
 DEFAULT_CFG = {
     "_help": "HR tunables. Wage bands are output-equivalent tokens at the 80th percentile, seeded from 34 helpers measured in the build session (Sonnet researchers: median 42k; Opus builders: median 222k).",
     "bands": {"S": 20000, "M": 60000, "L": 200000, "XL": 450000},
+    # Time wage (Parkinson's law): minutes a helper of each size aims for. The
+    # stop is twice the target until settled hires measure the real ratio.
+    "minutes": {"S": 8, "M": 20, "L": 45, "XL": 90},
     "quantile": 0.8,
     "ratio_cap": 30,
     "min_settled": 5,
@@ -235,7 +238,7 @@ def audit(brain_root: Path | None = None) -> tuple[list[str], dict]:
 # ---------------------------------------------------------------- learning state
 def hr_state(state: dict) -> dict:
     h = state.setdefault("hr", {})
-    for key in ("t", "g", "ratios"):
+    for key in ("t", "g", "ratios", "mratios"):
         h.setdefault(key, {})
     h.setdefault("settled", 0)
     return h
@@ -274,6 +277,13 @@ def fold_hire(state: dict, cfg: dict, r: dict) -> None:
         for key in (f"t:{tid}", f"s:{r['size']}", "_all"):
             h["ratios"][key] = (h["ratios"].get(key, []) + [ratio])[-hc["ratio_cap"]:]
         h["settled"] += 1
+    # Minutes over the size's minute band: the same scheme as tokens, so the
+    # time wage tightens as helpers of that kind finish faster.
+    mband, mins = r.get("band_minutes"), r.get("actual_minutes")
+    if num(mband) and num(mins) and mband > 0 and mins > 0 and r.get("size") in SIZES:
+        ratio = round(mins / mband, 4)
+        for key in (f"t:{tid}", f"s:{r['size']}", "_all"):
+            h["mratios"][key] = (h["mratios"].get(key, []) + [ratio])[-hc["ratio_cap"]:]
 
 
 def pass_posterior(h: dict, hc: dict, tid: str, group: str) -> tuple[float, float, float]:
@@ -483,6 +493,27 @@ def wage(size: str, model_alias: str, tid: str | None, state: dict | None, hc: d
     return {"tokens": tokens, "band": int(band), "cost": round(tokens * out_price(model_alias, models_cfg) / 1e6, 2), "basis": basis}
 
 
+def time_wage(size: str, tid: str | None, state: dict | None, hc: dict) -> dict:
+    """The helper's timebox in minutes (Parkinson's law). Target: the size's
+    minute band times the median ratio of real minutes to band among settled
+    hires (the template's own, else its size's, else all); stop: the
+    80th-percentile ratio, at least 1.5 x the target. Before enough hires are
+    settled: the band, and twice it."""
+    h = hr_state(state if isinstance(state, dict) else {})
+    bands = hc.get("minutes") or DEFAULT_CFG["minutes"]
+    band = float(bands.get(size, bands.get("M", 20)))
+    target, stop, basis = band, band * 2, f"size {size} (no timed hires yet)"
+    for key, label in ((f"t:{tid}", "this template"), (f"s:{size}", f"size {size}"), ("_all", "all hires")):
+        rs = h["mratios"].get(key, [])
+        if len(rs) >= hc["min_settled"]:
+            mid = max(0.2, min(3.0, _quantile(rs, 0.5)))
+            hi = max(mid * 1.5, min(5.0, _quantile(rs, hc["quantile"])))
+            target, stop = band * mid, band * hi
+            basis = f"size {size} from {len(rs)} timed hire(s) of {label}"
+            break
+    return {"target": max(1, round(target)), "stop": max(2, round(stop)), "band": band, "basis": basis}
+
+
 def hire_or_not(material_tokens: int | None, has_check: bool, parallel: bool, hc: dict) -> tuple[bool, str]:
     """Whether a helper pays. A helper starts cold, so it is worth it only when
     it keeps bulk out of the lead's context, or runs beside other work, and
@@ -509,7 +540,8 @@ def tier_block(model_alias: str, effort: str, base_agent: str) -> str:
 
 
 def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: list[str], inputs: list[str], check: str,
-                  model_alias: str, effort: str, notes_path: str, extra: list[str] | None = None, workdir: str = "") -> str:
+                  model_alias: str, effort: str, notes_path: str, extra: list[str] | None = None, workdir: str = "",
+                  timebox: dict | None = None) -> str:
     lines = [f"<task>{task.strip()}</task>"]
     if why:
         lines.append(f"Why: {why.strip()}")
@@ -545,6 +577,9 @@ def compose_brief(t: dict | None, base_agent: str, task: str, why: str, owns: li
         # No command was given: never point at a check that does not exist.
         done = "The outcome in the task is met, and your return names the evidence that shows it (a file and line, an output, a measurement)."
     lines += ["", f"<done_when>{done}</done_when>"]
+    if timebox:
+        lines.append(f"<timebox>Aim to finish in about {timebox['target']} minutes. At {timebox['stop']} minutes, stop "
+                     "and return what is done, what is left, and why it took longer.</timebox>")
     block = tier_block(model_alias, effort, base_agent)
     if block:
         lines += ["", block]
@@ -646,6 +681,7 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
             pass
     size = size or (t or {}).get("size") or "M"
     pay = wage(size, arm["model"], (t or {}).get("id"), state, hc, models_cfg)
+    clock = time_wage(size, (t or {}).get("id"), state, hc)
     d = contract_dir(project)
     base_id = "h-" + c.now().strftime("%Y%m%d") + "-" + hashlib.sha256(f"{c.now_iso()}|{task}|{c.session_id()}".encode()).hexdigest()[:6]
     cid, n = base_id, 1
@@ -654,11 +690,12 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
         cid = f"{base_id}-{n}"
     brief_path, notes_path = d / f"{cid}.md", d / f"{cid}-notes.md"
     workdir = str(Path(project).resolve()) if project else str(Path(workdir_hint).resolve() if workdir_hint else Path.cwd().resolve())
-    brief = compose_brief(t, agent, task, why, owns or [], inputs or [], check, arm["model"], arm["effort"], str(notes_path), extra, workdir)
+    brief = compose_brief(t, agent, task, why, owns or [], inputs or [], check, arm["model"], arm["effort"], str(notes_path), extra, workdir, clock)
     lead_text = "\n".join([task, why] + list(extra or []))
     if dry_run:
         return {"id": "(dry run)", "template": (t or {}).get("id"), "base_agent": agent, "model": arm["model"], "effort": arm["effort"],
                 "explored": bool(arm.get("explored")), "wage_tokens": pay["tokens"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
+                "time_target": clock["target"], "time_stop": clock["stop"], "time_basis": clock["basis"],
                 "brief": "(not written)", "runners_up": [x["id"] for x in chosen[1:3]], "model_basis": arm.get("basis", ""),
                 "lint": lint_brief(brief, arm["model"], lead_text), "words": _words(brief), "needs": (t or {}).get("needs", []),
                 "closest": [] if t else [x["id"] for x in select(task, rack, state, hc, family, risk, base_agent, near=True)]}
@@ -676,6 +713,7 @@ def hire(task: str, brain_root: Path | None = None, project: Path | None = None,
         "model": arm["model"], "effort": arm["effort"], "explored": bool(arm.get("explored")), "propensity": arm.get("propensity", 1.0),
         "task_class": task_class, "family": family, "risk": risk, "tier": tier, "check": check, "has_check": bool(check),
         "wage_tokens": pay["tokens"], "band_tokens": pay["band"], "wage_cost": pay["cost"], "wage_basis": pay["basis"],
+        "time_target": clock["target"], "time_stop": clock["stop"], "band_minutes": clock["band"], "time_basis": clock["basis"],
         "task_sha": c.sha256_text(task)[:16], "words": _words(brief), "needs": (t or {}).get("needs", []),
         "brief": str(brief_path), "notes": str(notes_path), "workdir": workdir, "runners_up": [x["id"] for x in chosen[1:3]],
         "lint": lint_brief(brief, arm["model"], lead_text), "model_basis": arm.get("basis", ""),
@@ -710,7 +748,9 @@ def find_helper_usage(contract: dict, sub_paths: list[Path], models_cfg: dict) -
             out_tokens += m["usage"].get("out", 0)
             model = m["model"]
         price_out = ledger.rates_for(model, models_cfg).get("out", 20.0) if model else 20.0
-        return {"cost": round(cost, 4), "out_tokens": out_tokens, "actual_tokens": int(cost / price_out * 1e6), "model": model, "turns": len(data["messages"])}
+        times = sorted(t for t in (ledger._parse_ts(s) for s in data["stamps"]) if t)
+        minutes = round((times[-1] - times[0]).total_seconds() / 60, 1) if len(times) > 1 else None
+        return {"minutes": minutes, "cost": round(cost, 4), "out_tokens": out_tokens, "actual_tokens": int(cost / price_out * 1e6), "model": model, "turns": len(data["messages"])}
     return None
 
 
@@ -749,6 +789,8 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
     if usage:
         contract.update({"actual_tokens": usage["actual_tokens"], "actual_cost": usage["cost"], "actual_out": usage["out_tokens"], "turns": usage["turns"],
                          "overrun": round(usage["actual_tokens"] / contract["wage_tokens"], 2) if contract.get("wage_tokens") else None})
+        if usage.get("minutes") is not None:
+            contract["actual_minutes"] = usage["minutes"]
     if not usage and passed is None:
         return dict(contract, status="unmatched")  # stays open on disk, so a later settle can still find the helper
     contract["status"] = "settled"
@@ -763,6 +805,8 @@ def settle(contract_path: Path, brain_root: Path | None = None, project: Path | 
                "has_check": contract.get("has_check"), "explored": contract.get("explored"), "propensity": contract.get("propensity"),
                "wage_tokens": contract.get("wage_tokens"), "band_tokens": contract.get("band_tokens"),
                "actual_tokens": contract.get("actual_tokens"), "passed": contract.get("passed"), "sealed": sealed,
+               "band_minutes": contract.get("band_minutes"), "time_stop": contract.get("time_stop"),
+               "actual_minutes": contract.get("actual_minutes"),
                "eval": bool(contract.get("eval"))}
         inbox = root / "learning" / "inbox" / f"{c.today()}-{c.session_id()}.jsonl"
         have = {r.get("id") for r in c.read_jsonl(inbox)}
@@ -865,6 +909,8 @@ def cmd_hire(args) -> int:
         print(f"templates closest by wording: {', '.join(con['closest'])} — only if one fits the kind of work, hire again with --template <id> (brain hr rack --id <id> shows it)")
     print(f"agent: {con['base_agent']} · model {con['model']} · effort {con['effort']}" + (" · a trial of a cheaper setting" if con["explored"] else "") + f" · {c.clip(con['model_basis'], 80)}")
     print(f"wage: {con['wage_tokens']:,} output-equivalent tokens (about ${con['wage_cost']:.2f} at list price) · {con['wage_basis']}")
+    if con.get("time_target"):
+        print(f"timebox: aim for {con['time_target']} min, stop at {con['time_stop']} min · {con['time_basis']}")
     print(f"brief: {con['brief']}")
     print(f"delegate with: agent {con['base_agent']}, model {con['model']}, effort {con['effort']}, message: \"Follow the brief at {con['brief']} (contract {con['id']}).\"")
     if con.get("needs"):
@@ -921,6 +967,10 @@ def cmd_settle(args) -> int:
         res = ("check passed" if con.get("passed") is True else "CHECK FAILED" if con.get("passed") is False
                else "CHECK NOT RUN: the contract was changed after hiring" if con.get("tampered") else "no check result")
         flag = " · OVER WAGE" if (con.get("overrun") or 0) > hc["overrun_flag"] else ""
+        if isinstance(con.get("actual_minutes"), (int, float)) and con.get("time_stop"):
+            use += f" · {con['actual_minutes']:g} of {con['time_stop']} min"
+            if con["actual_minutes"] > con["time_stop"]:
+                flag += " · OVER TIMEBOX"
         print(f"{con['id']}: {con.get('template') or 'plain'} on {con['model']} · {use}{flag} · {res}")
         if con.get("passed") is False:
             worst = 1

@@ -1,5 +1,5 @@
 {
-  "brain": "0.9.0",
+  "brain": "0.10.0",
   "contract": 1,
   "learned_zone_locked": false,
   "_help": "learned_zone_locked becomes true at tag brain-v1.0.0; after that the learned zone changes only through `brain learn apply`."

@@ -151,6 +151,13 @@ def boot_lines(request: str | None = None, brain_root: Path | None = None, named
             lines.append(f"size: {names.get(r['tier'], r['tier'])} · {r.get('family') or family or '-'} · {r.get('task_class', '-')} · {c.clip(r.get('reason', ''), 90)}")
             family = family or r.get("family")
             tier = r["tier"]
+            from . import timebox
+            box = timebox.for_size(tier, r.get("task_class", ""), r.get("family") or family or "")
+            if box:
+                lines.append(f"timebox: aim for {box['target']:g} min, stop at {box['stop']:g} min ({box['basis']}); "
+                             "at the stop, deliver what is there or re-size and say why")
+            elif tier in (2, 3):
+                lines.append("timebox: each plan ticket's estimate is its target and twice it its stop (brain plan schedule)")
         except Exception:  # routing is optional at boot; never block orientation
             tier = None
         if tier != 0:

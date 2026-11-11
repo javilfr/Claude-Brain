@@ -2,7 +2,7 @@
 
 This repository is the brain: method, memory and scripts for building anything. The repository attached beside it is the project being built, and holds its own state in `.brain/`. The owner, Javier, works mostly from his phone, does not use a terminal, and wants finished work with evidence. This file is the whole always-loaded core; everything else loads when needed.
 
-`BRAIN` means `python3 <folder of this file>/bin/brain` (normally `python3 Claude-Brain/bin/brain`). Standard library only; nothing to install.
+`BRAIN` means `python3 <folder of this file>/bin/brain` (normally `python3 Claude-Brain/bin/brain`). Standard library only.
 
 ## First, size the request
 
@@ -15,7 +15,7 @@ Over-process is the main waste, so do the least that meets the bar.
 | 2 Project | A whole deliverable; "New project:", "Start running", "Continue", "set up" | Run `BRAIN boot "<request>"`, then use the matching `brain-*` skill. |
 | 3 Programme | Phases or parallel streams | As size 2, with a written plan before any parallel work. |
 
-Between two sizes, choose the smaller; moving up later is fine, and say why. "Quick:" forces 0–1. "Go deep:" asks for a researched answer with sources.
+Between two sizes, choose the smaller; moving up later is fine, and say why. Work fills the time given, so each piece gets a timebox (boot, plan and hire print it); at its stop, deliver or re-size. "Quick:" forces 0–1. "Go deep:" asks for a researched answer with sources.
 
 ## Core rules
 
@@ -37,7 +37,7 @@ Between two sizes, choose the smaller; moving up later is fine, and say why. "Qu
 - Before an expensive full run, show one small sample.
 - For an app, done means deployed and visible on his phone; say what to look at.
 - He has no terminal: give clicks, or a file to read. Only when a step must run on his own computer, give one copy-and-paste box per step and say what it should print.
-- He dictates: read for intent, not spelling.
+- He dictates: read for intent.
 
 ## Where things are
 

@@ -528,6 +528,30 @@
       "est": 30,
       "accept": "python3 bin/brain doctor && python3 -m unittest discover -s tests -t .",
       "status": "open"
+    },
+    {
+      "id": "CB-214",
+      "title": "Parkinson's law for time: learned timeboxes everywhere a time budget exists",
+      "reason": "Owner request 2026-11-11: apply Parkinson's law (work expands to fill the time available) with algorithmic logic wherever it applies in the brain.",
+      "goal": "One algorithm (engine/timebox.py: median target, conformal-q90 stop, censored timeouts with doubling back-off, capped at the old fixed value) sets command timeouts, requirement-check timeouts, the post-release live wait, radar request timeouts, the size 0/1 session timebox at boot, plan-ticket timeboxes and a helper time wage; close records the timebox as the estimate so calibration learns.",
+      "deps": [],
+      "files": [
+        "engine/timebox.py",
+        "engine/gate.py",
+        "engine/req.py",
+        "engine/radar.py",
+        "engine/detect.py",
+        "engine/schedule.py",
+        "engine/hr.py",
+        "engine/ledger.py",
+        "engine/__init__.py",
+        "tests/test_timebox.py",
+        "method/efficiency.md",
+        "CLAUDE.md"
+      ],
+      "est": 120,
+      "accept": "python3 -m unittest tests.test_timebox && python3 bin/brain doctor && python3 bin/brain lint",
+      "status": "done"
     }
   ],
   "live_checks": [

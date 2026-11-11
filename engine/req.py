@@ -190,7 +190,7 @@ def cmd_verify(args) -> int:
             print(f"{r['id']}: no check command; verify it another way and use `brain req evidence`")
             failed += 1
             continue
-        res = run_filtered(cmd, project, project, timeout=args.timeout)
+        res = run_filtered(cmd, project, project, timeout=args.timeout, default=600)
         if res["exit"] == 127:
             print(f"{r['id']}: the check is not a runnable command (exit 127); verify it another way and use `brain req evidence`")
             failed += 1
@@ -299,7 +299,7 @@ def register(sub) -> None:
     a = s.add_parser("verify", help="run each open line's check; a pass records the log as evidence and marks it done")
     c.add_project_arg(a)
     a.add_argument("id", nargs="*", help="only these lines (default: every open line)")
-    a.add_argument("--timeout", type=int, default=600, help="seconds per check")
+    a.add_argument("--timeout", type=float, default=None, help="seconds per check; default: its timebox learned from earlier runs (at most 600)")
     a.set_defaults(func=guarded(cmd_verify))
     a = s.add_parser("drop", help="drop a line with a reason")
     c.add_project_arg(a)

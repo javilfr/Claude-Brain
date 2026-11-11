@@ -494,6 +494,15 @@ def cmd_close(args) -> int:
     declared = {"risk": args.risk, "model": args.model, "effort": args.effort, "est_tokens": args.est_tokens,
                 "est_minutes": args.est_minutes, "explored": None if args.explored is None else bool(args.explored),
                 "propensity": args.propensity, "has_check": None if args.has_check is None else bool(args.has_check)}
+    box = None
+    if args.tier is not None:
+        # The size's timebox is the time estimate when none was declared, so
+        # every closed small session teaches the calibration what such work
+        # really takes, and the next timebox tightens or widens to match.
+        from . import timebox
+        box = timebox.for_size(args.tier, (args.cls or [""])[0] if isinstance(args.cls, list) else (args.cls or ""))
+        if box and declared["est_minutes"] is None:
+            declared["est_minutes"] = box["target"]
     if getattr(args, "request", None) and project is not None:
         # The request text is used here and dropped: only salted hashes of
         # its words leave this function, and the salt stays in the project.
@@ -516,6 +525,11 @@ def cmd_close(args) -> int:
               f"cache read {_k(t['cache_read'])}, out {_k(t['out'])})")
         print(f"cost: ${t['cost']:.2f}; helpers {s['helpers']} ({s['helper_cost_share']:.0%} of cost)")
         print(f"main conversation read from cache: {s['cache_read_share']:.0%}")
+        est = declared.get("est_minutes")
+        if s.get("wall_minutes") and est:
+            stop = box["stop"] if box else est * 2
+            verdict = "within the target" if s["wall_minutes"] <= est else "within the stop" if s["wall_minutes"] <= stop else "OVER THE STOP"
+            print(f"time: {s['wall_minutes']:g} min against a timebox of {est:g} (stop {stop:g}): {verdict}")
     print(f"run record: {r['run_record'] or 'none (no managed project)'}")
     print(f"inbox: {r['skipped'] or str(r['inbox_records']) + ' record(s) in ' + Path(r['inbox']).name}")
     try:  # helpers hired this session are settled here, so no wage goes unrecorded

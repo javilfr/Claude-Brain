@@ -13,11 +13,15 @@ A helper starts cold, so hire one only for work that is self-contained, bulky ne
 
 `BRAIN hr hire "<the goal, as an outcome>" --why "<reason and who uses it>" --owns <path> --input <file to read first> --check "<acceptance command>" [--parallel] [--material-tokens <rough size>]`
 
-It answers "do not hire" when the work is small or has no check. Otherwise it picks the agent, model and effort (from learned results, with safe defaults) and a token wage, and writes a plain brief to a file, listing the closest of the 100 rack templates. Delegate exactly as its last line says: the named agent, model and effort, with the one-line message pointing at the brief. Do not retype the brief; that pointer is the saving. No two running helpers own the same file, and at most four run at once.
+It answers "do not hire" when the work is small or has no check. Otherwise it picks the agent, model and effort (from learned results, with safe defaults), a token wage and a timebox (aim and stop, in minutes), and writes a plain brief to a file, listing the closest of the 100 rack templates. Delegate exactly as its last line says: the named agent, model and effort, with the one-line message pointing at the brief. Do not retype the brief; that pointer is the saving. No two running helpers own the same file, and at most four run at once.
 
 Add `--also "<constraint, with its reason>"` for anything only this task needs. Add `--template <id>` only when a suggested template is clearly the same kind of work (a translator for a translation, not a reviewer for a fix): in the first paired evaluation, automatically chosen templates did worse than plain briefs. `BRAIN hr rack --search "<task>"` shows candidates. A pure lookup in files that would crowd your context (no commands, no edits) goes to `--agent scout`, the cheapest tier; it answers in its reply, so make the check a command that confirms what it found.
 
 When the helper returns, `BRAIN hr settle` runs the acceptance command itself and compares real token use with the wage (`BRAIN close` also settles whatever is still open). A failed check goes back to the same helper once with the failing output, then up one step in the escalation order in `memory/models.json`. A helper that stops at once on a usage limit for its model (HTTP 429, "reached your … limit") is an infrastructure error, not a result: send the same brief again on the next model that is available, and say so in the report.
+
+## Timeboxes
+
+Each item has a target and a stop (`plan packet` and the hire print them; `method/efficiency.md` has the rule). At an item's stop, decide instead of continuing: deliver what passes, split the rest into a new item, or record what is left. `brain run` and the gates already stop a hung command at its learned timebox; pass `--timeout` only when a run is known to be slower than usual.
 
 ## Checks and escalation
 

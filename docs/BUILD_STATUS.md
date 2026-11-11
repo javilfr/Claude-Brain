@@ -300,3 +300,23 @@ Still unproven, or waiting on the owner:
 - `main` was reverted by another session at 01:09 UTC (`NEEDS_YOU.md` item 8). This session's branch has not been merged, and its inbox has not been consolidated, because the single-writer rule refuses while the branch is behind `origin/main`.
 
 What this session cost (`brain ledger` at close): see the last commit's session record; about 40 helpers, most of them the 35 small evaluation trials on Sonnet.
+
+## CB-214: Parkinson's law for time (2026-11-11, brain 0.10.0)
+
+Owner request: apply Parkinson's law (work expands to fill the time available) with algorithmic logic wherever it applies. Decision D-16; rule and table in `method/efficiency.md`.
+
+**One algorithm, `engine/timebox.py`.** Target = median of the last 20 observed durations; stop = their conformal 90th percentile times a safety factor; under 5 observations, the slowest times 3 or the estimate times 2; a run that hits the stop is censored and doubles the next stop; every stop is capped at the old fixed value, so evidence can only tighten a budget.
+
+| Where | Before | Now | Evidence |
+|---|---|---|---|
+| `brain run`, gates, `hr settle` checks | 3600 s | default until 5 successes, then 3 x q90, floor 120 s; failures not counted | `tests/test_timebox.py` Commands |
+| `brain req verify` | 600 s | same rule, cap 600 s | `engine/req.py` |
+| live check after release | 120 s | learned per address, 30–120 s | `test_the_live_wait_is_learned_and_capped` |
+| radar requests | 6 s each | per-source latency, 1.5–6 s, kept in the untracked checks file | `tests/test_radar.py` (47 OK) |
+| size 0 / 1 request at boot | none | 3/6 and 20/40 min, mlearn-calibrated; `close --tier` records it as the estimate | `brain boot "Quick: …"` prints the line |
+| plan tickets | `est` only | target = calibrated median, stop = calibrated p80 or 2 x est; in `plan packet` | `test_ticket_box_and_packet` |
+| helpers | token wage only | time wage 8/20/45/90 min per size, stop 2x, learned from settled minutes; `<timebox>` in the brief; OVER TIMEBOX on settle | `test_helper_time_wage_tightens_with_evidence` |
+
+Left fixed on purpose: eval graders (a tight limit could fail a valid trial) and the 120-minute checkpoint lease (a safety guard, not effort).
+
+**Gate:** `python3 -m unittest discover -s tests -t .` 453 tests OK (436 before; 17 new). `brain doctor`, `lint`, `hr audit`, `items check`, `eval audit`, `learn verify` exit 0. `CLAUDE.md` 5988 bytes (limit 6000).

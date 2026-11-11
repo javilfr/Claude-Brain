@@ -34,8 +34,19 @@ def log_dir(project: Path | None) -> Path:
     return Path(tempfile.gettempdir()) / "brain-run"
 
 
-def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, timeout: int = 3600) -> dict:
-    """Run a shell command; save all output; return a short digest."""
+DEFAULT_TIMEOUT = 3600  # seconds; the cap of every learned command timebox
+
+
+def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, timeout: float | None = None,
+                 default: float = DEFAULT_TIMEOUT) -> dict:
+    """Run a shell command; save all output; return a short digest.
+
+    Without an explicit ``timeout`` the command gets its timebox (engine/
+    timebox.py): learned from its earlier runs, never above ``default``, and
+    doubled after each timeout in a row. Each run is folded back in."""
+    from . import timebox
+    key, box = timebox.for_command(command, project, default, explicit=timeout)
+    timeout = box["limit"]
     start = time.time()
     try:
         proc = subprocess.run(command, shell=True, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, errors="replace")
@@ -44,8 +55,12 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
     except subprocess.TimeoutExpired as e:
         code = 124
         streams = None
-        out = ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + f"\n[timed out after {timeout}s]"
+        out = ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + f"\n[timed out after {timeout:g}s ({box['basis']}); pass --timeout to allow longer]"
     secs = time.time() - start
+    # Only a success says how long the work takes; a quick failure would pull
+    # the timebox down and kill the fixed run (a timeout is censored).
+    if code == 0 or (code == 124 and streams is None):
+        timebox.observe(timebox.store_path(project), key, secs, timed_out=code != 0, label=command)
     d = log_dir(project)
     d.mkdir(parents=True, exist_ok=True)
     log = d / f"{c.now().strftime('%Y%m%d-%H%M%S')}-{c.sha256_text(command)[:8]}.log"
@@ -71,12 +86,13 @@ def run_filtered(command: str, cwd: Path, project: Path | None, tail: int = 6, t
                 shown.append("  …")
             shown.append(lines[i])
             prev = i
-    return {"exit": code, "seconds": round(secs, 1), "log": str(log), "lines": len(lines), "shown": [l[:240] for l in shown]}  # truncated, not re-spaced: output is shown as it was
+    return {"exit": code, "seconds": round(secs, 1), "timebox": box["limit"], "log": str(log), "lines": len(lines), "shown": [l[:240] for l in shown]}  # truncated, not re-spaced: output is shown as it was
 
 
 def print_digest(command: str, r: dict) -> None:
     word = "ok" if r["exit"] == 0 else f"FAILED (exit {r['exit']})"
-    print(f"{word} in {r['seconds']}s · {r['lines']} lines · full output: {r['log']}")
+    box = f" of a {r['timebox']:g}s timebox" if r.get("timebox") else ""
+    print(f"{word} in {r['seconds']}s{box} · {r['lines']} lines · full output: {r['log']}")
     for l in r["shown"]:
         print("  " + l)
 
@@ -206,9 +222,28 @@ def check_live(url: str, expect: str = "", wait_seconds: int = 120, every: float
         time.sleep(every)
 
 
-def live_report(project: Path, rel: dict, head: str, wait_seconds: int) -> int:
+LIVE_WAIT = 120  # seconds; the cap of the learned deploy wait
+
+
+def live_wait(project: Path, url: str, explicit: float | None = None) -> tuple[str, dict]:
+    """How long to wait for the live address: learned from how long earlier
+    deployments took to appear (Parkinson's law: a fixed generous wait is
+    spent in full on every failed deploy). Never above LIVE_WAIT unless the
+    caller says so."""
+    from . import timebox
+    key = timebox.key_for("live", url)
+    rec = timebox.load(timebox.store_path(project)).get(key)
+    cap = max(LIVE_WAIT, explicit or 0)
+    return key, timebox.allot(rec, LIVE_WAIT, floor=30.0, cap=cap, explicit=explicit, slack=20.0)
+
+
+def live_report(project: Path, rel: dict, head: str, wait_seconds: float | None = None) -> int:
+    from . import timebox
     expect = (rel.get("live_expect") or "").replace("{commit}", head[:7])
-    live, msg = check_live(rel["live_url"], expect, wait_seconds)
+    key, box = live_wait(project, rel["live_url"], wait_seconds)
+    start = time.time()
+    live, msg = check_live(rel["live_url"], expect, int(box["limit"]))
+    timebox.observe(timebox.store_path(project), key, time.time() - start, timed_out=not live, label="live " + rel["live_url"])
     print(("live check: " if live else "LIVE CHECK FAILED: ") + msg)
     if not live:
         print("tell the owner this first, with click steps; do not keep polling")
@@ -329,7 +364,7 @@ def register(sub) -> None:
     p = sub.add_parser("run", help="run a command; keep the full output in a file, print only the result")
     c.add_project_arg(p)
     p.add_argument("--tail", type=int, default=6)
-    p.add_argument("--timeout", type=int, default=3600)
+    p.add_argument("--timeout", type=float, default=None, help="seconds; default: the timebox learned from earlier runs (at most 3600)")
     p.add_argument("--cwd")
     p.add_argument("cmd", nargs="...")
     p.set_defaults(func=cmd_run)
@@ -343,5 +378,5 @@ def register(sub) -> None:
     p.add_argument("--push", action="store_true", help="actually push (without it: report only)")
     p.add_argument("--run-gates", action="store_true", help="run the gates first if they are not green on this commit")
     p.add_argument("--check-live", action="store_true", help="only re-check the live address; push nothing")
-    p.add_argument("--live-wait", type=int, default=120, help="seconds to wait for the live address (bounded)")
+    p.add_argument("--live-wait", type=float, default=None, help="seconds to wait for the live address; default: learned from earlier deployments (at most 120)")
     p.set_defaults(func=cmd_release)

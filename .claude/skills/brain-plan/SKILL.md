@@ -21,7 +21,7 @@ Write `.brain/PLAN.md` sized to the request: a short ordered list of items, each
 
 ## 4. Parallel work
 
-Only when items are independent, bulky and checkable: put them in a tickets file (`{"tickets": [{"id", "title", "goal", "files", "deps", "est" in minutes, "accept" command}]}`) and run `BRAIN plan schedule <file>`. It returns waves that never put two items touching the same file together, with the elapsed-time and token cost of parallel versus sequential. `BRAIN hr staff <file>` then shows which template, agent and wage each ticket would get and the total payroll (add `--budget <tokens>` to test a ceiling).
+Only when items are independent, bulky and checkable: put them in a tickets file (`{"tickets": [{"id", "title", "goal", "files", "deps", "est" in minutes, "accept" command}]}`) and run `BRAIN plan schedule <file>`. It returns waves that never put two items touching the same file together, with the elapsed-time and token cost of parallel versus sequential. Give `est` as the minutes the item should take, not a safe upper bound: it is the item's target, twice it is its stop, and calibration replaces both once similar work has outcomes. `BRAIN hr staff <file>` then shows which template, agent and wage each ticket would get and the total payroll (add `--budget <tokens>` to test a ceiling).
 
 ## 5. Checkpoint
 

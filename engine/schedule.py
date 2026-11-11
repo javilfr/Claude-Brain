@@ -407,7 +407,11 @@ def calibrate_plan(data: dict, state: dict, cfg: dict | None = None) -> tuple[di
             tok = t2.get("tokens") if isinstance(t2.get("tokens"), (int, float)) and t2.get("tokens") else None
             cal = mlearn.calibrate(state, cls, fam, tok, est, cfg)
             if cal["level"] in ("class", "family") and cal["minutes_p50"]:
+                # Parkinson's law: the target is the median of what such work
+                # took, not the cautious 80th percentile, which becomes the stop.
                 t2["est"] = cal["minutes_p50"]
+                if cal["minutes_p80"]:
+                    t2["stop"] = max(cal["minutes_p80"], cal["minutes_p50"])
                 if tok and cal["tokens_p50"]:
                     t2["tokens"] = cal["tokens_p50"]
                 changed += 1
@@ -452,6 +456,10 @@ def packet(data: dict, ticket_id: str, max_lines: int = 25) -> list[str]:
             lines.append(f"{label}: {c.clip(val, 400)}")
     accept = t.get("accept")
     lines.append(f"Acceptance command: {accept}" if accept else "Acceptance command: none recorded; add one before delegating")
+    from . import timebox
+    box = timebox.box_line(timebox.ticket_box(t))
+    if box:
+        lines.append(box)
     lines.append(f"Return: {PACKET_RETURN}.")
     lines.append("Do not commit; the lead reviews and commits.")
     return lines[:max_lines]

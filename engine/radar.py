@@ -45,7 +45,7 @@ STATE_FILE = "learning/radar/state.json"
 # rewrites a tracked file and dirties the brain every session (review item
 # M20). The tracked file keeps only what changes when something new is seen.
 CHECKS_FILE = "learning/radar/checks.json"
-VOLATILE = ("last_checked", "last_status", "etag", "last_modified")
+VOLATILE = ("last_checked", "last_status", "etag", "last_modified", "lat")
 
 
 def load_state(root: Path) -> dict:
@@ -403,8 +403,17 @@ def _check(src: dict, prev: dict, fetch: Fetch, allow: frozenset, stamp: str, ti
         headers["If-None-Match"] = prev["etag"]
     if prev.get("last_modified"):
         headers["If-Modified-Since"] = prev["last_modified"]
+    # Parkinson's law per source: a source that answers in 0.3 s gets a
+    # timebox from its own latencies, not the 6 s every source may take, so a
+    # hung server costs the run seconds less (engine/timebox.py).
+    from . import timebox
+    timeout = min(timeout, timebox.allot({"d": prev.get("lat", [])}, timeout, floor=1.5, slack=0.5)["limit"])
+    t_start = time.monotonic()
     try:
         status, hdrs, raw = _get(src["url"], headers, fetch, allow, timeout)
+        if status in (200, 304):
+            lat = [x for x in prev.get("lat", []) if isinstance(x, (int, float))]
+            state["lat"] = (lat + [round(time.monotonic() - t_start, 2)])[-10:]
     except _Refused as e:
         state["last_status"] = "refused"
         return {"state": state, "new": [], "error": str(e)}
