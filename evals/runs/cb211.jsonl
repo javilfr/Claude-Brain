@@ -2,3 +2,6 @@
 {"arm": "plain", "at": "2026-11-11T02:51:16Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-api-fallback", "tokens": 2611, "trial": 1}
 {"arm": "plain", "at": "2026-11-11T02:51:23Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-es-en-guide", "tokens": 5539, "trial": 1}
 {"arm": "template", "at": "2026-11-11T02:51:41Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-es-en-guide", "tokens": 8367, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T02:52:03Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-flaky-bug", "tokens": 2708, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T02:52:09Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-facts-consistency", "tokens": 5155, "trial": 1}
+{"arm": "template", "at": "2026-11-11T02:52:10Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-flaky-bug", "tokens": 3256, "trial": 1}
