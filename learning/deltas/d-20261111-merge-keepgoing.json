@@ -1,0 +1,16 @@
+{
+  "at": "2026-11-11T00:50:00Z",
+  "id": "d-20261111-merge-keepgoing",
+  "ops": [
+    {
+      "id": "own-decide-and-record",
+      "op": "EDIT_TEXT",
+      "text": "Do not stop to ask. Decide using research, record the assumption where he can overturn it, and keep going until all the work is done; stop only when he says so or everything left waits on him. Ask only what would change what gets built."
+    },
+    {
+      "id": "lsn-once-work-starts-keep-going-until-all-do-3f6477",
+      "op": "SET_STATUS",
+      "status": "retired"
+    }
+  ]
+}
