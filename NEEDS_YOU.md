@@ -15,7 +15,7 @@ RESOLVED: 2026-11-10 — you approved it in chat and `main` was fast-forwarded t
 
 - **Why:** this is what makes "only changed by its own learning systems" a rule that GitHub enforces, not just a convention. With it, a change reaches `main` only through a pull request whose checks pass.
 - **How:** github.com → **javilfr/Claude-Brain** → **Settings** → **Branches** → **Add branch ruleset** (or **Add rule**) → branch name `main` → tick **Require a pull request before merging** and **Require status checks to pass**, then choose the check named **brain** → **Create**. Do this only after the check has gone green once (item 7): requiring a check that cannot run would block every merge.
-- **Meanwhile:** nothing on GitHub stops a direct change. The same checks pass when run inside a session (310+ tests, self-test, lint).
+- **Meanwhile:** nothing on GitHub stops a direct change. The same checks pass when run inside a session (the full test suite, `brain doctor`, `brain lint`, `brain hr audit`).
 
 ## 3. Choose your default model for new chats (no clicks now; a habit)
 

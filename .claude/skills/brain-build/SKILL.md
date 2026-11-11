@@ -17,7 +17,7 @@ It answers "do not hire" when the work is small or has no check. Otherwise it pi
 
 Add `--also "<constraint, with its reason>"` for anything only this task needs. Add `--template <id>` only when a suggested template is clearly the same kind of work (a translator for a translation, not a reviewer for a fix): in the first paired evaluation, automatically chosen templates did worse than plain briefs. `BRAIN hr rack --search "<task>"` shows candidates. A pure lookup in files that would crowd your context (no commands, no edits) goes to `--agent scout`, the cheapest tier; it answers in its reply, so make the check a command that confirms what it found.
 
-When the helper returns, `BRAIN hr settle` runs the acceptance command itself and compares real token use with the wage (`BRAIN close` also settles whatever is still open). A failed check goes back to the same helper once with the failing output, then up one step in the escalation order in `memory/models.json`.
+When the helper returns, `BRAIN hr settle` runs the acceptance command itself and compares real token use with the wage (`BRAIN close` also settles whatever is still open). A failed check goes back to the same helper once with the failing output, then up one step in the escalation order in `memory/models.json`. A helper that stops at once on a usage limit for its model (HTTP 429, "reached your … limit") is an infrastructure error, not a result: send the same brief again on the next model that is available, and say so in the report.
 
 ## Checks and escalation
 
