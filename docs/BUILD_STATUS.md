@@ -225,3 +225,19 @@ What changed because of it:
 3. A plain helper given a command check now gets the builder agent. It was getting the researcher, which has no shell to run its check.
 
 What this does not show: whether a correctly chosen template beats a plain brief. These tasks are small, and the template arm mostly ran the wrong template. That needs a run where the lead names a matching template, on tasks bulky enough for method lines to matter.
+
+## CB-206 close (2026-11-11)
+
+All items on the list are handled:
+
+| Item | Outcome |
+|---|---|
+| M6 success output mixes streams | fixed, tested |
+| M8 repo map lists generated files | fixed, tested |
+| M15 radar thread shutdown | measured 6.08 s for a 1 s budget; fixed (1.08 s), tested in a subprocess |
+| M18 tunables inline | promotion bar configurable; the recall floor already was; tested |
+| M19 lead-record field names | the spec now describes what the code writes (`id` formula, `matched`); the code, its tests and consolidation agree |
+| M20 radar state dirties the tree | per-run fields untracked; tested |
+| `staff` parallel default | parallel only when the schedule overlaps tickets; tested |
+| a use for the scout tier | `--agent scout` for file lookups, documented in the build skill; tested |
+| forged inbox records | **accepted risk, not fixed.** Anything that can write the inbox can write a valid-looking record: the model, a helper, or a person with the repository. A signature would need a key the model cannot read, and none exists in this environment. What limits the harm: pass counts move only on records whose check this engine ran under a seal (I-17); owner-stated notes need the owner's words in the session transcript; every inbox change arrives as a commit the owner can see; and `learn verify` replays deltas against `main` |
