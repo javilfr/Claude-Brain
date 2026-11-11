@@ -70,7 +70,8 @@ def default_manifest(title: str, family: str, pid: str | None = None) -> dict:
         "tier": 2,
         "commands": {"setup": "", "check_fast": "", "check_full": "", "run": ""},
         "gates": [{"id": "checks", "kind": "command", "command": ""}],
-        "release": {"rule": "none", "branch": "main", "live_url": ""},
+        # Owner, 2026-11-11: "always put anything deployable merged in main" — the default.
+        "release": {"rule": "main-on-green", "branch": "main", "live_url": ""},
         "paths": {"deliverables": [], "evidence": "docs/evidence/", "never_touch": []},
         "languages": ["en"],
         "risk": "standard",
@@ -306,7 +307,7 @@ def cmd_init(args) -> int:
         return 1
     over = {}
     if args.release:
-        over["release"] = {"rule": args.release}
+        over["release"] = {"rule": args.release, "branch": "main", "live_url": ""}
     if args.language:
         over["languages"] = args.language
     made = init(project, args.title or project.name, args.family, over)

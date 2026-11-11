@@ -30,7 +30,7 @@ One round; a second only to confirm blocking fixes; stop when only style remains
 
 ## 5. Release
 
-Under release rule `main-on-green`: `BRAIN release --run-gates --push`. It refuses uncommitted changes and a branch behind `origin/main` (merge it, re-run, try again), pushes only when every gate is green on this commit, never forces, then checks the live address. Without `--push` it only reports. Push to `main` no other way. `BRAIN release --check-live` re-checks the live address alone; if it fails, say so first and give click steps. Under rule `pr`, open a pull request when he asks.
+Under release rule `main-on-green` (the default): every finished deliverable ends with `BRAIN release --run-gates --push`, without waiting to be asked; the owner has a standing yes for merging deployable work into `main`. It refuses uncommitted changes and a branch behind `origin/main` (merge it, re-run, try again), pushes only when every gate is green on this commit, never forces, then checks the live address. Without `--push` it only reports. Push to `main` no other way. `BRAIN release --check-live` re-checks the live address alone; if it fails, say so first and give click steps. Under rule `pr`, open a pull request when he asks.
 
 A change to the brain itself needs `BRAIN eval contract` passing; a claim that it helps needs `BRAIN eval compare <run-file> --a ARM --b ARM`.
 

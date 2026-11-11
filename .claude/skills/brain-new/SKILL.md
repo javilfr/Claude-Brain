@@ -9,7 +9,7 @@ The owner describes a project in one sentence and expects it to start. His large
 
 ## Set up
 
-- Empty repo: `BRAIN init <path> --family F --title "T" --release R --language L`, with F one of software, data, knowledge, language, operations (the nearest fit; record a poor fit as a decision) and R `main-on-green` when the project deploys from `main`, `pr` or `none`. Running it twice changes nothing.
+- Empty repo: `BRAIN init <path> --family F --title "T" --release R --language L`, with F one of software, data, knowledge, language, operations (the nearest fit; record a poor fit as a decision) and R `main-on-green` (the default, and the owner's standing rule: anything deployable ends up merged in `main`); `pr` or `none` only when he asks for it. Running it twice changes nothing.
 - Repo with content and no `.brain/`: `BRAIN adopt <path> --survey` first (it writes nothing), plus `BRAIN map <path>` or a scout for large code; then `BRAIN adopt <path> --family F --title "T"`. Adopt puts a pointer block above an existing `CLAUDE.md`, saying the brain wins where they disagree. When that file is large (every byte is paid on every request) it adds a "Slim the old handbook" item to `NEEDS_YOU.md` and never moves the file; make that choice one of your questions.
 - `BRAIN validate` afterwards. Fill the rest of `.brain/project.json`: commands, gates, live address if known.
 
