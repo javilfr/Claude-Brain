@@ -438,6 +438,15 @@ class ReviewFindings(Base):
             code = mod.main(list(argv))
         return code, buf.getvalue()
 
+    def test_the_cli_writes_a_plain_brief_unless_a_template_is_named(self):
+        # CB-203, pre-registered, n=8: automatic templates did worse (verdict revert).
+        code, out = self.run_cli("hr", "hire", "Build the settings screen for the phone", "--check", "true", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("plain brief (the default)", out)
+        self.assertIn("phone-first-ui-builder", out)  # still suggested
+        code, out = self.run_cli("hr", "hire", "Build the settings screen for the phone", "--check", "true", "--dry-run", "--template", "auto")
+        self.assertIn("template phone-first-ui-builder", out)
+
     def test_cap_counts_this_sessions_contracts_with_or_without_a_project(self):
         """S1: the four-helper cap applies with no project; other sessions' leftovers do not block."""
         os.environ["TMPDIR"] = str(Path(self._tmp.name) / "tmp")
@@ -636,6 +645,13 @@ class RealRack(unittest.TestCase):
             top3 += any(i in r["expect"] for i in ids[:3])
         self.assertGreaterEqual(top1 / len(rows), 0.74, f"top-1 {top1}")
         self.assertGreaterEqual(top3 / len(rows), 0.82, f"top-3 {top3}")
+
+    def test_a_making_request_does_not_rank_a_read_only_template_first(self):
+        # CB-203: reviewer templates given a translation or a fix reviewed instead of doing it.
+        rack = hr.load_rack(ROOT)
+        self.assertNotEqual(hr.select("Translate source.md into Spanish in es.md", rack)[0]["template"]["base_agent"], "reviewer")
+        review = hr.select("Review the Spanish translation in es.md against source.md", rack)
+        self.assertEqual(review[0]["id"], "back-translation-checker")
 
     def test_vague_requests_rarely_get_a_template(self):
         """evals/hr_negatives.jsonl: 20 requests no template fits (dev, used

@@ -206,3 +206,22 @@ How clean the measurement is: the new set was looked at three times, not once. F
 Still weak: on requests worded the way the owner dictates, the right template is in the top three only about half the time, and 12 of 20 vague requests still get a template. Two things keep the harm small. The lead sees the candidates and the closest list, and can name a template or use `--template none`. And small items are done by the lead without a hire.
 
 One test input was changed. The fixture test that a weak fit is "offered, not chosen" used a long review request that now rightly matches `code-reviewer` (trigram 0.31, two words). It now uses a request that is weak on both measures; the behaviour it checks is unchanged.
+
+## CB-203 result: first paired evaluation (2026-11-11)
+
+Both comparisons were pre-registered and committed before the first trial (`evals/prereg/aa-plain-brief.json`, `evals/prereg/hr-template-vs-plain.json`). The 8 dev tasks were used, and the 4 held-out tasks were not touched. Every trial ran in a clean folder, with the task's grader as its acceptance command. `brain hr settle` measured tokens and `brain eval grade` graded the result independently. Runs: `evals/runs/aa.jsonl`, `evals/runs/ab.jsonl`.
+
+| Comparison | Pass | Tokens | `brain eval compare` |
+|---|---|---|---|
+| A/A: plain brief vs plain brief | 8/8 and 8/8 | within 2% (5 wins, 3 losses) | **not proven**, as an A/A must be; this is the noise level |
+| A/B: plain brief vs brief with the automatically chosen template | plain 8/8, template 6/8 | 17,409 vs 32,805 (+80%) | **revert** (7 of 8 worse; P(template worse) 0.98; sequential test accepts "not better") |
+
+Why the templates lost: the automatic pick was the wrong kind of helper on 7 of 8 tasks. `ticket-slicer` was chosen for two sizing questions, `copy-editor` for a code fix, `coverage-analyst` for adding a function, and `source-harvester` for a memo. The read-only reviewers `back-translation-checker` (translation) and `rubric-mapper` (an idempotency fix) did not do the work at all: they reviewed it and failed.
+
+What changed because of it:
+
+1. `brain hr hire` writes a plain brief by default and lists the closest templates. A template is used only when the lead names it (`--template <id>`); `--template auto` keeps the old behaviour. `hr staff` reports "plain (closest: …)". The build skill says to name a template only when it is clearly the same kind of work.
+2. Selection demotes read-only templates for a request that asks for something to be made or changed (factor 0.6). This was tuned on dev, the old held-out set and the negatives only; the new held-out set was not looked at again. Dev top-1/top-3 0.94/0.98, old held-out 0.81/0.92.
+3. A plain helper given a command check now gets the builder agent. It was getting the researcher, which has no shell to run its check.
+
+What this does not show: whether a correctly chosen template beats a plain brief. These tasks are small, and the template arm mostly ran the wrong template. That needs a run where the lead names a matching template, on tasks bulky enough for method lines to matter.

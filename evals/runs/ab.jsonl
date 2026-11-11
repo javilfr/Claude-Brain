@@ -1,0 +1,16 @@
+{"arm": "plain", "at": "2026-11-11T01:02:47Z", "infra_error": false, "minutes": null, "passed": 1, "task": "data-csv-total", "tokens": 2206, "trial": 1}
+{"arm": "template", "at": "2026-11-11T01:02:47Z", "infra_error": false, "minutes": null, "passed": 1, "task": "data-csv-total", "tokens": 2119, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T01:03:56Z", "infra_error": false, "minutes": null, "passed": 1, "task": "know-memo-facts", "tokens": 2362, "trial": 1}
+{"arm": "template", "at": "2026-11-11T01:03:56Z", "infra_error": false, "minutes": null, "passed": 1, "task": "know-memo-facts", "tokens": 4261, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T01:03:57Z", "infra_error": false, "minutes": null, "passed": 1, "task": "lang-es-glossary", "tokens": 2170, "trial": 1}
+{"arm": "template", "at": "2026-11-11T01:03:57Z", "infra_error": false, "minutes": null, "passed": 0, "task": "lang-es-glossary", "tokens": 6616, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T01:04:43Z", "infra_error": false, "minutes": null, "passed": 1, "task": "ops-idempotent-dirs", "tokens": 2389, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T01:04:44Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-question", "tokens": 1721, "trial": 1}
+{"arm": "template", "at": "2026-11-11T01:04:44Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-question", "tokens": 2449, "trial": 1}
+{"arm": "template", "at": "2026-11-11T01:05:03Z", "infra_error": false, "minutes": null, "passed": 0, "task": "ops-idempotent-dirs", "tokens": 6936, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T01:05:10Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-small-edit", "tokens": 1758, "trial": 1}
+{"arm": "template", "at": "2026-11-11T01:05:10Z", "infra_error": false, "minutes": null, "passed": 1, "task": "route-small-edit", "tokens": 2558, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T01:05:39Z", "infra_error": false, "minutes": null, "passed": 1, "task": "sw-add-slugify", "tokens": 2646, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T01:05:40Z", "infra_error": false, "minutes": null, "passed": 1, "task": "sw-fix-median", "tokens": 2157, "trial": 1}
+{"arm": "template", "at": "2026-11-11T01:05:46Z", "infra_error": false, "minutes": null, "passed": 1, "task": "sw-add-slugify", "tokens": 4078, "trial": 1}
+{"arm": "template", "at": "2026-11-11T01:05:55Z", "infra_error": false, "minutes": null, "passed": 1, "task": "sw-fix-median", "tokens": 3788, "trial": 1}

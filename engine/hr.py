@@ -55,6 +55,8 @@ DEFAULT_CFG = {
     "trigram_weight": 0.25,
     "trigram_floor": 0.2,
     "min_matched": 2,
+    "read_only_on_make": 0.6,
+    "auto_template": False,
     "novelty_min_trials": 3,
     "probation": {"min_trials": 5, "lcb_below": 0.35},
     "overrun_flag": 1.5,
@@ -392,6 +394,7 @@ def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | No
     if not pool:
         return []
     q = _terms(task)
+    makes = bool(set(c.words(task)) & MAKE_VERBS) and not (set(c.words(task)) & CHECK_VERBS)
     if len(set(q)) < 2:
         return []  # one word ("fix it") is too little to choose a specialist on
     raw = _bm25(q, [_doc(t) for t in pool])
@@ -411,6 +414,8 @@ def select(task: str, rack: list[dict], state: dict | None = None, hc: dict | No
         fit = (1 - wt) * (0.6 * (s / top) + 0.4 * coverage) + wt * (sim / top_sim)
         if family and family not in t.get("families", []):
             fit *= 0.8
+        if makes and t.get("base_agent") in READ_ONLY:
+            fit *= hc.get("read_only_on_make", 1.0)  # a reviewer asked to write reviews nothing (CB-203)
         mult = performance_multiplier(h, hc, t["id"], t.get("group", ""))
         _a, _b, n = pass_posterior(h, hc, t["id"], t.get("group", ""))
         if risk in ("high", "one-way-door") and n < hc["novelty_min_trials"]:
@@ -824,10 +829,19 @@ def cmd_hire(args) -> int:
     if not args.dry_run and len(open_contracts(project, mine_only=True)) >= hc["hire"]["max_helpers"] and not args.force:
         print(f"do not hire yet: {hc['hire']['max_helpers']} contracts of this session are open; settle one first (brain hr settle), or drop one (brain hr settle <id> --abandon)")
         return 1
+    # CB-203, pre-registered, n=8: briefs with the automatically chosen
+    # template passed 6 of 8 against 8 of 8 for plain briefs and used 80% more
+    # tokens (verdict: revert). So a plain brief is the default; the closest
+    # templates are suggested and used only when the lead names one.
+    tid = args.template
+    if tid is None:
+        tid = None if hc.get("auto_template") else "none"
+    elif tid == "auto":
+        tid = None
     try:
         con = hire(args.task, project=project, why=args.why or "", owns=args.owns, inputs=args.input, check=args.check or "",
                    family=args.family, task_class=args.task_class, risk=args.risk, tier=args.tier, size=args.size,
-                   base_agent=args.agent, template_id=args.template, extra=args.also, seed=args.seed, workdir_hint=args.workdir,
+                   base_agent=args.agent, template_id=tid, extra=args.also, seed=args.seed, workdir_hint=args.workdir,
                    dry_run=args.dry_run)
     except ValueError as e:
         print(str(e))
@@ -835,11 +849,11 @@ def cmd_hire(args) -> int:
     if args.json:
         print(json.dumps(con, indent=2))
         return 0
-    tpl = con["template"] or "none fits: plain helper"
+    tpl = con["template"] or ("plain brief (the default)" if tid == "none" else "none fits: plain helper")
     also = f" (also considered: {', '.join(con['runners_up'])})" if con["runners_up"] else ""
     print(f"hire {con['id']}: template {tpl}{also}")
     if con.get("closest"):
-        print(f"closest by wording: {', '.join(con['closest'])} — if one is right, hire again with --template <id> (brain hr rack --id <id> shows it)")
+        print(f"templates closest by wording: {', '.join(con['closest'])} — only if one fits the kind of work, hire again with --template <id> (brain hr rack --id <id> shows it)")
     print(f"agent: {con['base_agent']} · model {con['model']} · effort {con['effort']}" + (" · a trial of a cheaper setting" if con["explored"] else "") + f" · {c.clip(con['model_basis'], 80)}")
     print(f"wage: {con['wage_tokens']:,} output-equivalent tokens (about ${con['wage_cost']:.2f} at list price) · {con['wage_basis']}")
     print(f"brief: {con['brief']}")
@@ -945,6 +959,13 @@ def cmd_report(args) -> int:
 
 
 PLAIN_IDS = ("none", "plain")
+READ_ONLY = {"reviewer", "redteam", "scout"}
+# Verbs that ask for something to be made or changed, and verbs that ask for
+# a check; a request with only the first kind should not get a read-only template.
+MAKE_VERBS = set("write add build create make fix change translate rename implement convert generate draft "
+                 "escribe anade crea construye haz arregla cambia traduce traducir genera redacta".split())
+CHECK_VERBS = set("review check verify audit test inspect assess grade compare find revisa comprueba verifica "
+                  "audita evalua busca".split())
 
 
 def _overlapping(data: dict) -> set[str]:
@@ -987,13 +1008,19 @@ def cmd_staff(args) -> int:
         t = normalise_ticket(t)
         task = " ".join(str(t.get(k, "")) for k in ("title", "goal"))
         best = select(task, rack, state, hc, t.get("family"), t.get("risk"))
-        tpl = best[0]["template"] if best else None
-        agent = (tpl or {}).get("base_agent", "builder")
+        suggested = best[0]["template"] if best else None
+        if t.get("template") and t["template"] not in PLAIN_IDS:
+            tpl = next((x for x in rack if x["id"] == t["template"]), None)
+        else:
+            tpl = suggested if hc.get("auto_template") else None  # plain by default (CB-203)
+        fam = t.get("family") or "software"
+        agent = (tpl or {}).get("base_agent") or ("builder" if fam == "software" or t.get("accept") else "researcher")
         model = ((models_cfg.get("roles") or {}).get(ROLE_OF[agent]) or {}).get("model", "sonnet")
         pay = wage(t.get("size") or (tpl or {}).get("size") or "M", model, (tpl or {}).get("id"), state, hc, models_cfg)
         par = t["parallel"] if isinstance(t.get("parallel"), bool) else str(t.get("id")) in side_by_side
         go, _why = hire_or_not(t.get("material_tokens"), bool(t.get("accept")), par, hc)
-        rows.append((str(t.get("id")), (tpl or {}).get("id") or "plain", agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
+        label = (tpl or {}).get("id") or ("plain" + (f" (closest: {suggested['id']})" if suggested else ""))
+        rows.append((str(t.get("id")), label, agent, model, pay["tokens"] if go else 0, pay["cost"] if go else 0.0, go))
         total += pay["tokens"] if go else 0
     if not rows:
         print("no open ticket to staff")
@@ -1027,7 +1054,7 @@ def register(sub) -> None:
     h.add_argument("--tier", type=int, choices=(1, 2, 3), default=2)
     h.add_argument("--size", choices=("S", "M", "L", "XL"))
     h.add_argument("--agent", choices=BASE_AGENTS, help="restrict to templates for one base agent")
-    h.add_argument("--template", help="use this template instead of choosing; 'none' writes a plain brief")
+    h.add_argument("--template", help="use this template; default is a plain brief ('auto' lets HR choose one, which did worse in CB-203)")
     h.add_argument("--material-tokens", type=int, help="rough size of what the helper must read")
     h.add_argument("--parallel", action="store_true", help="it will run beside other work")
     h.add_argument("--force", action="store_true", help="hire even when the rule says the lead should do it")
