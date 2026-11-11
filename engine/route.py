@@ -99,7 +99,7 @@ QWORDS = set("what whats why how which who when where can could does do did is a
              "tell difference que por como cual cuales cuanto cuanta cuantos donde cuando quien puedo puedes es hay "
              "deberia explica explicame sabes vale merece".split())
 CREATE = _vocab(
-    "build, create, make, design, redesign, develop, write, draft, translate, research, investigate, implement, "
+    "rebuild, redo, recreate, reconstruye, rehaz, rehacer, build, create, make, design, redesign, develop, write, draft, translate, research, investigate, implement, "
     "generate, produce, prepare, compose, program, scaffold, construct, port, migrate, convert, scrape, "
     "automate, deploy, release, ship, publish, launch, analyse, analyze, audit, summarise, summarize, outline, "
     "compile, train, plan, organise, organize, map out, want, need, would like, set up, "
@@ -262,6 +262,10 @@ def _content(raw: str, tokens: list[str], manifest: dict) -> dict:
     programme = _hits(tokens, PROGRAMME)
     acts = bool(create or edit)
     q = _question_kind(raw, tokens)
+    # "explain X and then rebuild it" asks for work after the answer (final review D11).
+    then = next((i for i, w in enumerate(tokens) if w in ("then", "luego", "despues", "after", "afterwards")), None)
+    if q in ("wh", "polite") and then is not None and (_hits(tokens[then:], CREATE) or _hits(tokens[then:], EDIT)):
+        q = None
     if q == "wh" or (q == "yesno" and not acts):
         return {"tier": 0, "family": family, "task_class": "answer", "reason": "a question"}
     cls = _task_class(tokens, family)

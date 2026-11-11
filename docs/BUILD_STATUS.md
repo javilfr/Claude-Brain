@@ -250,3 +250,32 @@ All items on the list are handled:
 - **Persona prompts:** the general guide still says a one-sentence role "focuses Claude's behavior and tone". The Fable 5.2 and Opus 5.5 guides have no persona section; the Fable guide shows that ownership framing changed results at about 1.5 times the output. The brain's rule stands unchanged: one role line, no "expert" persona.
 - **Pointer versus pasted brief:** measured, `docs/research/round4/02-pointer-vs-inline-brief.md`. The pointer stays.
 - Found while recording: the rehearsal test counted every candidate item in the copied brain, so it would have gone red the first time the brain learned a candidate fact. It now checks that the session adds exactly one.
+
+## CB-208 result: red team and final independent review (2026-11-11)
+
+**Red team** (`docs/review/2026-11-11-redteam.md`). It ran on Opus 5.5 at high effort, because Fable 5.2 hit this account's usage limit. 3 blocking, 2 should-fix:
+
+| Finding | Outcome |
+|---|---|
+| Learning never reaches `main`; parallel consolidations conflict | **Confirmed by simulation:** two branches consolidating from the same base conflicted in `stats/ml.json`, `learning/manifest.jsonl` and `learning/CHANGELOG.md`. Fixed with a single writer: `learn consolidate` refuses with a project attached, or on a branch behind `origin/main`. Radar leads now go to a per-session inbox file, so working sessions only ever add files that cannot conflict. Tested |
+| Owner rules can be rewritten (I-08) | Fixed: editing, moving, demoting or retiring an owner-stated item needs owner evidence verified against a typed turn. Tested |
+| No stop before one-way steps | Fixed in `CLAUDE.md` and brain-start: such a step waits for the owner's yes in `NEEDS_YOU.md` while the rest continues (D-14). Tested by text |
+| Evaluation hires skew wages | Confirmed: the M band was already at 0.40x. `hr hire --eval` hires no longer train wages or template records (tested). The trials already folded stay in the wage window until 30 real medium hires replace them; until then, medium wages read low. A wage is a tracked budget, not a limit |
+| All enforcement is warn-only | Unchanged; it depends on `NEEDS_YOU.md` items 2 and 7 (GitHub checks and branch protection) and on the lock in decision D-08 |
+
+**Final review** (`docs/review/2026-11-11-final-review.md`, 52 rows: 41 met, 9 partly, 2 not met at the time). The reviewer reproduced each finding with commands.
+
+| Finding | Outcome |
+|---|---|
+| D1 blocking: `learn apply` trusted every field of a hand-written delta (I-07, I-08, R-03 not met) | Fixed. By hand, a delta may only curate. Adding items, credit, statistics and promotion come only from consolidating verified records; the time stamp is set to now; pasted owner evidence is refused. All five of the reviewer's attack deltas are refused. Tested |
+| D2 blocking: a CLI test wrote eight contracts into the project beside the brain | Fixed: `BRAIN_PROJECT=none` means no project, and the HR and note tests use it. Tested |
+| D3 the rehearsal used the live network | Fixed: it runs with `BRAIN_NO_NETWORK=1` |
+| D4 the boot radar ran on every boot (a regression from M20) | Fixed: it reads check times where the radar writes them. Tested |
+| D5 live checks had no steps | Each of CB-101 to CB-112 now has exact steps; CB-105 and CB-107 are observed, CB-109 (HR part) and CB-112 done |
+| D6 stale figures in `docs/REQUIREMENTS.md` | Fixed in CB-209 |
+| D7, D8 output caps | Fixed: a bare group prints its short usage, and radar output fits in `--max`. Tested |
+| D9 release ignored a failed fetch | Fixed: release refuses when origin cannot be reached or the fetch fails. Tested |
+| D11 "explain … and then rebuild it" was sized as an answer | Fixed. Tested |
+| D10, D12, D13 | Left: no project ids exist yet to list; a weak acceptance check in this session's own hire (noted); `mlearn.sizing_hint` is exposed but unused (the sizing model runs in shadow, as designed) |
+
+Remaining hole, stated plainly: someone with write access to the repository can still commit a hand-made delta together with the manifest and learned files. `learn verify` replays deltas through the engine, which refuses unauthorised owner changes, but not every hand-written op. Only branch protection with the check running (`NEEDS_YOU.md` items 2 and 7) closes this.

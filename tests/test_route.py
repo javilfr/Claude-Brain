@@ -62,6 +62,12 @@ class Classify(unittest.TestCase):
         self.assertEqual(route.classify("contniue")["task_class"], "resume")
         self.assertEqual(route.classify("trnaslate the whole website to japanese")["family"], "language")
 
+    def test_a_question_followed_by_work_is_not_an_answer(self):
+        # Final review 2026-11-11, D11.
+        self.assertGreaterEqual(route.classify("can you explain how the scheduler works and then rebuild it")["tier"], 1)
+        self.assertGreaterEqual(route.classify("explica como funciona y luego rehaz el modulo")["tier"], 1)
+        self.assertEqual(route.classify("how do I fix this?")["tier"], 0)
+
     def test_exact_words_beat_one_edit_matches_for_family(self):
         # Found in the CB-202 trial: 'tests' matched 'tesis' (thesis) and a
         # Python tool was routed to long-form writing.

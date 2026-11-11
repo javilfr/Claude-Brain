@@ -6,6 +6,7 @@ learned zone or any real project.
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -508,6 +509,26 @@ class GateTests(Base):
         self.assertEqual(code, 1)
         self.assertIn("Never force-push", out.getvalue())
         self.assertEqual(sh(remote, "git", "rev-parse", "main").stdout.strip(), theirs)
+
+    def test_release_refuses_when_the_remote_cannot_be_reached(self):
+        # Final review 2026-11-11, D9: a failed fetch compared against a stale copy.
+        p = self.project()
+        remote = self.setup_remote(p)
+        self.set_gate(p, "true")
+        commit_all(p)
+        os.environ["BRAIN_PROJECT"] = str(p)
+
+        class A:
+            project = None
+            push = True
+            run_gates = True
+            check_live = False
+            live_wait = 0
+        shutil.move(str(remote), str(remote) + ".gone")
+        with redirect_stdout(io.StringIO()) as out:
+            code = gate.cmd_release(A())
+        self.assertEqual(code, 1)
+        self.assertIn("could not reach origin", out.getvalue())
 
     def test_release_never_uses_a_forcing_push(self):
         """Capture every git push the release makes: no --force, no -f, no

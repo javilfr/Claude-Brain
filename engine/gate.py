@@ -291,7 +291,19 @@ def cmd_release(args) -> int:
         for w in why:
             print(" -", w)
         return 1
-    git(project, "fetch", "origin", branch)
+    # A failed fetch would compare against a stale origin/<branch> (final
+    # review 2026-11-11, D9). ls-remote exit 2 means the branch does not exist
+    # yet (a first release); anything else non-zero means the remote is unreachable.
+    probe = subprocess.run(["git", "-C", str(project), "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"],
+                           capture_output=True, text=True)
+    if probe.returncode not in (0, 2):
+        print(f"refusing to release: could not reach origin to compare with {branch} ({c.clip(probe.stderr.strip(), 120)}). Try again when the remote is reachable.")
+        return 1
+    if probe.returncode == 0:
+        f = subprocess.run(["git", "-C", str(project), "fetch", "origin", branch], capture_output=True, text=True)
+        if f.returncode != 0:
+            print(f"refusing to release: fetching origin/{branch} failed ({c.clip(f.stderr.strip(), 120)}), so the fast-forward check would use a stale copy")
+            return 1
     remote = git(project, "rev-parse", "--verify", "--quiet", f"origin/{branch}")
     if remote:
         if subprocess.run(["git", "-C", str(project), "merge-base", "--is-ancestor", f"origin/{branch}", "HEAD"]).returncode != 0:

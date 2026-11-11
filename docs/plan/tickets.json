@@ -446,7 +446,7 @@
       "est": 120,
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain doctor && python3 bin/brain lint && python3 bin/brain hr audit",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
-      "status": "open"
+      "status": "done"
     },
     {
       "id": "CB-209",
@@ -471,62 +471,112 @@
     {
       "id": "CB-101",
       "title": "Brain CLAUDE.md, skills and agents load beside a project; boot runs from the first message",
-      "status": "live"
+      "status": "live",
+      "steps": [
+        "Open a new chat with the brain and a project repository attached.",
+        "Type 'Continue'.",
+        "Pass if the first tool call is `brain boot` and the reply names the project's stage and item, without reading CLAUDE.md files by hand."
+      ]
     },
     {
       "id": "CB-102",
       "title": "A quick question gets an answer with zero process steps",
-      "status": "live"
+      "status": "live",
+      "steps": [
+        "In a chat with both repositories, type 'Quick: what does HTTP 404 mean?'.",
+        "Pass if the answer comes with no tool call at all (no boot, no files)."
+      ]
     },
     {
       "id": "CB-103",
       "title": "'New project: ...' on an empty repo: contract installed, at most three questions, first item started",
-      "status": "live"
+      "status": "live",
+      "steps": [
+        "Attach an empty repository and the brain.",
+        "Type 'New project: a one-page site that shows today's date'.",
+        "Pass if `.brain/project.json` exists after the first turn, at most three numbered questions each with a default were asked, and a first plan item was started in the same turn."
+      ]
     },
     {
       "id": "CB-104",
       "title": "End a session mid-item; a new chat with 'Continue' resumes the same item",
-      "status": "live"
+      "status": "live",
+      "steps": [
+        "Start any multi-item project; after the first checkpoint push, close the chat mid-item.",
+        "Open a new chat with the same repositories and type 'Continue'.",
+        "Pass if boot names the same item and the work resumes there without re-planning."
+      ]
     },
     {
       "id": "CB-105",
       "title": "Helpers honour model, effort and omitClaudeMd (visible in the ledger)",
-      "status": "live"
+      "status": "observed",
+      "steps": [
+        "Done in a one-repo session on 2026-11-11: helper transcripts carry the requested model, .meta.json the requested effort, and no CLAUDE.md text (docs/BUILD_STATUS.md, CB-201).",
+        "Still to see: the agent file's own `model:` working when the call passes none. In a chat, delegate to `builder` without a model and read the model in its transcript or in `brain ledger`."
+      ]
     },
     {
       "id": "CB-106",
       "title": "Do hooks installed through the cloud environment load in two-repo sessions? Record either way",
-      "status": "live"
+      "status": "live",
+      "steps": [
+        "In the cloud environment settings, add the brain's guard hook as an environment hook (exact clicks: NEEDS_YOU item 5, once confirmed).",
+        "Open a two-repo chat and ask for an edit to a file under the brain's memory/ while VERSION.json is locked.",
+        "Pass or fail is recorded either way: blocked means the hook loads."
+      ]
     },
     {
       "id": "CB-107",
       "title": "Do a skill's own frontmatter hooks fire after it is used? Record either way",
-      "status": "live"
+      "status": "observed",
+      "steps": [
+        "Nothing to test today: no skill in .claude/skills declares hooks (checked 2026-11-11). Re-open only if one is added."
+      ]
     },
     {
       "id": "CB-108",
       "title": "Push to both repos from one session with branch protection on the brain's main",
-      "status": "live"
+      "status": "live",
+      "steps": [
+        "After NEEDS_YOU items 2 and 7, in a two-repo chat finish one project item and one brain change.",
+        "Pass if both branches push and the brain change reaches main only through a pull request whose check passed."
+      ]
     },
     {
       "id": "CB-109",
       "title": "A/A run, then the first paired benchmark with and without the brain",
-      "status": "live"
+      "status": "done",
+      "steps": [
+        "Done 2026-11-11 in a one-repo session for HR templates (docs/BUILD_STATUS.md, CB-203): A/A not proven; template versus plain, revert.",
+        "Still open: the benchmark with and without the whole brain, which needs a two-repo chat per arm."
+      ]
     },
     {
       "id": "CB-110",
       "title": "First real project end to end, released by brain release",
-      "status": "live"
+      "status": "live",
+      "steps": [
+        "Run a small real project from 'New project:' to a deployed address, releasing with `brain release --push`.",
+        "Pass if the live address shows the release's version marker and `brain req check` passes."
+      ]
     },
     {
       "id": "CB-111",
       "title": "Plugin manifest loads on desktop",
-      "status": "live"
+      "status": "live",
+      "steps": [
+        "On the desktop app, add the brain as a plugin from its folder (.claude-plugin/plugin.json).",
+        "Pass if its skills appear in the skill list of a new chat."
+      ]
     },
     {
       "id": "CB-112",
       "title": "Measure whether an effort change keeps the prompt cache",
-      "status": "live"
+      "status": "done",
+      "steps": [
+        "Answered by the official page (https://code.claude.com/docs/en/prompt-caching.md, fetched 2026-11-11): changing effort keeps the cache in Claude Code on Fable 5.1+, Opus 5.5, Sonnet 5.5 and Haiku 5.5 with an API key or subscription. Recorded as a fact in memory/facts.jsonl."
+      ]
     }
   ]
 }
