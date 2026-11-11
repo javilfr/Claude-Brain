@@ -1,23 +1,26 @@
 # Handover: the next session on the brain
 
-## Where things stand (2026-11-11)
+## Where things stand (2026-11-11, later)
 
-- The improvement programme CB-200 to CB-209 is done and on `main`. The owner confirmed the 01:09 UTC reverts were a mistake, so `main` was fast-forwarded to the work. Evidence is in `docs/BUILD_STATUS.md`, its last sections first.
-- The learning inbox is consolidated; `learn verify` matches.
+- CB-210 and CB-211 are done on branch `claude/keen-sagan-deq8fd` (not yet on `main`; the owner merges). Evidence: `docs/BUILD_STATUS.md`, sections "CB-210 result" and "CB-211 result".
+  - CB-210: third held-out set `evals/hr_golden_3.jsonl` (looked at twice). The everyday-word expansion did not clear its pre-set bar and ships off (`hr.expand`).
+  - CB-211: a named matching template ties a plain brief on pass (8/8 each) and costs 63% more tokens (8 of 8 worse). Default stays plain.
 - Owner instruction, standing (D-14): keep building until everything is done, without stopping to ask or report. Steps that cannot be undone wait for his yes in `NEEDS_YOU.md`.
 
 ## What to do
 
-Work tickets CB-210 to CB-213 in the order `python3 bin/brain plan schedule docs/plan/tickets.json` gives. Each has a goal, a reason, the files it owns and an acceptance command:
+Only CB-212 and CB-213 remain, and both need a project attached:
 
-- CB-210: a third held-out selection set, then selection work.
-- CB-211: a paired run with a named matching template against a plain brief.
-- CB-212: the two-repository live checks. They need a project attached; if this chat has only the brain, do CB-210 and CB-211 and leave CB-212 with its steps.
-- CB-213: lock the learned zone.
+- CB-212: the two-repository live checks. Open a new chat with this brain **and a scratch project repository** attached (an empty repository is fine), say "Continue", and run each live check's steps in `docs/plan/tickets.json`; record pass or fail in `docs/BUILD_STATUS.md`.
+- CB-213: lock the learned zone, after CB-212.
+
+Open follow-ups from CB-211 (small, brain-only, no ticket yet): `canonical-facts-keeper`'s scope line forbids fixing documents even when asked; eval briefs should say the check may be run although its files must not be read.
 
 Mark each ticket done in the JSON, commit with the trailer `Brain-Bootstrap: <ids>`, and push the session's branch. Do not push to `main` without the owner's word; he merges.
 
-## Rules learned in the last session
+## Rules learned in the last sessions
+
+- In a paired run give each arm a distinct task text (a second hire with the same text supersedes the first), and never pipe a test run through `tail` in an `&&` chain.
 
 - Pre-register before any paired run; look at a held-out set once; use `hr hire --eval` for trials.
 - Consolidate only in a brain-only chat on an up-to-date `main` (the command enforces it).
