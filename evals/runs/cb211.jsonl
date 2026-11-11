@@ -11,3 +11,5 @@
 {"arm": "plain", "at": "2026-11-11T02:53:25Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-reconcile-members", "tokens": 3066, "trial": 1}
 {"arm": "plain", "at": "2026-11-11T02:53:26Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-refactor-dedupe", "tokens": 3281, "trial": 1}
 {"arm": "template", "at": "2026-11-11T02:53:34Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-reconcile-members", "tokens": 4695, "trial": 1}
+{"arm": "template", "at": "2026-11-11T02:53:46Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-refactor-dedupe", "tokens": 7457, "trial": 1}
+{"arm": "plain", "at": "2026-11-11T02:53:50Z", "infra_error": false, "minutes": null, "passed": 1, "task": "cb211-sqlite-add-column", "tokens": 3099, "trial": 1}
