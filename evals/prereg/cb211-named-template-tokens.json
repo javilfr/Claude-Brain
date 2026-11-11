@@ -1,0 +1,25 @@
+{
+  "change": "cb211-named-template-tokens",
+  "hypothesis": "A brief with a template the lead names as clearly matching uses fewer helper tokens than a plain brief on the 8 cb211 dev tasks, same agent, model and effort; kept only if the pass verdict is not worse",
+  "metric": "tokens",
+  "direction": "down",
+  "tasks": [
+    "cb211-api-fallback",
+    "cb211-es-en-guide",
+    "cb211-facts-consistency",
+    "cb211-flaky-bug",
+    "cb211-idempotent-renamer",
+    "cb211-reconcile-members",
+    "cb211-refactor-dedupe",
+    "cb211-sqlite-add-column"
+  ],
+  "min_pairs": 8,
+  "decision": {
+    "alpha": 0.05,
+    "ship_prob": 0.95,
+    "revert_prob": 0.8,
+    "cost_guard": 1.1
+  },
+  "decision_text": "revert if P(B worse) >= revert_prob; ship if exact sign test p <= alpha and P(B better) >= ship_prob and the guard holds; otherwise keep A; fewer than 8 paired tasks is always not proven",
+  "created": "2026-11-11T02:49:37Z"
+}
