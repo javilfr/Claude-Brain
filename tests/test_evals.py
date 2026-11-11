@@ -321,11 +321,13 @@ class ShippedTasks(unittest.TestCase):
     def test_split_families_and_size(self):
         tasks = E.load_tasks(BRAIN / "evals" / "tasks").values()
         splits = [t["split"] for t in tasks]
-        self.assertEqual((splits.count("dev"), splits.count("heldout")), (8, 4))
+        # 8 small dev tasks, 4 held-out, and 8 bulkier dev tasks for CB-211,
+        # where method lines need room to matter.
+        self.assertEqual((splits.count("dev"), splits.count("heldout")), (16, 4))
         self.assertEqual({t["family"] for t in tasks}, set(E.FAMILIES))
         for t in tasks:
             lines = sum(f["content"].count("\n") for f in t["setup"])
-            self.assertLess(lines, 60, t["id"])
+            self.assertLess(lines, 250 if t["id"].startswith("cb211-") else 60, t["id"])
 
     def test_grade_command_reports_failing_check(self):
         work = Path(tempfile.mkdtemp())
@@ -490,7 +492,7 @@ class Ablate(unittest.TestCase):
             self.assertEqual(new, {f"evals/prereg/{name}.json"})
             self.assertEqual({k: after[k] for k in before}, before)
             pre = E.load_prereg(self.root / "evals" / "prereg" / f"{name}.json")
-            self.assertEqual((pre["metric"], pre["direction"], len(pre["tasks"])), ("tokens", "down", 12))
+            self.assertEqual((pre["metric"], pre["direction"], len(pre["tasks"])), ("tokens", "down", 20))
             self.assertTrue(any(line.startswith("arm B") for line in out))
 
     def test_task_subset_and_bad_targets(self):
