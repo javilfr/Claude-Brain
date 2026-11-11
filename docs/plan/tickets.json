@@ -465,6 +465,69 @@
       "accept": "python3 -m unittest discover -s tests -t . && python3 bin/brain lint",
       "return": "at most 250 words: what changed, the acceptance command and its result line, anything that differs from the brief",
       "status": "done"
+    },
+    {
+      "id": "CB-210",
+      "title": "Third held-out selection set, then selection work",
+      "reason": "evals/hr_golden_2.jsonl has been looked at three times; tuning needs a fresh measure.",
+      "goal": "Have a helper write evals/hr_golden_3.jsonl (100 owner-style requests, 60 English and 40 Spanish, from role lines only, plus 20 requests no template fits) before any change; measure; then improve hr.select on dev, the old sets and the negatives only; keep a change only if top-3 on the new set rises by 3 points or more without more false picks.",
+      "deps": [],
+      "files": [
+        "engine/hr.py",
+        "evals/hr_golden_3.jsonl",
+        "tests/test_hr.py"
+      ],
+      "est": 90,
+      "accept": "python3 -m unittest tests.test_hr",
+      "status": "open"
+    },
+    {
+      "id": "CB-211",
+      "title": "Paired run: named matching template versus plain brief",
+      "reason": "CB-203 showed wrong templates hurt; whether a right one helps is unproven.",
+      "goal": "Write 8 new dev tasks bulky enough for method lines to matter (each with a grader that passes its reference and fails its null), pre-register with brain eval prereg, then run plain versus a template the lead names as clearly matching, using hr hire --eval; report the verdict with n.",
+      "deps": [
+        "CB-210"
+      ],
+      "files": [
+        "evals/tasks",
+        "evals/prereg",
+        "evals/runs",
+        "docs/BUILD_STATUS.md"
+      ],
+      "est": 120,
+      "accept": "python3 bin/brain eval audit",
+      "status": "open"
+    },
+    {
+      "id": "CB-212",
+      "title": "Two-repository live checks",
+      "reason": "CB-101 to CB-104, CB-106, CB-108, CB-110 and CB-111 can only be proven with a project attached.",
+      "goal": "In a chat with the brain and a scratch project repository attached, run each live check's steps in docs/plan/tickets.json and record pass or fail with evidence in docs/BUILD_STATUS.md; fix what fails, with a test.",
+      "deps": [],
+      "files": [
+        "docs/BUILD_STATUS.md",
+        "docs/plan/tickets.json"
+      ],
+      "est": 120,
+      "accept": "python3 -m unittest discover -s tests -t .",
+      "status": "open"
+    },
+    {
+      "id": "CB-213",
+      "title": "Lock the learned zone at brain-v1.0.0",
+      "reason": "Decision D-08: lock after the live checks, so hand edits to memory are blocked, not only detected.",
+      "goal": "After CB-212, set learned_zone_locked in VERSION.json, tag brain-v1.0.0 through the owner's merge, and confirm the guard hook blocks a hand edit to memory/.",
+      "deps": [
+        "CB-212"
+      ],
+      "files": [
+        "VERSION.json",
+        "docs/BUILD_STATUS.md"
+      ],
+      "est": 30,
+      "accept": "python3 bin/brain doctor && python3 -m unittest discover -s tests -t .",
+      "status": "open"
     }
   ],
   "live_checks": [

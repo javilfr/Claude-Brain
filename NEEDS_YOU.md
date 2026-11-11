@@ -55,3 +55,5 @@ RESOLVED: 2026-11-10 — you approved it in chat and `main` was fast-forwarded t
 - **If the revert was a mistake:** merge this session's branch into `main` (on github.com: **Pull requests** → **New pull request** → base `main`, compare `claude/amazing-albattani-204zc8` → **Create** → **Merge**). GitHub may report conflicts with the reverts; if it does, say "merge the brain branch to main" in a chat with the brain and I will resolve them there.
 - **If you wanted the revert:** say so, and say which part you wanted gone. The branch stays untouched until then.
 - **Meanwhile:** nothing on `main` was touched by this session.
+
+RESOLVED: 2026-11-11 — you said the revert was a mistake. The branch was merged with `main` keeping its content, and `main` was fast-forwarded to it.
