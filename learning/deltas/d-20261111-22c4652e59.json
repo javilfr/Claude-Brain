@@ -1,0 +1,160 @@
+{
+  "at": "2026-11-11T16:17:39Z",
+  "id": "d-20261111-22c4652e59",
+  "ops": [
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-always-look-referral-path-each-toptier-t-13b6f5",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Always look for a referral path to each top-tier target employer before applying cold: referred candidates reached interviews at about 40% against 3% for inbound applicants (Ashby, selection-confounded, so treat it as an upper bound).",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-always-prepare-counter-every-job-offer-b-f9a49a",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Always prepare a counter for every job offer, backed by a BLS OEWS figure for the metro and role: those who countered got about 12% more, and 85% of counters got something (UCLA Anderson).",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-limit-tailoring-each-application-about-2-421b1c",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Limit tailoring of each application to about 20 minutes, using the posting's own words: the evidence for tailoring is vendor data only, while a referral or outreach note on the same application moves the odds more.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-cite-bls-oews-metro-area-occupation-code-d9b364",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Cite BLS OEWS for the metro area and occupation code (median and 25th/75th percentiles, with the survey year) for every salary claim; job-board estimates are secondary.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-record-every-job-application-channel-col-c78799",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Record every job application with its channel (cold, referral, recruiter, outreach, event, internal); the response rate by channel decides where the next week's hours go.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "learning/inbox/2026-11-11-3b747fab-4246-5926-9ff6-5376e9621ede-n2.jsonl",
+      "op": "MARK_INBOX"
+    }
+  ]
+}

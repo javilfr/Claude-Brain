@@ -1,0 +1,657 @@
+{
+  "at": "2026-11-11T16:17:16Z",
+  "id": "d-20261111-fbc94dc283",
+  "ops": [
+    {
+      "op": "ML_FOLD",
+      "records": [
+        {
+          "actual_minutes": 2.2,
+          "actual_tokens": 32724,
+          "at": "2026-11-11T15:52:26Z",
+          "band_minutes": 45.0,
+          "band_tokens": 200000,
+          "base_agent": "researcher",
+          "effort": "medium",
+          "eval": false,
+          "explored": false,
+          "family": "knowledge",
+          "group": null,
+          "has_check": true,
+          "id": "206cb9815bcb3bbd",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "3b747fab-4246-5926-9ff6-5376e9621ede",
+          "size": "L",
+          "task_class": "software.feature",
+          "template": null,
+          "time_stop": 90,
+          "wage_tokens": 220000
+        },
+        {
+          "actual_minutes": 4.8,
+          "actual_tokens": 52568,
+          "at": "2026-11-11T15:54:46Z",
+          "band_minutes": 45.0,
+          "band_tokens": 200000,
+          "base_agent": "researcher",
+          "effort": "medium",
+          "eval": false,
+          "explored": false,
+          "family": "knowledge",
+          "group": null,
+          "has_check": true,
+          "id": "b57336792ea3e62a",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "3b747fab-4246-5926-9ff6-5376e9621ede",
+          "size": "L",
+          "task_class": "language.translate",
+          "template": null,
+          "time_stop": 90,
+          "wage_tokens": 220000
+        },
+        {
+          "actual_minutes": 7.5,
+          "actual_tokens": 82512,
+          "at": "2026-11-11T16:00:08Z",
+          "band_minutes": 45.0,
+          "band_tokens": 200000,
+          "base_agent": "builder",
+          "effort": "medium",
+          "eval": false,
+          "explored": false,
+          "family": "software",
+          "group": null,
+          "has_check": true,
+          "id": "c4b0a949df3fd90c",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "3b747fab-4246-5926-9ff6-5376e9621ede",
+          "size": "L",
+          "task_class": "software.feature",
+          "template": null,
+          "time_stop": 90,
+          "wage_tokens": 220000
+        },
+        {
+          "actual_minutes": 9.2,
+          "actual_tokens": 100050,
+          "at": "2026-11-11T16:01:59Z",
+          "band_minutes": 45.0,
+          "band_tokens": 200000,
+          "base_agent": "builder",
+          "effort": "medium",
+          "eval": false,
+          "explored": false,
+          "family": "knowledge",
+          "group": null,
+          "has_check": true,
+          "id": "8b689291903b62e3",
+          "kind": "hire",
+          "model": "sonnet",
+          "passed": true,
+          "propensity": 1.0,
+          "risk": "standard",
+          "sealed": true,
+          "session": "3b747fab-4246-5926-9ff6-5376e9621ede",
+          "size": "L",
+          "task_class": "knowledge.research",
+          "template": null,
+          "time_stop": 90,
+          "wage_tokens": 220000
+        },
+        {
+          "at": "2026-11-11T05:23:31Z",
+          "correction": "quality",
+          "evidence": [
+            "owner:turn@2026-11-11T05:22:14.665Z#00c07984785b"
+          ],
+          "id": "33948c0f129440de",
+          "item": "own-main-deployable",
+          "kind": "correction",
+          "session": "77d2f8c2-f748-5229-9c86-283c6b88df44"
+        }
+      ]
+    },
+    {
+      "file": "stats/ledger/2026-11.jsonl",
+      "op": "APPEND_STAT",
+      "row": {
+        "at": "2026-11-11T15:39:42Z",
+        "cache_read_share": 0.9625,
+        "classes": [
+          "software.feature"
+        ],
+        "family": "",
+        "helpers": 0,
+        "id": "2c7318eb84c847d5",
+        "kind": "ledger",
+        "model": "opus",
+        "models": {
+          "claude-opus-5-5": {
+            "cache_read": 6658594,
+            "cache_write": 259590,
+            "cost": 4.232643,
+            "in": 91,
+            "out": 41192
+          }
+        },
+        "outcome": "ok",
+        "session": "3b747fab-4246-5926-9ff6-5376e9621ede",
+        "task_class": "software.feature",
+        "tier": 2,
+        "wall_minutes": 18.1
+      }
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "networking"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-ask-acquaintances-not-only-close-contact-585bad",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Ask acquaintances, not only close contacts: a randomized study of about 20 million LinkedIn users found moderately weak ties raised job mobility most, especially in digital industries.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "visibility"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-make-person-findable-recruiters-headline-9fff35",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Make the person findable by recruiters (headline and skills with the target role's exact words, open-to-work set privately): sourced candidates reached interviews at about 25% against 3% inbound (Ashby, confounded).",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "documents"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-aiassisted-applications-must-read-specif-ebae77",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "AI-assisted applications must read specific and human, with facts only the applicant has; never hidden text or prompt injection. Most recruiters say they look for AI-written deception and many use detection tools.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "career-change"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-career-changer-lead-proof-new-work-case-eff1d3",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "For a career changer, lead with proof of the new work (a case study, a small built tool, a before/after with numbers) over claims: most employers now say they use skills-based hiring.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "privacy"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-person-profile-tracker-documents-target-a03016",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "A person's profile, tracker, documents and target list live only in their job-search project; the brain keeps generic method and sourced facts, never names, employers or history.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "strategy"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-when-person-out-work-keep-gap-short-fill-537e09",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "When the person is out of work, keep the gap short or fill it with documented work: callbacks fell sharply with unemployment length in a US audit study (about 45% lower at 8 months than at 1).",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "interview"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-build-six-eight-interview-stories-number-f5fc09",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Build six to eight interview stories with numbers (situation, action, measurable result) from the person's real work, then rehearse each format with Claude playing the interviewer and scoring against the posting.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "accuracy"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-mark-earlycareer-pay-estimates-estimates-5de17e",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Mark early-career pay estimates as estimates: no sourced data gives pay by years of experience per role, so say what the 25th percentile and median imply instead of promising a figure.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-us-recent-college-graduates-2227-unemplo-473c4d",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "recheck_days": 90,
+        "scope": "family:career",
+        "sessions": 1,
+        "source": "https://www.newyorkfed.org/research/college-labor-market",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "US recent college graduates (22-27): unemployment 5.2% and underemployment 42.5% in 2026 Q3 (New York Fed, Labor Market for Recent College Graduates).",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-11",
+        "verified_on": "2026-11-11"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-bls-jolts-september-2026-about-106-job-o-de90c3",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "recheck_days": 90,
+        "scope": "family:career",
+        "sessions": 1,
+        "source": "https://www.bls.gov/news.release/archives/jolts_11032026.htm",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "BLS JOLTS, September 2026: about 1.06 job openings per unemployed person, hires rate 3.4%, quits rate 2.1%.",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-11",
+        "verified_on": "2026-11-11"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-ashby-talent-trends-referred-applicants-42fcf2",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "recheck_days": 90,
+        "scope": "family:career",
+        "sessions": 1,
+        "source": "https://www.ashbyhq.com/talent-trends-report/reports/referrals",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Ashby Talent Trends: referred applicants converted application-to-interview at about 40% and interview-to-offer at 16%, against about 3% and 6% for inbound applicants (vendor data, selection-confounded).",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-11",
+        "verified_on": "2026-11-11"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-randomized-study-about-20-million-linked-e95ed4",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "recheck_days": 90,
+        "scope": "family:career",
+        "sessions": 1,
+        "source": "https://pubmed.ncbi.nlm.nih.gov/36107999/",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "A randomized study of about 20 million LinkedIn users (Science, 2022) found moderately weak ties most increased job mobility, with weak ties more useful in digital industries.",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-11",
+        "verified_on": "2026-11-11"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-ucla-anderson-review-job-seekers-who-neg-f094e6",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "recheck_days": 90,
+        "scope": "family:career",
+        "sessions": 1,
+        "source": "https://anderson-review.ucla.edu/most-job-seekers-skip-negotiation-and-pay-a-high-price/",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "UCLA Anderson Review: job seekers who negotiated got about 12.45% higher compensation, and 85% of those who countered received something (tech-sector sample).",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-11",
+        "verified_on": "2026-11-11"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "memory/facts.jsonl",
+      "item": {
+        "by_model": "opus",
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "fact-bls-march-2026-privateindustry-workers-a-6faf85",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "recheck_days": 90,
+        "scope": "family:career",
+        "sessions": 1,
+        "source": "https://www.bls.gov/charts/employee-benefits/paid-leave-sick-vacation-days-by-service-requirement.htm",
+        "status": "candidate",
+        "supersedes": [],
+        "text": "BLS, March 2026: private-industry workers average 11 paid vacation days after 1 year of service, 16 after 5, 18 after 10 and 20 after 20.",
+        "trust": "external",
+        "type": "fact",
+        "uses": 0,
+        "valid_from": "2026-11-11",
+        "verified_on": "2026-11-11"
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "stats/ledger/2026-11.jsonl",
+      "op": "APPEND_STAT",
+      "row": {
+        "at": "2026-11-11T03:24:12Z",
+        "cache_read_share": 0.9657,
+        "classes": [],
+        "family": "software",
+        "helpers": 0,
+        "id": "b628b835bf2e330f",
+        "kind": "ledger",
+        "model": "opus",
+        "models": {
+          "claude-opus-5-5": {
+            "cache_read": 1872853,
+            "cache_write": 66543,
+            "cost": 1.629547,
+            "in": 38,
+            "out": 36124
+          }
+        },
+        "outcome": "",
+        "session": "77d2f8c2-f748-5229-9c86-283c6b88df44",
+        "task_class": "",
+        "tier": null,
+        "wall_minutes": 6.4
+      }
+    },
+    {
+      "evidence": [
+        "owner:turn@2026-11-11T05:22:14.665Z#00c07984785b"
+      ],
+      "id": "own-main-deployable",
+      "n": 1,
+      "op": "INC_HARMFUL",
+      "session": "77d2f8c2-f748-5229-9c86-283c6b88df44"
+    },
+    {
+      "file": "learning/inbox/2026-11-11-3b747fab-4246-5926-9ff6-5376e9621ede.jsonl",
+      "op": "MARK_INBOX"
+    },
+    {
+      "file": "learning/inbox/2026-11-11-77d2f8c2-f748-5229-9c86-283c6b88df44.jsonl",
+      "op": "MARK_INBOX"
+    }
+  ]
+}

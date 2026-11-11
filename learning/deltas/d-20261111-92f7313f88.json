@@ -1,0 +1,40 @@
+{
+  "at": "2026-11-11T16:17:44Z",
+  "id": "d-20261111-92f7313f88",
+  "ops": [
+    {
+      "file": "memory/items.jsonl",
+      "item": {
+        "class": [
+          "career"
+        ],
+        "conflicts": [],
+        "created": "2026-11-11",
+        "evidence": [
+          "review:sha256-a8e13ba946a0",
+          "session:3b747fab-4246-5926-9ff6-5376e9621ede"
+        ],
+        "harmful": 0,
+        "helpful": 0,
+        "id": "lsn-always-apply-first-postings-under-about-436791",
+        "importance": 2,
+        "last_used": "",
+        "projects": 0,
+        "provenance": "note:3b747fab-424",
+        "scope": "family:career",
+        "sessions": 1,
+        "status": "candidate",
+        "supersedes": [],
+        "text": "Always apply first to postings under about two weeks old, and mark those over 60 days as likely stale: surveys put ghost postings at roughly a fifth of listings.",
+        "trust": "observed",
+        "type": "rule",
+        "uses": 0
+      },
+      "op": "ADD"
+    },
+    {
+      "file": "learning/inbox/2026-11-11-3b747fab-4246-5926-9ff6-5376e9621ede-n3.jsonl",
+      "op": "MARK_INBOX"
+    }
+  ]
+}
