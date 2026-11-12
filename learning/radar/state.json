@@ -1,135 +1,4 @@
 {
-  "platform-relnotes": {
-    "hash": "0fa6ce3b01c48f2f1a9c110614cdc38e3d04a1292a6107bd93347f521045bd16",
-    "seen": [
-      "c43dc535a9ba",
-      "472164fa3175",
-      "d31e95c7fae6",
-      "98ff922369d0",
-      "04827e03f1ac",
-      "551447217300",
-      "b32a26281868"
-    ]
-  },
-  "hn-claude": {
-    "hash": "8ddc4620b1ed437a6bb8bd77c0ac5e7a8df9d5196e193a46c91a7933c742b028",
-    "seen": [
-      "7b35c1c7d78a",
-      "f34c402cbcaa",
-      "085c8ccbfc12",
-      "a69b226b4e37",
-      "6284fa7147ed",
-      "4aedb2675db1",
-      "1a858efb6e23"
-    ]
-  },
-  "anthropic-sitemap": {
-    "hash": "2495845b264479ced5a5e847b7b2b72184f480808040316f8573eb80ae613cda",
-    "seen": [
-      "b3a26b5f8ada",
-      "f75de63b48df",
-      "71e0837a9684",
-      "12db76f63f47",
-      "f68b1c4bd56f",
-      "fd44ef9b2453",
-      "1c631bca01fa",
-      "0b091731af22",
-      "c8cdae35e97c",
-      "a2042fe4ac20",
-      "778b9c109563",
-      "481fd583c5f2",
-      "aaa8325c4dda",
-      "2927d2daa93a",
-      "e58ec1ea0736",
-      "3dd90815b84e",
-      "e2366e59159e",
-      "441fe9f379e4",
-      "b0ec8c4d0bac",
-      "f3bb9bef82b1",
-      "8a0bb7ea0178",
-      "eebe177e826f",
-      "234addb377ca",
-      "f43eaad18297",
-      "578bacd50b76",
-      "050d20ae6001"
-    ]
-  },
-  "cc-changelog": {
-    "hash": "a074556107911c423a449df2f0b1dbbabb51aaa66383b81c3ba4fea1c52679cf",
-    "seen": [
-      "5392a6106419",
-      "8326c08686af",
-      "ce331ca6f0e9",
-      "632f2ad3b994",
-      "0f7a241ba297",
-      "2b9b6de67191",
-      "8780ecde1c50",
-      "f6863e41f88b",
-      "84247f4916f1",
-      "8916f64557ce",
-      "52a8cf7b02ab",
-      "4d8407265e02",
-      "41c3b836ae31",
-      "a8fb3ca0dda7",
-      "2af438ae63df"
-    ]
-  },
-  "hf-daily-papers": {
-    "hash": "3dd0e62db488e45fb6d60f5111709645c100febb3e8ec3f9043ac5d2fb10f983",
-    "seen": [
-      "45f753afe439",
-      "2eddcd3bbbb0",
-      "de30354bcb77",
-      "856722f69215",
-      "11aff58a5392",
-      "162a3fc3465a",
-      "132140523136",
-      "bda2bbbe51cd",
-      "8702ff33f1ff",
-      "447fde64a056",
-      "d0bd5b4afada",
-      "fd3bce808917",
-      "131f9b01cd47",
-      "9995fc873fba",
-      "6a12e376ec47",
-      "375a273501ec",
-      "753d5211795a",
-      "b92ddaf404ca",
-      "902f49478158",
-      "f42eeb206b4f",
-      "fc4ab8fab3b1",
-      "63eb7f7f2aec",
-      "28db437d3876",
-      "b659bf968a43",
-      "7de481beca0a",
-      "f50dd5f1dfd0",
-      "56e5ce0ebc0c",
-      "250d4d32b1ff",
-      "c0dc10a3d4b4",
-      "55246cf15647",
-      "4b9fc89ddd05",
-      "28f0f4434411",
-      "32c70ee587ef",
-      "3bb5136a2675",
-      "01e633abfdfe",
-      "c6c70a4c058f",
-      "ef3820830dc4",
-      "d756944c6244",
-      "32cfeedbb954",
-      "77064a14e960",
-      "89a79836cd19",
-      "561bc3573174",
-      "560f2366beb5",
-      "60331bb83b98",
-      "2f0695a6e6b6",
-      "aa839c029978",
-      "e3305cfad5eb",
-      "405fb97ed1be",
-      "f0130dd25cba",
-      "fd2f07eb1e6d",
-      "abac4b3a2a31"
-    ]
-  },
   "hf-blog": {
     "hash": "f2d04bdf9e8314240b15ab6724333315830446aa8d9a6dbf69acd4f96d413eb1",
     "seen": [
@@ -162,19 +31,37 @@
       "514a4ee1ccb7"
     ]
   },
-  "arxiv-agent-memory": {
-    "hash": "74e42ceea6a7522153c6488066a5cbc674bdfb8db18c825bf1d79c4b54af0c27",
+  "platform-relnotes": {
+    "hash": "344bfa56bd710a09d3a7490f809ce5e48c537b230b6a4f609a36910a2a2ea384",
     "seen": [
-      "089abb17cac2",
-      "386414866407",
-      "62e6de5954f7",
-      "98346915ebbc",
-      "f7e18c400ed5",
-      "d3dae6ebce7b",
-      "da88c1c19e63",
-      "7f7bff8687fb",
-      "d0e2a074ffc3",
-      "3ce7c015e965"
+      "2495ecc743a2",
+      "472164fa3175",
+      "d31e95c7fae6",
+      "98ff922369d0",
+      "04827e03f1ac",
+      "551447217300",
+      "c43dc535a9ba",
+      "b32a26281868"
+    ]
+  },
+  "cc-changelog": {
+    "hash": "a074556107911c423a449df2f0b1dbbabb51aaa66383b81c3ba4fea1c52679cf",
+    "seen": [
+      "5392a6106419",
+      "8326c08686af",
+      "ce331ca6f0e9",
+      "632f2ad3b994",
+      "0f7a241ba297",
+      "2b9b6de67191",
+      "8780ecde1c50",
+      "f6863e41f88b",
+      "84247f4916f1",
+      "8916f64557ce",
+      "52a8cf7b02ab",
+      "4d8407265e02",
+      "41c3b836ae31",
+      "a8fb3ca0dda7",
+      "2af438ae63df"
     ]
   },
   "cc-docs-llms": {
@@ -421,8 +308,20 @@
       "93749914f539"
     ]
   },
+  "hn-claude": {
+    "hash": "8ddc4620b1ed437a6bb8bd77c0ac5e7a8df9d5196e193a46c91a7933c742b028",
+    "seen": [
+      "7b35c1c7d78a",
+      "f34c402cbcaa",
+      "085c8ccbfc12",
+      "a69b226b4e37",
+      "6284fa7147ed",
+      "4aedb2675db1",
+      "1a858efb6e23"
+    ]
+  },
   "platform-llms": {
-    "hash": "64ad4c75cdb789ad796a882db9f36eda660d3cf9942fc2ac5385b6ee2b4937d1",
+    "hash": "2b023768414fe8b00cecf96e9af9f78ac1b25ba3a19a3f77ba89e5a8774d2978",
     "seen": [
       "e2ab33e270b5",
       "6d5269fcb398",
@@ -486,6 +385,7 @@
       "4abbd49ae067",
       "17b30bf0f666",
       "50c4b1559ee1",
+      "cc0605cf953c",
       "f708f862a8cd",
       "0d893149f146",
       "0b328d23130d",
@@ -604,8 +504,8 @@
       "b4af8edcae90",
       "28f3f7aeb6ee",
       "3c1f817e364f",
-      "27881db7f02f",
       "1512c1d4145b",
+      "27881db7f02f",
       "3705d177de72",
       "0a8daa5196bc",
       "ef788ea3174c",
@@ -729,6 +629,7 @@
       "dba9b2f0fafc",
       "89b5bfd53fee",
       "dba68ee556a4",
+      "f79409f07631",
       "8c8548b217e8",
       "a123029927a9",
       "ce16a3ec16ad",
@@ -740,7 +641,6 @@
       "e5b7ecf89cb5",
       "6eb768d10fb7",
       "8545a6d00b36",
-      "f79409f07631",
       "eb8c438889d2",
       "fbff0428b7b2",
       "64cd934397e5",
@@ -1326,8 +1226,110 @@
       "d18e1d75ef4e"
     ]
   },
+  "anthropic-sitemap": {
+    "hash": "44e4fb0f0e9dcd620039c5a366e163ad3e9b522be3b467dcc85fc3d6af908c08",
+    "seen": [
+      "b3a26b5f8ada",
+      "f75de63b48df",
+      "71e0837a9684",
+      "12db76f63f47",
+      "f68b1c4bd56f",
+      "fd44ef9b2453",
+      "1c631bca01fa",
+      "0b091731af22",
+      "c8cdae35e97c",
+      "a2042fe4ac20",
+      "778b9c109563",
+      "481fd583c5f2",
+      "aaa8325c4dda",
+      "2927d2daa93a",
+      "e58ec1ea0736",
+      "3dd90815b84e",
+      "e2366e59159e",
+      "441fe9f379e4",
+      "b0ec8c4d0bac",
+      "f3bb9bef82b1",
+      "8a0bb7ea0178",
+      "eebe177e826f",
+      "234addb377ca",
+      "f43eaad18297",
+      "578bacd50b76",
+      "050d20ae6001"
+    ]
+  },
+  "arxiv-agent-memory": {
+    "hash": "74e42ceea6a7522153c6488066a5cbc674bdfb8db18c825bf1d79c4b54af0c27",
+    "seen": [
+      "089abb17cac2",
+      "386414866407",
+      "62e6de5954f7",
+      "98346915ebbc",
+      "f7e18c400ed5",
+      "d3dae6ebce7b",
+      "da88c1c19e63",
+      "7f7bff8687fb",
+      "d0e2a074ffc3",
+      "3ce7c015e965"
+    ]
+  },
   "status": {
-    "hash": "9c3f9a314f9e6db0e73bef4fa447aa313fa24d6918685ceb72c1cf8b7b36e2d2",
+    "hash": "2cc94f2eae8448edcea3e4c28db87b94d7cd7bc913d2f8ae56b546645880d869",
     "seen": []
+  },
+  "hf-daily-papers": {
+    "hash": "3dd0e62db488e45fb6d60f5111709645c100febb3e8ec3f9043ac5d2fb10f983",
+    "seen": [
+      "45f753afe439",
+      "2eddcd3bbbb0",
+      "de30354bcb77",
+      "856722f69215",
+      "11aff58a5392",
+      "162a3fc3465a",
+      "132140523136",
+      "bda2bbbe51cd",
+      "8702ff33f1ff",
+      "447fde64a056",
+      "d0bd5b4afada",
+      "fd3bce808917",
+      "131f9b01cd47",
+      "9995fc873fba",
+      "6a12e376ec47",
+      "375a273501ec",
+      "753d5211795a",
+      "b92ddaf404ca",
+      "902f49478158",
+      "f42eeb206b4f",
+      "fc4ab8fab3b1",
+      "63eb7f7f2aec",
+      "28db437d3876",
+      "b659bf968a43",
+      "7de481beca0a",
+      "f50dd5f1dfd0",
+      "56e5ce0ebc0c",
+      "250d4d32b1ff",
+      "c0dc10a3d4b4",
+      "55246cf15647",
+      "4b9fc89ddd05",
+      "28f0f4434411",
+      "32c70ee587ef",
+      "3bb5136a2675",
+      "01e633abfdfe",
+      "c6c70a4c058f",
+      "ef3820830dc4",
+      "d756944c6244",
+      "32cfeedbb954",
+      "77064a14e960",
+      "89a79836cd19",
+      "561bc3573174",
+      "560f2366beb5",
+      "60331bb83b98",
+      "2f0695a6e6b6",
+      "aa839c029978",
+      "e3305cfad5eb",
+      "405fb97ed1be",
+      "f0130dd25cba",
+      "fd2f07eb1e6d",
+      "abac4b3a2a31"
+    ]
   }
 }
